@@ -178,8 +178,8 @@ function MilitaresPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Militares do quartel</h1>
           <p className="text-sm text-muted-foreground">
-            Cadastre os militares do seu quartel e marque a função: COV (Comandante
-            de Viatura) ou CG (Comandante de Guarnição).
+            Cadastre os militares do seu quartel e marque a função: COV (Condutor
+            e Operador de Viatura — motorista) ou CG (Comandante de Guarnição).
           </p>
         </div>
         <Button onClick={openNew}>
