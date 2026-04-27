@@ -50,6 +50,45 @@ export type Database = {
         }
         Relationships: []
       }
+      militares: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          funcao: Database["public"]["Enums"]["funcao_militar"]
+          id: string
+          matricula: string | null
+          nome: string
+          observacoes: string | null
+          posto_graduacao: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          funcao: Database["public"]["Enums"]["funcao_militar"]
+          id?: string
+          matricula?: string | null
+          nome: string
+          observacoes?: string | null
+          posto_graduacao?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          funcao?: Database["public"]["Enums"]["funcao_militar"]
+          id?: string
+          matricula?: string | null
+          nome?: string
+          observacoes?: string | null
+          posto_graduacao?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -117,6 +156,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      funcao_militar: "COV" | "CG"
       user_status: "pendente" | "aprovado" | "bloqueado"
     }
     CompositeTypes: {
@@ -246,6 +286,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      funcao_militar: ["COV", "CG"],
       user_status: ["pendente", "aprovado", "bloqueado"],
     },
   },

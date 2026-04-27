@@ -16,6 +16,7 @@ import { Route as AguardandoRouteImport } from './routes/aguardando'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppUsuariosRouteImport } from './routes/app.usuarios'
+import { Route as AppMilitaresRouteImport } from './routes/app.militares'
 import { Route as AppImportarRouteImport } from './routes/app.importar'
 
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
@@ -53,6 +54,11 @@ const AppUsuariosRoute = AppUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AppRoute,
 } as any)
+const AppMilitaresRoute = AppMilitaresRouteImport.update({
+  id: '/militares',
+  path: '/militares',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppImportarRoute = AppImportarRouteImport.update({
   id: '/importar',
   path: '/importar',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/app/importar': typeof AppImportarRoute
+  '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
 }
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/app/importar': typeof AppImportarRoute
+  '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app': typeof AppIndexRoute
 }
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/app/importar': typeof AppImportarRoute
+  '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
 }
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/redefinir-senha'
     | '/app/importar'
+    | '/app/militares'
     | '/app/usuarios'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/redefinir-senha'
     | '/app/importar'
+    | '/app/militares'
     | '/app/usuarios'
     | '/app'
   id:
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/redefinir-senha'
     | '/app/importar'
+    | '/app/militares'
     | '/app/usuarios'
     | '/app/'
   fileRoutesById: FileRoutesById
@@ -180,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUsuariosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/militares': {
+      id: '/app/militares'
+      path: '/militares'
+      fullPath: '/app/militares'
+      preLoaderRoute: typeof AppMilitaresRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/importar': {
       id: '/app/importar'
       path: '/importar'
@@ -192,12 +211,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppImportarRoute: typeof AppImportarRoute
+  AppMilitaresRoute: typeof AppMilitaresRoute
   AppUsuariosRoute: typeof AppUsuariosRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppImportarRoute: AppImportarRoute,
+  AppMilitaresRoute: AppMilitaresRoute,
   AppUsuariosRoute: AppUsuariosRoute,
   AppIndexRoute: AppIndexRoute,
 }
@@ -214,12 +235,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
