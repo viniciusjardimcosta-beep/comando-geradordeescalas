@@ -24,6 +24,7 @@ function AppLayout() {
 
   const tabs = [
     { to: "/app/importar", label: "Importar planilha", icon: FileSpreadsheet, show: true },
+    { to: "/app/militares", label: "Militares", icon: UserSquare2, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
   ];
 
