@@ -19,33 +19,45 @@ export type Database = {
           alertas: Json
           ano: number
           arquivo_nome: string | null
+          arquivo_saida_path: string | null
           created_at: string
           diretrizes: string | null
           exportacoes: Json
           id: string
           mes: number
+          observacoes_texto: string | null
+          parametros: Json
+          status: string
           user_id: string
         }
         Insert: {
           alertas?: Json
           ano: number
           arquivo_nome?: string | null
+          arquivo_saida_path?: string | null
           created_at?: string
           diretrizes?: string | null
           exportacoes?: Json
           id?: string
           mes: number
+          observacoes_texto?: string | null
+          parametros?: Json
+          status?: string
           user_id: string
         }
         Update: {
           alertas?: Json
           ano?: number
           arquivo_nome?: string | null
+          arquivo_saida_path?: string | null
           created_at?: string
           diretrizes?: string | null
           exportacoes?: Json
           id?: string
           mes?: number
+          observacoes_texto?: string | null
+          parametros?: Json
+          status?: string
           user_id?: string
         }
         Relationships: []
@@ -57,6 +69,7 @@ export type Database = {
           funcao: Database["public"]["Enums"]["funcao_militar"]
           id: string
           matricula: string | null
+          matricula_norm: string | null
           nome: string
           observacoes: string | null
           posto_graduacao: string | null
@@ -69,6 +82,7 @@ export type Database = {
           funcao: Database["public"]["Enums"]["funcao_militar"]
           id?: string
           matricula?: string | null
+          matricula_norm?: string | null
           nome: string
           observacoes?: string | null
           posto_graduacao?: string | null
@@ -81,6 +95,7 @@ export type Database = {
           funcao?: Database["public"]["Enums"]["funcao_militar"]
           id?: string
           matricula?: string | null
+          matricula_norm?: string | null
           nome?: string
           observacoes?: string | null
           posto_graduacao?: string | null
