@@ -520,21 +520,28 @@ export const gerarEscala = createServerFn({ method: "POST" })
     if (upErr) throw new Error("Falha ao salvar arquivo: " + upErr.message);
 
     /* 10) Registrar no histórico */
-    const { data: row, error: insErr } = await supabase
+    const insertPayload = {
+      user_id: userId,
+      mes: data.mes,
+      ano: data.ano,
+      arquivo_nome: data.fileName,
+      diretrizes: data.parametros.observacoesTexto || null,
+      observacoes_texto: data.parametros.observacoesTexto || null,
+      parametros: data.parametros,
+      arquivo_saida_path: path,
+      status: "concluida",
+      alertas,
+      exportacoes: [],
+    };
+    const { data: row, error: insErr } = await (supabase as unknown as {
+      from: (t: string) => {
+        insert: (p: unknown) => {
+          select: (s: string) => { single: () => Promise<{ data: { id: string } | null; error: { message: string } | null }> };
+        };
+      };
+    })
       .from("escalas_geradas")
-      .insert({
-        user_id: userId,
-        mes: data.mes,
-        ano: data.ano,
-        arquivo_nome: data.fileName,
-        diretrizes: data.parametros.observacoesTexto || null,
-        observacoes_texto: data.parametros.observacoesTexto || null,
-        parametros: data.parametros as unknown as Record<string, unknown>,
-        arquivo_saida_path: path,
-        status: "concluida",
-        alertas: alertas as unknown as Record<string, unknown>[],
-        exportacoes: [],
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
     if (insErr) throw new Error("Falha ao registrar histórico: " + insErr.message);
