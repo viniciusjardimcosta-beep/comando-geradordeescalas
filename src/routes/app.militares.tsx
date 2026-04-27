@@ -336,7 +336,7 @@ function MilitaresPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="COV">COV — Comandante de Viatura</SelectItem>
+                  <SelectItem value="COV">COV — Condutor e Operador de Viatura (motorista)</SelectItem>
                   <SelectItem value="CG">CG — Comandante de Guarnição</SelectItem>
                 </SelectContent>
               </Select>
