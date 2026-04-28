@@ -397,6 +397,27 @@ Cb Robson não escalar dia 15.`}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={openConfirmDivergencia} onOpenChange={setOpenConfirmDivergencia}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mês/Ano divergente</DialogTitle>
+            <DialogDescription>
+              A planilha enviada parece ser de{" "}
+              <strong>
+                {planilhaMes ? meses[planilhaMes - 1] : "?"}/{planilhaAno ?? "?"}
+              </strong>{" "}
+              mas você selecionou <strong>{meses[mes - 1]}/{ano}</strong>. Deseja continuar mesmo assim?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenConfirmDivergencia(false)}>Cancelar</Button>
+            <Button onClick={() => { setOpenConfirmDivergencia(false); setOpenObs(true); }}>
+              Continuar mesmo assim
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
