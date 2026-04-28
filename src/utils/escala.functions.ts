@@ -586,45 +586,116 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
     if (efetivoRows.length === 0) throw new Error("Aba Efetivo está vazia.");
 
-    /* 4) Militares cadastrados do usuário */
+    /* 4) Militares cadastrados do usuário (com flags multi-papel) */
     const { data: cadastrados, error: errCad } = await supabase
       .from("militares")
-      .select("matricula_norm, nome, funcao, ativo")
+      .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo")
       .eq("user_id", userId)
       .eq("ativo", true);
     if (errCad) throw new Error("Falha ao ler militares: " + errCad.message);
 
-    const cadPorMat = new Map<string, { funcao: "COV" | "CG"; nome: string }>();
-    const cadPorNome = new Map<string, { funcao: "COV" | "CG"; nome: string }>();
+    interface CadInfo { id: string; nome: string; isCov: boolean; isCg: boolean; isAdm: boolean; }
+    const cadPorMat = new Map<string, CadInfo>();
+    const cadPorNome = new Map<string, CadInfo>();
     for (const c of cadastrados ?? []) {
-      const mn = c.matricula_norm ?? "";
-      if (mn) cadPorMat.set(mn, { funcao: c.funcao as "COV" | "CG", nome: c.nome });
-      cadPorNome.set(normNome(c.nome), { funcao: c.funcao as "COV" | "CG", nome: c.nome });
+      const info: CadInfo = {
+        id: c.id as string,
+        nome: c.nome as string,
+        isCov: !!c.is_cov,
+        isCg: !!c.is_cg,
+        isAdm: !!c.is_adm,
+      };
+      const mn = (c.matricula_norm as string | null) ?? "";
+      if (mn) cadPorMat.set(mn, info);
+      cadPorNome.set(normNome(c.nome as string), info);
+    }
+
+    /* 4.1) Férias automáticas do ano alvo */
+    const { data: feriasRows } = await supabase
+      .from("ferias_militares")
+      .select("militar_id, data_inicio, data_fim")
+      .eq("user_id", userId)
+      .eq("ano", data.ano);
+
+    const feriasPorMilitar = new Map<string, { inicio: string; fim: string }[]>();
+    for (const f of feriasRows ?? []) {
+      const arr = feriasPorMilitar.get(f.militar_id as string) ?? [];
+      arr.push({ inicio: f.data_inicio as string, fim: f.data_fim as string });
+      feriasPorMilitar.set(f.militar_id as string, arr);
+    }
+
+    /* 4.2) Escalas ordinárias (grupos de rotação) */
+    const { data: escOrdRows } = await supabase
+      .from("escalas_ordinarias")
+      .select("id, ordem")
+      .eq("user_id", userId)
+      .eq("mes", data.mes)
+      .eq("ano", data.ano);
+
+    const ordemPorEscala = new Map<string, number>();
+    for (const e of escOrdRows ?? []) ordemPorEscala.set(e.id as string, e.ordem as number);
+
+    const grupoPorMilitar = new Map<string, number>();
+    if (ordemPorEscala.size) {
+      const { data: membros } = await supabase
+        .from("escala_ordinaria_membros")
+        .select("escala_id, militar_id")
+        .eq("user_id", userId)
+        .in("escala_id", Array.from(ordemPorEscala.keys()));
+      for (const m of membros ?? []) {
+        const ord = ordemPorEscala.get(m.escala_id as string);
+        if (ord) grupoPorMilitar.set(m.militar_id as string, ord);
+      }
     }
 
     /* 5) Runtime dos militares — linhas R12, R15, R18... */
     const militares: MilitarRT[] = efetivoRows.map((ef, i) => {
       const rowOrd = 12 + i * 3;
       const cad = cadPorMat.get(ef.idFunc) ?? cadPorNome.get(normNome(ef.nome));
-      const funcao: "COV" | "CG" | "BM" = cad?.funcao ?? "BM";
+      const isCov = !!cad?.isCov;
+      const isCg = !!cad?.isCg;
+      const isAdm = !!cad?.isAdm;
       if (!cad) {
         alertas.push({
           tipo: "info",
-          msg: `${ef.nome} (${ef.idFunc || "sem matrícula"}) não está no cadastro — tratado como BM comum.`,
+          msg: `${ef.nome} (${ef.idFunc || "sem matrícula"}) não está no cadastro — tratado como BM comum (sem COV/CG/ADM).`,
         });
       }
-      return {
+      const m: MilitarRT = {
         rowOrd,
         nome: ef.nome,
         nomeNorm: normNome(ef.nome),
         matricula: ef.idFunc,
-        funcao,
+        isCov, isCg, isAdm,
         ativo: true,
         cargaH: 0,
         ultimoServico: 0,
         afastDias: new Set(),
         afastSigla: new Map(),
+        grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
       };
+      // pré-aplica férias do plano anual
+      if (cad) {
+        const periodos = feriasPorMilitar.get(cad.id) ?? [];
+        for (const p of periodos) {
+          const ini = new Date(p.inicio);
+          const fim = new Date(p.fim);
+          for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) {
+            if (d.getUTCFullYear() === data.ano && d.getUTCMonth() + 1 === data.mes) {
+              const dia = d.getUTCDate();
+              m.afastDias.add(dia);
+              m.afastSigla.set(dia, "FER");
+            }
+          }
+        }
+        if (periodos.length) {
+          alertas.push({
+            tipo: "info",
+            msg: `${ef.nome}: férias aplicadas automaticamente do plano anual.`,
+          });
+        }
+      }
+      return m;
     });
 
     /* 6) IA interpretando observações */
@@ -633,6 +704,24 @@ export const gerarEscala = createServerFn({ method: "POST" })
       militares.map((m) => ({ nome: m.nome, matricula: m.matricula })),
       data.mes, data.ano,
     );
+
+    /* 6.1) Pré-aplicar FER vindos do plano anual nos slots ORD */
+    // (o motor escalar() não conhece o slot ord ainda — vamos passar via ia.afastamentos sintéticos)
+    for (const m of militares) {
+      for (const [dia, sigla] of m.afastSigla.entries()) {
+        ia.afastamentos.push({
+          matricula: m.matricula,
+          nome: m.nome,
+          diaInicio: dia,
+          diaFim: dia,
+          sigla,
+          motivo: sigla === "FER" ? "ferias" : sigla,
+        });
+      }
+      // limpa para não duplicar dentro do motor
+      m.afastDias = new Set();
+      m.afastSigla = new Map();
+    }
 
     /* 7) Motor */
     const dias = diasNoMes(data.mes, data.ano);
