@@ -46,6 +46,34 @@ function detectAnexoB(names: string[]) {
   return names.find((n) => n.trim().toLowerCase().includes("anexo b"));
 }
 
+/** Tenta achar mês/ano escrito na aba Anexo B (procura "MES" e "ANO" ou string tipo "Janeiro/2026"). */
+function detectMesAnoAnexoB(wb: XLSX.WorkBook, anexoBName: string): { mes?: number; ano?: number } {
+  const ws = wb.Sheets[anexoBName];
+  if (!ws) return {};
+  const mesesNomes = ["janeiro","fevereiro","março","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const range = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
+  if (!range) return {};
+  const maxRow = Math.min(range.e.r, 12);
+  for (let r = 0; r <= maxRow; r++) {
+    for (let c = range.s.c; c <= Math.min(range.e.c, 30); c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      const v = cell?.v;
+      if (typeof v !== "string") continue;
+      const lower = v.toLowerCase();
+      for (let i = 0; i < mesesNomes.length; i++) {
+        if (lower.includes(mesesNomes[i])) {
+          const anoMatch = lower.match(/(20\d{2})/);
+          const mesIdx = i >= 3 ? i - (mesesNomes[2] === "março" && i > 2 ? 0 : 0) : i;
+          // mapear índices: 0=jan,1=fev,2=mar,3=mar(marco alt),4=abr...
+          const mapMes = i <= 2 ? i + 1 : i === 3 ? 3 : i; // marco também = 3
+          return { mes: mapMes, ano: anoMatch ? Number(anoMatch[1]) : undefined };
+        }
+      }
+    }
+  }
+  return {};
+}
+
 async function fileToBase64(f: File): Promise<string> {
   const buf = new Uint8Array(await f.arrayBuffer());
   let bin = "";
@@ -63,8 +91,11 @@ function ImportarPage() {
   const [anexoBName, setAnexoBName] = useState<string | null>(null);
   const [mes, setMes] = useState<number>(new Date().getMonth() + 1);
   const [ano, setAno] = useState<number>(new Date().getFullYear());
+  const [planilhaMes, setPlanilhaMes] = useState<number | undefined>();
+  const [planilhaAno, setPlanilhaAno] = useState<number | undefined>();
 
   const [openObs, setOpenObs] = useState(false);
+  const [openConfirmDivergencia, setOpenConfirmDivergencia] = useState(false);
   const [militaresPorDia, setMilitaresPorDia] = useState(4);
   const [minCovPorDia, setMinCovPorDia] = useState(1);
   const [minCgPorDia, setMinCgPorDia] = useState(1);
@@ -91,14 +122,22 @@ function ImportarPage() {
     setFile(f);
     setSheetNames([]);
     setAnexoBName(null);
+    setPlanilhaMes(undefined);
+    setPlanilhaAno(undefined);
     try {
       const buf = await f.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       setSheetNames(wb.SheetNames);
       const found = detectAnexoB(wb.SheetNames);
       setAnexoBName(found ?? null);
-      if (found) toast.success(`Aba "${found}" detectada.`);
-      else toast.error('Arquivo não contém aba "Anexo B".');
+      if (found) {
+        toast.success(`Aba "${found}" detectada.`);
+        const det = detectMesAnoAnexoB(wb, found);
+        setPlanilhaMes(det.mes);
+        setPlanilhaAno(det.ano);
+      } else {
+        toast.error('Arquivo não contém aba "Anexo B".');
+      }
     } catch (err) {
       toast.error("Falha ao ler o arquivo.");
       console.error(err);
@@ -110,9 +149,14 @@ function ImportarPage() {
     if (f) handleFile(f);
   };
 
+  const divergenciaMesAno =
+    (planilhaMes !== undefined && planilhaMes !== mes) ||
+    (planilhaAno !== undefined && planilhaAno !== ano);
+
   const abrirObservacoes = () => {
     if (!file) { toast.error("Selecione a planilha-modelo."); return; }
     if (!anexoBName) { toast.error("Arquivo sem aba Anexo B."); return; }
+    if (divergenciaMesAno) { setOpenConfirmDivergencia(true); return; }
     setOpenObs(true);
   };
 
@@ -349,6 +393,27 @@ Cb Robson não escalar dia 15.`}
             <Button variant="outline" onClick={() => setOpenObs(false)} disabled={busy}>Cancelar</Button>
             <Button onClick={gerar} disabled={busy}>
               {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando...</> : <><Sparkles className="mr-2 h-4 w-4" /> Gerar escala</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openConfirmDivergencia} onOpenChange={setOpenConfirmDivergencia}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mês/Ano divergente</DialogTitle>
+            <DialogDescription>
+              A planilha enviada parece ser de{" "}
+              <strong>
+                {planilhaMes ? meses[planilhaMes - 1] : "?"}/{planilhaAno ?? "?"}
+              </strong>{" "}
+              mas você selecionou <strong>{meses[mes - 1]}/{ano}</strong>. Deseja continuar mesmo assim?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenConfirmDivergencia(false)}>Cancelar</Button>
+            <Button onClick={() => { setOpenConfirmDivergencia(false); setOpenObs(true); }}>
+              Continuar mesmo assim
             </Button>
           </DialogFooter>
         </DialogContent>
