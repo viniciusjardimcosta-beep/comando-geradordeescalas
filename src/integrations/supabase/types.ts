@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      escala_ordinaria_membros: {
+        Row: {
+          created_at: string
+          escala_id: string
+          id: string
+          militar_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          escala_id: string
+          id?: string
+          militar_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          escala_id?: string
+          id?: string
+          militar_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "escala_ordinaria_membros_escala_id_fkey"
+            columns: ["escala_id"]
+            isOneToOne: false
+            referencedRelation: "escalas_ordinarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "escala_ordinaria_membros_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       escalas_geradas: {
         Row: {
           alertas: Json
@@ -62,12 +101,92 @@ export type Database = {
         }
         Relationships: []
       }
+      escalas_ordinarias: {
+        Row: {
+          ano: number
+          created_at: string
+          id: string
+          mes: number
+          nome: string
+          ordem: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          id?: string
+          mes: number
+          nome?: string
+          ordem: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          id?: string
+          mes?: number
+          nome?: string
+          ordem?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ferias_militares: {
+        Row: {
+          ano: number
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          id: string
+          militar_id: string
+          periodo: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          id?: string
+          militar_id: string
+          periodo: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: string
+          militar_id?: string
+          periodo?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ferias_militares_militar_id_fkey"
+            columns: ["militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       militares: {
         Row: {
           ativo: boolean
           created_at: string
-          funcao: Database["public"]["Enums"]["funcao_militar"]
+          funcao: Database["public"]["Enums"]["funcao_militar"] | null
           id: string
+          is_adm: boolean
+          is_cg: boolean
+          is_cov: boolean
           matricula: string | null
           matricula_norm: string | null
           nome: string
@@ -79,8 +198,11 @@ export type Database = {
         Insert: {
           ativo?: boolean
           created_at?: string
-          funcao: Database["public"]["Enums"]["funcao_militar"]
+          funcao?: Database["public"]["Enums"]["funcao_militar"] | null
           id?: string
+          is_adm?: boolean
+          is_cg?: boolean
+          is_cov?: boolean
           matricula?: string | null
           matricula_norm?: string | null
           nome: string
@@ -92,8 +214,11 @@ export type Database = {
         Update: {
           ativo?: boolean
           created_at?: string
-          funcao?: Database["public"]["Enums"]["funcao_militar"]
+          funcao?: Database["public"]["Enums"]["funcao_militar"] | null
           id?: string
+          is_adm?: boolean
+          is_cg?: boolean
+          is_cov?: boolean
           matricula?: string | null
           matricula_norm?: string | null
           nome?: string
