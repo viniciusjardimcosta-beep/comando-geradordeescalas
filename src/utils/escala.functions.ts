@@ -20,6 +20,8 @@ const InputSchema = z.object({
   mes: z.number().int().min(1).max(12),
   ano: z.number().int().min(2024).max(2100),
   parametros: ParametrosSchema,
+  /** ignorar aviso de mês/ano divergente da planilha */
+  forcarMesAno: z.boolean().optional().default(false),
 });
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
@@ -276,12 +278,16 @@ interface MilitarRT {
   nome: string;
   nomeNorm: string;
   matricula: string;
-  funcao: "COV" | "CG" | "BM";
+  isCov: boolean;
+  isCg: boolean;
+  isAdm: boolean;
   ativo: boolean;
   cargaH: number;
   ultimoServico: number;
   afastDias: Set<number>;
   afastSigla: Map<number, string>; // dia -> sigla afastamento (ex: FER, LTS)
+  /** ordem do grupo de escala ordinária (1..N). undefined = sem grupo definido */
+  grupoOrdem?: number;
 }
 
 function escalar(
