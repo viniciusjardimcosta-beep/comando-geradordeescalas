@@ -46,6 +46,34 @@ function detectAnexoB(names: string[]) {
   return names.find((n) => n.trim().toLowerCase().includes("anexo b"));
 }
 
+/** Tenta achar mês/ano escrito na aba Anexo B (procura "MES" e "ANO" ou string tipo "Janeiro/2026"). */
+function detectMesAnoAnexoB(wb: XLSX.WorkBook, anexoBName: string): { mes?: number; ano?: number } {
+  const ws = wb.Sheets[anexoBName];
+  if (!ws) return {};
+  const mesesNomes = ["janeiro","fevereiro","março","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const range = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
+  if (!range) return {};
+  const maxRow = Math.min(range.e.r, 12);
+  for (let r = 0; r <= maxRow; r++) {
+    for (let c = range.s.c; c <= Math.min(range.e.c, 30); c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      const v = cell?.v;
+      if (typeof v !== "string") continue;
+      const lower = v.toLowerCase();
+      for (let i = 0; i < mesesNomes.length; i++) {
+        if (lower.includes(mesesNomes[i])) {
+          const anoMatch = lower.match(/(20\d{2})/);
+          const mesIdx = i >= 3 ? i - (mesesNomes[2] === "março" && i > 2 ? 0 : 0) : i;
+          // mapear índices: 0=jan,1=fev,2=mar,3=mar(marco alt),4=abr...
+          const mapMes = i <= 2 ? i + 1 : i === 3 ? 3 : i; // marco também = 3
+          return { mes: mapMes, ano: anoMatch ? Number(anoMatch[1]) : undefined };
+        }
+      }
+    }
+  }
+  return {};
+}
+
 async function fileToBase64(f: File): Promise<string> {
   const buf = new Uint8Array(await f.arrayBuffer());
   let bin = "";

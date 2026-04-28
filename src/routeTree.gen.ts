@@ -19,6 +19,7 @@ import { Route as AppUsuariosRouteImport } from './routes/app.usuarios'
 import { Route as AppMilitaresRouteImport } from './routes/app.militares'
 import { Route as AppImportarRouteImport } from './routes/app.importar'
 import { Route as AppFeriasRouteImport } from './routes/app.ferias'
+import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
@@ -70,6 +71,11 @@ const AppFeriasRoute = AppFeriasRouteImport.update({
   path: '/ferias',
   getParentRoute: () => AppRoute,
 } as any)
+const AppEscalasRoute = AppEscalasRouteImport.update({
+  id: '/escalas',
+  path: '/escalas',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
   '/app/militares': typeof AppMilitaresRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/aguardando': typeof AguardandoRoute
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
   '/app/militares': typeof AppMilitaresRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
   '/app/militares': typeof AppMilitaresRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
     | '/app/militares'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/aguardando'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
     | '/app/militares'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
     | '/app/militares'
@@ -225,10 +237,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFeriasRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/escalas': {
+      id: '/app/escalas'
+      path: '/escalas'
+      fullPath: '/app/escalas'
+      preLoaderRoute: typeof AppEscalasRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppEscalasRoute: typeof AppEscalasRoute
   AppFeriasRoute: typeof AppFeriasRoute
   AppImportarRoute: typeof AppImportarRoute
   AppMilitaresRoute: typeof AppMilitaresRoute
@@ -237,6 +257,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppEscalasRoute: AppEscalasRoute,
   AppFeriasRoute: AppFeriasRoute,
   AppImportarRoute: AppImportarRoute,
   AppMilitaresRoute: AppMilitaresRoute,
