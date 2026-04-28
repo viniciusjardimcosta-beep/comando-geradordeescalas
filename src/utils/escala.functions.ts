@@ -438,27 +438,41 @@ function escalar(
 
     const elegivel = (m: MilitarRT, papel: "CG" | "COV" | "BM") => {
       if (!m.ativo) return false;
+      if (m.isAdm) return false; // ADM nunca entra na escala operacional
       if (indisp.has(m.rowOrd)) return false;
       if (jaOcupado(m)) return false;
       if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
       const restr = apFunc.get(m.rowOrd);
-      if (restr && papel !== restr) return false;
-      if (papel === "CG" && m.funcao !== "CG") return false;
-      if (papel === "COV" && m.funcao !== "COV") return false;
+      if (restr) {
+        if (restr === "CG" && !m.isCg) return false;
+        if (restr === "COV" && !m.isCov) return false;
+        if (papel !== restr) return false;
+      }
+      if (papel === "CG" && !m.isCg) return false;
+      if (papel === "COV" && !m.isCov) return false;
       return true;
     };
 
+    // Ordem preferencial: militares do grupo da vez (rotação 24x72 por grupo) primeiro,
+    // depois o resto por menor carga.
+    // Em ciclo 24x72 com 4 grupos, grupo do dia D = ((D-1) mod 4) + 1
+    const grupoDoDia = ((dia - 1) % 4) + 1;
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
       const candidatos = militares
         .filter((m) => elegivel(m, papel))
-        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+        .sort((a, b) => {
+          const ag = a.grupoOrdem === grupoDoDia ? 0 : 1;
+          const bg = b.grupoOrdem === grupoDoDia ? 0 : 1;
+          if (ag !== bg) return ag - bg;
+          return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+        });
       return candidatos[0] ?? null;
     };
 
     // obrigatórios primeiro
     for (const rowOrd of obriga) {
       const m = militares.find((x) => x.rowOrd === rowOrd);
-      if (m && !slot.has(rowOrd)) {
+      if (m && !slot.has(rowOrd) && !m.isAdm) {
         slot.set(rowOrd, SIGLA_24);
         m.cargaH += 24;
         m.ultimoServico = dia;
@@ -466,7 +480,7 @@ function escalar(
     }
 
     // CGs
-    let cgEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.funcao === "CG").length;
+    let cgEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCg).length;
     while (cgEscalados < minCg) {
       const cg = escolher("CG");
       if (!cg) {
@@ -480,7 +494,7 @@ function escalar(
     }
 
     // COVs
-    let covEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.funcao === "COV").length;
+    let covEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCov).length;
     while (covEscalados < minCov) {
       const cov = escolher("COV");
       if (!cov) {
@@ -499,7 +513,7 @@ function escalar(
       let m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
       if (!m) {
         const flex = militares
-          .filter((x) => x.ativo && !indisp.has(x.rowOrd) && !slot.has(x.rowOrd))
+          .filter((x) => x.ativo && !x.isAdm && !indisp.has(x.rowOrd) && !slot.has(x.rowOrd))
           .sort((a, b) => a.cargaH - b.cargaH);
         m = flex[0] ?? null;
         if (m) alertas.push({
