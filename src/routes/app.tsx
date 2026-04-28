@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, Navigate, useLocation } from "@tanstack/
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2 } from "lucide-react";
+import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane } from "lucide-react";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
@@ -25,6 +25,7 @@ function AppLayout() {
   const tabs = [
     { to: "/app/importar", label: "Importar planilha", icon: FileSpreadsheet, show: true },
     { to: "/app/militares", label: "Militares", icon: UserSquare2, show: true },
+    { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
   ];
 
