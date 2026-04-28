@@ -6,33 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, Pencil, Trash2, UserSquare2 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,14 +24,14 @@ export const Route = createFileRoute("/app/militares")({
   component: MilitaresPage,
 });
 
-type Funcao = "COV" | "CG";
-
 interface Militar {
   id: string;
   nome: string;
   posto_graduacao: string | null;
   matricula: string | null;
-  funcao: Funcao;
+  is_cov: boolean;
+  is_cg: boolean;
+  is_adm: boolean;
   ativo: boolean;
   observacoes: string | null;
   created_at: string;
@@ -58,7 +41,9 @@ interface FormState {
   nome: string;
   posto_graduacao: string;
   matricula: string;
-  funcao: Funcao;
+  is_cov: boolean;
+  is_cg: boolean;
+  is_adm: boolean;
   ativo: boolean;
   observacoes: string;
 }
@@ -67,16 +52,29 @@ const emptyForm: FormState = {
   nome: "",
   posto_graduacao: "",
   matricula: "",
-  funcao: "COV",
+  is_cov: false,
+  is_cg: false,
+  is_adm: false,
   ativo: true,
   observacoes: "",
 };
+
+type Filter = "todos" | "cov" | "cg" | "adm" | "bm";
+
+function funcoesBadges(m: Militar) {
+  const tags: { label: string; cls: string }[] = [];
+  if (m.is_cg) tags.push({ label: "CG", cls: "bg-primary/20 text-primary border-primary/30" });
+  if (m.is_cov) tags.push({ label: "COV", cls: "bg-accent/30 text-accent-foreground border-accent/50" });
+  if (m.is_adm) tags.push({ label: "ADM", cls: "bg-warning/20 text-warning border-warning/40" });
+  if (tags.length === 0) tags.push({ label: "BM", cls: "bg-muted text-muted-foreground border-border" });
+  return tags;
+}
 
 function MilitaresPage() {
   const { session } = useAuth();
   const [militares, setMilitares] = useState<Militar[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"todos" | Funcao>("todos");
+  const [filter, setFilter] = useState<Filter>("todos");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Militar | null>(null);
@@ -90,19 +88,16 @@ function MilitaresPage() {
     const { data, error } = await supabase
       .from("militares")
       .select("*")
-      .order("funcao", { ascending: true })
       .order("nome", { ascending: true });
     if (error) {
       toast.error("Erro ao carregar militares", { description: error.message });
     } else {
-      setMilitares((data ?? []) as Militar[]);
+      setMilitares((data ?? []) as unknown as Militar[]);
     }
     setLoading(false);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   function openNew() {
     setEditing(null);
@@ -116,7 +111,9 @@ function MilitaresPage() {
       nome: m.nome,
       posto_graduacao: m.posto_graduacao ?? "",
       matricula: m.matricula ?? "",
-      funcao: m.funcao,
+      is_cov: m.is_cov,
+      is_cg: m.is_cg,
+      is_adm: m.is_adm,
       ativo: m.ativo,
       observacoes: m.observacoes ?? "",
     });
@@ -130,21 +127,26 @@ function MilitaresPage() {
     }
     if (!session?.user.id) return;
     setSaving(true);
+    // Mantém 'funcao' (NOT NULL antigo, agora nullable) preenchido por compatibilidade
+    const funcaoCompat = form.is_cg ? "CG" : form.is_cov ? "COV" : null;
     const payload = {
       nome: form.nome.trim(),
       posto_graduacao: form.posto_graduacao.trim() || null,
       matricula: form.matricula.trim() || null,
-      funcao: form.funcao,
+      is_cov: form.is_cov,
+      is_cg: form.is_cg,
+      is_adm: form.is_adm,
+      funcao: funcaoCompat,
       ativo: form.ativo,
       observacoes: form.observacoes.trim() || null,
-    };
+    } as never;
     let error;
     if (editing) {
       ({ error } = await supabase.from("militares").update(payload).eq("id", editing.id));
     } else {
       ({ error } = await supabase
         .from("militares")
-        .insert({ ...payload, user_id: session.user.id }));
+        .insert({ ...(payload as object), user_id: session.user.id } as never));
     }
     setSaving(false);
     if (error) {
@@ -159,18 +161,22 @@ function MilitaresPage() {
   async function confirmDelete() {
     if (!deleteId) return;
     const { error } = await supabase.from("militares").delete().eq("id", deleteId);
-    if (error) {
-      toast.error("Erro ao excluir", { description: error.message });
-    } else {
-      toast.success("Militar excluído");
-      load();
-    }
+    if (error) toast.error("Erro ao excluir", { description: error.message });
+    else { toast.success("Militar excluído"); load(); }
     setDeleteId(null);
   }
 
-  const filtered = militares.filter((m) => filter === "todos" || m.funcao === filter);
-  const totalCov = militares.filter((m) => m.funcao === "COV").length;
-  const totalCg = militares.filter((m) => m.funcao === "CG").length;
+  const filtered = militares.filter((m) => {
+    if (filter === "todos") return true;
+    if (filter === "cov") return m.is_cov;
+    if (filter === "cg") return m.is_cg;
+    if (filter === "adm") return m.is_adm;
+    if (filter === "bm") return !m.is_cov && !m.is_cg && !m.is_adm;
+    return true;
+  });
+  const totalCov = militares.filter((m) => m.is_cov).length;
+  const totalCg = militares.filter((m) => m.is_cg).length;
+  const totalAdm = militares.filter((m) => m.is_adm).length;
 
   return (
     <div className="space-y-6">
@@ -178,46 +184,43 @@ function MilitaresPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Militares do quartel</h1>
           <p className="text-sm text-muted-foreground">
-            Cadastre os militares do seu quartel e marque a função: COV (Condutor
-            e Operador de Viatura — motorista) ou CG (Comandante de Guarnição).
+            Marque as funções do militar. COV (motorista) e CG (comandante de guarnição) podem ser
+            marcados juntos. ADM = militar de expediente — não entra na escala operacional.
           </p>
         </div>
         <Button onClick={openNew}>
-          <Plus className="h-4 w-4" />
-          Novo militar
+          <Plus className="h-4 w-4" /> Novo militar
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total cadastrados</CardDescription>
-            <CardTitle className="text-3xl">{militares.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>COV</CardDescription>
-            <CardTitle className="text-3xl">{totalCov}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>CG</CardDescription>
-            <CardTitle className="text-3xl">{totalCg}</CardTitle>
-          </CardHeader>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Card><CardHeader className="pb-2">
+          <CardDescription>Total</CardDescription>
+          <CardTitle className="text-3xl">{militares.length}</CardTitle>
+        </CardHeader></Card>
+        <Card><CardHeader className="pb-2">
+          <CardDescription>CG</CardDescription>
+          <CardTitle className="text-3xl">{totalCg}</CardTitle>
+        </CardHeader></Card>
+        <Card><CardHeader className="pb-2">
+          <CardDescription>COV</CardDescription>
+          <CardTitle className="text-3xl">{totalCov}</CardTitle>
+        </CardHeader></Card>
+        <Card><CardHeader className="pb-2">
+          <CardDescription>ADM</CardDescription>
+          <CardTitle className="text-3xl">{totalAdm}</CardTitle>
+        </CardHeader></Card>
       </div>
 
-      <div className="flex gap-2">
-        {(["todos", "COV", "CG"] as const).map((f) => (
+      <div className="flex flex-wrap gap-2">
+        {(["todos", "cg", "cov", "adm", "bm"] as Filter[]).map((f) => (
           <Button
             key={f}
             variant={filter === f ? "default" : "outline"}
             size="sm"
             onClick={() => setFilter(f)}
           >
-            {f === "todos" ? "Todos" : f}
+            {f === "todos" ? "Todos" : f === "bm" ? "Só BM" : f.toUpperCase()}
           </Button>
         ))}
       </div>
@@ -231,50 +234,39 @@ function MilitaresPage() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
               <UserSquare2 className="h-10 w-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Nenhum militar cadastrado ainda.
-              </p>
+              <p className="text-sm text-muted-foreground">Nenhum militar.</p>
               <Button variant="outline" size="sm" onClick={openNew}>
-                <Plus className="h-4 w-4" />
-                Cadastrar o primeiro
+                <Plus className="h-4 w-4" /> Cadastrar o primeiro
               </Button>
             </div>
           ) : (
             <div className="divide-y divide-border">
               {filtered.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex flex-wrap items-center gap-3 p-4 hover:bg-muted/30"
-                >
+                <div key={m.id} className="flex flex-wrap items-center gap-3 p-4 hover:bg-muted/30">
                   <div className="flex-1 min-w-[200px]">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{m.nome}</p>
-                      {!m.ativo && (
-                        <Badge variant="outline" className="text-[10px]">
-                          INATIVO
-                        </Badge>
-                      )}
+                      {!m.ativo && <Badge variant="outline" className="text-[10px]">INATIVO</Badge>}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {[m.posto_graduacao, m.matricula].filter(Boolean).join(" • ") ||
-                        "—"}
+                      {[m.posto_graduacao, m.matricula].filter(Boolean).join(" • ") || "—"}
                     </p>
                   </div>
-                  <Badge
-                    variant={m.funcao === "COV" ? "default" : "secondary"}
-                    className="font-mono"
-                  >
-                    {m.funcao}
-                  </Badge>
+                  <div className="flex gap-1 flex-wrap">
+                    {funcoesBadges(m).map((t) => (
+                      <span
+                        key={t.label}
+                        className={`px-2 py-0.5 rounded border text-[11px] font-mono font-semibold ${t.cls}`}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(m)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteId(m.id)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteId(m.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
@@ -288,92 +280,77 @@ function MilitaresPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {editing ? "Editar militar" : "Novo militar"}
-            </DialogTitle>
+            <DialogTitle>{editing ? "Editar militar" : "Novo militar"}</DialogTitle>
             <DialogDescription>
-              Os dados ficam visíveis apenas para você (e para o ADMIN).
+              Marque as funções aplicáveis. Se não marcar nenhuma, o militar é um BM comum (entra na
+              escala operacional sem restrição de função).
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="nome">Nome *</Label>
-              <Input
-                id="nome"
-                value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                placeholder="Nome completo"
-              />
+              <Input id="nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="posto">Posto / Graduação</Label>
-                <Input
-                  id="posto"
-                  value={form.posto_graduacao}
-                  onChange={(e) =>
-                    setForm({ ...form, posto_graduacao: e.target.value })
-                  }
-                  placeholder="Ex: SGT, CB, SD"
-                />
+                <Input id="posto" value={form.posto_graduacao}
+                  onChange={(e) => setForm({ ...form, posto_graduacao: e.target.value })}
+                  placeholder="Ex: SGT, CB, SD" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="mat">Matrícula</Label>
-                <Input
-                  id="mat"
-                  value={form.matricula}
-                  onChange={(e) => setForm({ ...form, matricula: e.target.value })}
-                />
+                <Input id="mat" value={form.matricula}
+                  onChange={(e) => setForm({ ...form, matricula: e.target.value })} />
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="funcao">Função *</Label>
-              <Select
-                value={form.funcao}
-                onValueChange={(v: Funcao) => setForm({ ...form, funcao: v })}
-              >
-                <SelectTrigger id="funcao">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COV">COV — Condutor e Operador de Viatura (motorista)</SelectItem>
-                  <SelectItem value="CG">CG — Comandante de Guarnição</SelectItem>
-                </SelectContent>
-              </Select>
+
+            <div className="grid gap-3 rounded-md border border-border p-3">
+              <Label className="text-sm">Funções</Label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox checked={form.is_cg}
+                  onCheckedChange={(v) => setForm({ ...form, is_cg: !!v })} className="mt-1" />
+                <div>
+                  <p className="font-medium text-sm">CG — Comandante de Guarnição</p>
+                  <p className="text-xs text-muted-foreground">Pode ser escalado como CG no serviço 24h.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox checked={form.is_cov}
+                  onCheckedChange={(v) => setForm({ ...form, is_cov: !!v })} className="mt-1" />
+                <div>
+                  <p className="font-medium text-sm">COV — Condutor e Operador de Viatura</p>
+                  <p className="text-xs text-muted-foreground">Motorista da viatura; pode ser marcado junto com CG.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox checked={form.is_adm}
+                  onCheckedChange={(v) => setForm({ ...form, is_adm: !!v })} className="mt-1" />
+                <div>
+                  <p className="font-medium text-sm">ADM — Expediente</p>
+                  <p className="text-xs text-muted-foreground">Não entra na escala operacional; apenas EXP.</p>
+                </div>
+              </label>
             </div>
+
             <div className="flex items-center justify-between rounded-md border border-border p-3">
               <div>
-                <Label htmlFor="ativo" className="cursor-pointer">
-                  Ativo
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Apenas militares ativos entram na escala.
-                </p>
+                <Label htmlFor="ativo" className="cursor-pointer">Ativo</Label>
+                <p className="text-xs text-muted-foreground">Apenas ativos entram na escala.</p>
               </div>
-              <Switch
-                id="ativo"
-                checked={form.ativo}
-                onCheckedChange={(v) => setForm({ ...form, ativo: v })}
-              />
+              <Switch id="ativo" checked={form.ativo}
+                onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="obs">Observações</Label>
-              <Textarea
-                id="obs"
-                value={form.observacoes}
-                onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                placeholder="Restrições, férias previstas, etc."
-                rows={3}
-              />
+              <Textarea id="obs" value={form.observacoes}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Salvar
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -383,9 +360,7 @@ function MilitaresPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir militar?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
