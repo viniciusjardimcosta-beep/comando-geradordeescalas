@@ -91,8 +91,11 @@ function ImportarPage() {
   const [anexoBName, setAnexoBName] = useState<string | null>(null);
   const [mes, setMes] = useState<number>(new Date().getMonth() + 1);
   const [ano, setAno] = useState<number>(new Date().getFullYear());
+  const [planilhaMes, setPlanilhaMes] = useState<number | undefined>();
+  const [planilhaAno, setPlanilhaAno] = useState<number | undefined>();
 
   const [openObs, setOpenObs] = useState(false);
+  const [openConfirmDivergencia, setOpenConfirmDivergencia] = useState(false);
   const [militaresPorDia, setMilitaresPorDia] = useState(4);
   const [minCovPorDia, setMinCovPorDia] = useState(1);
   const [minCgPorDia, setMinCgPorDia] = useState(1);
@@ -119,14 +122,22 @@ function ImportarPage() {
     setFile(f);
     setSheetNames([]);
     setAnexoBName(null);
+    setPlanilhaMes(undefined);
+    setPlanilhaAno(undefined);
     try {
       const buf = await f.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       setSheetNames(wb.SheetNames);
       const found = detectAnexoB(wb.SheetNames);
       setAnexoBName(found ?? null);
-      if (found) toast.success(`Aba "${found}" detectada.`);
-      else toast.error('Arquivo não contém aba "Anexo B".');
+      if (found) {
+        toast.success(`Aba "${found}" detectada.`);
+        const det = detectMesAnoAnexoB(wb, found);
+        setPlanilhaMes(det.mes);
+        setPlanilhaAno(det.ano);
+      } else {
+        toast.error('Arquivo não contém aba "Anexo B".');
+      }
     } catch (err) {
       toast.error("Falha ao ler o arquivo.");
       console.error(err);
@@ -138,9 +149,14 @@ function ImportarPage() {
     if (f) handleFile(f);
   };
 
+  const divergenciaMesAno =
+    (planilhaMes !== undefined && planilhaMes !== mes) ||
+    (planilhaAno !== undefined && planilhaAno !== ano);
+
   const abrirObservacoes = () => {
     if (!file) { toast.error("Selecione a planilha-modelo."); return; }
     if (!anexoBName) { toast.error("Arquivo sem aba Anexo B."); return; }
+    if (divergenciaMesAno) { setOpenConfirmDivergencia(true); return; }
     setOpenObs(true);
   };
 
