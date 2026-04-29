@@ -182,6 +182,10 @@ function ImportarPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
 
+      if (!result || typeof result !== "object" || !("escritas" in result)) {
+        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
+      }
+
       toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
       if (result.downloadUrl) {
         window.open(result.downloadUrl, "_blank");
