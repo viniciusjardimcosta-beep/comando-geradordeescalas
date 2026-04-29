@@ -542,6 +542,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => InputSchema.parse(input))
   .handler(async ({ data, context }) => {
+   try {
     const { supabase, userId } = context;
     const alertas: Alerta[] = [];
 
