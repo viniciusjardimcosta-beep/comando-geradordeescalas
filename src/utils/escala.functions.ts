@@ -809,4 +809,9 @@ export const gerarEscala = createServerFn({ method: "POST" })
       },
       militaresProcessados: militares.length,
     };
+   } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[gerarEscala] erro no handler:", msg, err);
+      throw new Error(msg);
+   }
   });
