@@ -1,7 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import ExcelJS from "exceljs";
+import {
+  loadXlsx,
+  saveXlsx,
+  getSheetXml,
+  readCell,
+  iterRows,
+  applyEdits,
+  writeSheetXml,
+  makeRef,
+  parseRef,
+  type CellEdit,
+} from "./xlsx-surgical";
 
 /* ------------------------------------------------------------------ */
 /* Tipos                                                              */
