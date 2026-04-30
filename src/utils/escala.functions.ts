@@ -76,6 +76,8 @@ interface LancamentoIA {
   linha?: "ORD" | "EXP" | "HE";
   /** sigla exata a lançar (ex: HE6, CM3, EXP9, 123, 2341, C2) */
   sigla: string;
+  /** lançamento sintético gerado pelo sistema — não emite alerta individual */
+  __silent?: boolean;
 }
 interface ReforcoIA {
   dia: number;

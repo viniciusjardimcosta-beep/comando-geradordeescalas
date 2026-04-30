@@ -1,68 +1,51 @@
-## Diagnóstico
+## Ajustes finais no motor de escala
 
-Hoje `src/utils/escala.functions.ts` carrega a planilha com **ExcelJS** (`wb.xlsx.load(...)`), preenche as células e regrava com `wb.xlsx.writeBuffer()`. O ExcelJS, ao serializar de volta, **descarta ou simplifica** vários recursos do .xlsx original:
+Três correções pontuais em `src/utils/escala.functions.ts`. Nenhuma mudança de schema, UI ou banco.
 
-- Listas suspensas (Data Validation) — especialmente quando declaradas em `<extLst>` (validações por intervalo, comuns em planilhas modernas)
-- Formatação condicional avançada
-- Fórmulas com referências externas / nomes definidos complexos
-- Tabelas estruturadas, gráficos, comentários, tabelas dinâmicas
-- Estilos de células parcialmente reescritos (fontes, larguras de coluna)
+### 1. Não usar militares fora do cadastro
 
-Resultado: o arquivo baixado abre, mas perde os menus de seleção (HE, CM, 2341, etc.), as fórmulas de carga horária e a “editabilidade” original que o usuário precisa.
+Hoje, quando um nome aparece na aba "Efetivo" da planilha mas não existe no banco de dados do usuário, o sistema o trata como "BM comum" e o utiliza para preencher a escala. Isso fez com que um militar não cadastrado fosse escalado.
 
-## Solução
+Mudança no bloco que monta `militares: MilitarRT[]` (em torno da linha 806):
 
-Parar de “desserializar e reserializar” o arquivo. Em vez disso, abrir o `.xlsx` como **ZIP**, ler somente o XML da aba `Anexo B - Escala`, **substituir apenas as células de dia** que precisamos preencher (linhas 8, 10, 11 e blocos de militares a partir da linha 12, colunas F em diante) e **regravar o ZIP** sem tocar em nenhum outro arquivo interno (`xl/styles.xml`, `xl/worksheets/sheet*.xml` das outras abas, `xl/sharedStrings.xml`, `xl/drawings/*`, validações em `extLst`, etc.).
+- Se `cad` for `undefined` (militar da planilha não está no cadastro), marcar `ativo = false`. O motor já filtra por `m.ativo` em `elegivel()` e na etapa de HE, então ele simplesmente não será considerado para preencher escalas.
+- Coletar esses nomes em uma lista local e emitir **um único alerta info consolidado no final**: "X militar(es) da planilha não estão cadastrados e foram ignorados: Fulano, Beltrano, …" — em vez de um alerta por militar.
+- A linha do militar continua existindo na planilha (preserva o layout), mas não recebe lançamentos automáticos.
 
-Isso garante que TUDO o que não foi explicitamente alterado permanece byte-a-byte igual ao arquivo enviado pelo usuário — listas suspensas, fórmulas, formatação, macros, tudo.
+### 2. Alertas de expediente ADM consolidados
 
-### Etapas
+Hoje, no bloco 6.2 (expediente ADM), cada `ia.lancamentos.push({ ... EXP9/EXP6 ... })` gera mais tarde — na etapa 2 do motor (linha ~469) — um alerta por dia: "Lançado EXP9 (EXP) em 1 militar(es) nos dias 4". Como são ~22 dias úteis × N militares ADM, vira muito ruído.
 
-1. **Adicionar dependência `fflate`** (ZIP puro-JS, leve, funciona no runtime Worker do TanStack Start; sem binários nativos).
+Mudança:
 
-2. **Criar `src/utils/xlsx-surgical.ts`** com utilitários:
-   - `loadXlsx(bytes)` → `{ files: Record<string, Uint8Array>, workbookXml, sheetMap }` usando `fflate.unzipSync`.
-   - `getSheetPath(workbookXml, sheetName)` → resolve nome da aba para caminho `xl/worksheets/sheetN.xml` (via `xl/_rels/workbook.xml.rels`).
-   - `readSheetCells(sheetXml)` → parse mínimo via regex/XML simples só para mapear `<c r="F12" .../>`.
-   - `writeCells(sheetXml, edits)` → para cada edição `{ ref, value, type }`:
-     - Se a célula existe → substitui apenas `<v>` / atributos `t=`/`s=` preservando o restante (fórmula `<f>` é mantida se a edição não for forçada).
-     - Se não existe → insere a célula na `<row>` correta, mantendo ordem por coluna.
-   - Strings vão como **inline string** (`<c t="inlineStr"><is><t>2341</t></is></c>`) para não mexer em `sharedStrings.xml`.
-   - Datas vão como número serial Excel + atributo de estilo herdado (ou simplesmente como inline string `"1"`, `"2"`... para a linha 10 — equivalente ao que já é exibido hoje).
-   - `saveXlsx(files)` → `fflate.zipSync` devolvendo `Uint8Array`.
+- Marcar os lançamentos sintéticos de expediente ADM com uma flag interna (`__silent: true`) ou agrupá-los antes de empurrar para `ia.lancamentos`.
+- No motor (etapa 2), pular `alertas.push(...)` quando o lançamento for sintético.
+- Substituir pelo alerta já existente no fim do bloco 6.2 ("Expediente ADM aplicado a N militar(es): …") — porém reformulado para listar os nomes:
+  "Expediente lançado para: Cap Silva, Sgt Souza, … (EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados)."
 
-3. **Reescrever a seção 1, 8 e 9 de `src/utils/escala.functions.ts`**:
-   - Remover `import ExcelJS from "exceljs"`.
-   - Substituir `wb.xlsx.load` por `loadXlsx(bin)`.
-   - Para ler **aba Efetivo** (que só lemos, nunca gravamos): manter um caminho de leitura simples — extrair `<row>`/`<c>` da `xl/worksheets/sheetX.xml` correspondente, resolvendo `sharedStrings.xml` quando `t="s"`. Read-only, sem reescrita.
-   - Para escrever na aba **Anexo B - Escala**: usar `writeCells` apenas nas referências:
-     - `A8` (título do mês)
-     - `linha 10` colunas F..F+dias-1 (números de dia 1..N)
-     - `linha 11` colunas F..F+dias-1 (rótulos da semana)
-     - células dos militares: `(rowOrd + offset, F+(d-1))` para ord/exp/he
-   - Limpeza prévia: para cada militar, **só apagar conteúdo das células que estamos prestes a (re)escrever** — em vez de zerar uma faixa inteira de 31 dias × 3 linhas, apagamos `<v>` mantendo `<c>` com seu `s=` (estilo) e `<f>` (se houver fórmula nativa do template, ela é preservada). Isso elimina a chance de quebrar fórmulas pré-existentes.
+Para lançamentos vindos da IA do usuário (não-sintéticos), o alerta atual continua: "Lançado HE2 (HE) em 3 militar(es) nos dias 4,11,18." — esse comportamento é desejado.
 
-4. **Não tocar** em: `xl/styles.xml`, `xl/sharedStrings.xml` (a menos que vá ler), `xl/_rels/*`, `[Content_Types].xml`, `xl/drawings/*`, `xl/charts/*`, `xl/pivotTables/*`, `xl/worksheets/*` que não sejam a aba Anexo B.
+### 3. Alertas de "faltou militar" só no final
 
-5. **Manter** todo o motor de escala (etapas 1–4 do modus operandi) intacto — só muda a camada de I/O do arquivo.
+Hoje, na etapa 3 (escalar()), quando o motor não consegue completar CG/COV/total no dia, emite imediatamente:
+- "Dia 12: faltou CG (mínimo 1)."
+- "Dia 12: faltou COV (mínimo 1)."
+- "Dia 12: guarnição ordinária ficou abaixo do mínimo; será tentado complemento por HE."
 
-6. **QA pós-geração**: após gerar uma planilha de teste, abrir o `.xlsx` resultante com `unzip -l` e diff contra o original — confirmar que os únicos arquivos modificados são `xl/worksheets/sheetN.xml` da aba Anexo B (e nada mais). Validar que as listas suspensas voltam a funcionar abrindo no Excel/LibreOffice.
+A etapa 4 (HE) frequentemente resolve esses furos, mas os alertas anteriores ficam no histórico mesmo quando o problema foi corrigido.
 
-### Detalhes técnicos
+Mudança:
 
-- **fflate** é compatível com Cloudflare Workers (puro JS, sem `Buffer` obrigatório, sem binários). Já é usado em ambientes serverless similares.
-- O parser de XML será **regex-based dirigido** (não precisamos de DOM completo): a estrutura de `<sheetData>` é regular o suficiente para edição cirúrgica de `<c r="...">`. Isso evita adicionar `fast-xml-parser` ou similar.
-- Inline strings (`t="inlineStr"`) são suportadas nativamente pelo Excel/LibreOffice e não exigem mexer em `sharedStrings.xml`. Perfeito para siglas como `2341`, `EXP9`, `HE24`, `FER`.
-- Para preservar o estilo original de cada célula (cor, borda, formato “Texto”), lemos o atributo `s="..."` da célula existente antes de reescrever, e o mantemos. Se a célula não existe, copiamos o `s=` da célula vizinha do mesmo bloco.
-- A leitura da aba Efetivo continuará funcionando porque montaremos um pequeno helper `readCell(sheetXml, ref)` que resolve `t="s"` via `sharedStrings.xml` quando necessário.
+- Trocar os 3 `alertas.push({ tipo: "warn", … })` da etapa 3 por uma marcação interna (ex.: `breakControl = true`) só para sair do `while`, sem emitir alerta.
+- Manter apenas o alerta da etapa 4 — "Dia X: ainda faltam Y militar(es) — sem HE elegível disponível." — que é emitido **depois** da tentativa de complemento e representa um furo real, não resolvido.
+- Adicional: trocar esse alerta final por warn consolidado por dia continuando como está, já que cada dia que ficou furado é informação útil distinta.
 
-### Arquivos afetados
+### Validação esperada após os ajustes
 
-- `package.json` — adicionar `fflate`
-- `src/utils/xlsx-surgical.ts` — **novo**, ~250 linhas
-- `src/utils/escala.functions.ts` — substituir blocos de I/O (seções 1, 3, 8, 9); motor permanece igual
-- Remover dependência `exceljs` se não for mais usada em nenhum outro lugar (verificar antes)
+- Militar que aparece só na planilha não recebe nenhum lançamento e gera 1 alerta info consolidado.
+- Histórico passa a ter no máximo 1 alerta por militar ADM (nome listado), em vez de ~22.
+- Alertas warn de "faltou" só aparecem para dias em que nem ordinária nem HE conseguiram cobrir.
 
-### Resultado esperado
+### Arquivos tocados
 
-O arquivo baixado abre idêntico ao enviado: mesmas listas suspensas em cada linha (HE, CM, 2341/turnos, etc.), mesmas fórmulas de soma de carga horária, mesma formatação condicional. A única diferença são as células de dia preenchidas com as siglas geradas pelo motor.
+- `src/utils/escala.functions.ts` (apenas — bloco 6.2, etapa 3 do `escalar()`, montagem de `militares`).
