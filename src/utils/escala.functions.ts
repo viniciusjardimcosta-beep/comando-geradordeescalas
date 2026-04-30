@@ -700,43 +700,43 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const alertas: Alerta[] = [];
 
-    /* 1) Carregar workbook com ExcelJS (preserva estilos/merges/fórmulas) */
+    /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
-    const wb = new ExcelJS.Workbook();
+    let bundle;
     try {
-      await wb.xlsx.load(bin.buffer as ArrayBuffer);
+      bundle = loadXlsx(bin);
     } catch (e) {
       throw new Error("Não foi possível ler o arquivo XLSX: " + (e instanceof Error ? e.message : ""));
     }
 
-    /* 2) Localizar abas */
-    let wsAnexo: ExcelJS.Worksheet | undefined;
-    let wsEfetivo: ExcelJS.Worksheet | undefined;
-    wb.eachSheet((ws) => {
-      const n = ws.name.trim().toLowerCase();
-      if (n.includes("anexo b")) wsAnexo = ws;
-      else if (n === "efetivo") wsEfetivo = ws;
-    });
-    if (!wsAnexo) throw new Error('Arquivo não possui aba "Anexo B - Escala".');
-    if (!wsEfetivo) throw new Error('Arquivo não possui aba "Efetivo".');
+    /* 2) Localizar abas — Anexo B (escrita) e Efetivo (somente leitura) */
+    let anexoSheet: { path: string; xml: string } | null = null;
+    let efetivoSheet: { path: string; xml: string } | null = null;
+    for (const [name, path] of bundle.sheetByName.entries()) {
+      if (!anexoSheet && name.includes("anexo b")) {
+        anexoSheet = { path, xml: "" };
+      } else if (!efetivoSheet && name === "efetivo") {
+        efetivoSheet = { path, xml: "" };
+      }
+    }
+    if (!anexoSheet) throw new Error('Arquivo não possui aba "Anexo B - Escala".');
+    if (!efetivoSheet) throw new Error('Arquivo não possui aba "Efetivo".');
+    anexoSheet = getSheetXml(bundle, "anexo b");
+    efetivoSheet = getSheetXml(bundle, "efetivo");
 
     /* 3) Ler Efetivo — B=id func, C=nome, D=posto */
     const efetivoRows: { idFunc: string; nome: string; postoGrad: string }[] = [];
-    const maxEfRow = wsEfetivo.rowCount || 100;
+    const efRows = iterRows(efetivoSheet.xml);
+    const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
     for (let r = 2; r <= maxEfRow; r++) {
-      const idFunc = wsEfetivo.getCell(r, 2).value;
-      const nomeCell = wsEfetivo.getCell(r, 3).value;
-      const posto = wsEfetivo.getCell(r, 4).value;
-      const nomeStr =
-        typeof nomeCell === "string" ? nomeCell :
-        nomeCell && typeof nomeCell === "object" && "result" in nomeCell ? String(nomeCell.result ?? "") :
-        nomeCell && typeof nomeCell === "object" && "richText" in nomeCell ? (nomeCell.richText as { text: string }[]).map(t => t.text).join("") :
-        String(nomeCell ?? "");
+      const idFunc = readCell(bundle, efetivoSheet.xml, makeRef(r, 2));
+      const nomeStr = readCell(bundle, efetivoSheet.xml, makeRef(r, 3));
+      const posto = readCell(bundle, efetivoSheet.xml, makeRef(r, 4));
       if (!nomeStr.trim()) continue;
       efetivoRows.push({
         idFunc: normMatricula(idFunc),
         nome: nomeStr,
-        postoGrad: String(posto ?? ""),
+        postoGrad: posto,
       });
     }
     if (efetivoRows.length === 0) throw new Error("Aba Efetivo está vazia.");
