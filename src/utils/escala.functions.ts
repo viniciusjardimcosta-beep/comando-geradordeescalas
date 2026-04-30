@@ -76,6 +76,8 @@ interface LancamentoIA {
   linha?: "ORD" | "EXP" | "HE";
   /** sigla exata a lançar (ex: HE6, CM3, EXP9, 123, 2341, C2) */
   sigla: string;
+  /** lançamento sintético gerado pelo sistema — não emite alerta individual */
+  __silent?: boolean;
 }
 interface ReforcoIA {
   dia: number;
@@ -466,10 +468,12 @@ function escalar(
         }
       }
     }
-    alertas.push({
-      tipo: "info",
-      msg: `Lançado ${sigla} (${linha}) em ${alvos.length} militar(es) nos dias ${l.dias.join(",")}.`,
-    });
+    if (!l.__silent) {
+      alertas.push({
+        tipo: "info",
+        msg: `Lançado ${sigla} (${linha}) em ${alvos.length} militar(es) nos dias ${l.dias.join(",")}.`,
+      });
+    }
   }
 
   // 3) exceções
@@ -587,10 +591,7 @@ function escalar(
     let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
     while (cgEscalados < minCg) {
       const cg = escolher("CG");
-      if (!cg) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou CG (mínimo ${minCg}).` });
-        break;
-      }
+      if (!cg) break; // furo será reavaliado depois da etapa de HE
       lancaServico24(cg, dia);
       cgEscalados++;
     }
@@ -599,10 +600,7 @@ function escalar(
     let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     while (covEscalados < minCov) {
       const cov = escolher("COV");
-      if (!cov) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou COV (mínimo ${minCov}).` });
-        break;
-      }
+      if (!cov) break;
       lancaServico24(cov, dia);
       covEscalados++;
     }
@@ -610,11 +608,8 @@ function escalar(
     // completar
     const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
     while (escalados24() < totalAlvo) {
-      let m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
-      if (!m) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: guarnição ordinária ficou abaixo do mínimo; será tentado complemento por HE.` });
-        break;
-      }
+      const m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
+      if (!m) break;
       lancaServico24(m, dia);
     }
   }
@@ -803,6 +798,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
     /* 5) Runtime dos militares — linhas R12, R15, R18... */
+    const naoCadastrados: string[] = [];
     const militares: MilitarRT[] = efetivoRows.map((ef, i) => {
       const rowOrd = 12 + i * 3;
       const cad = cadPorMat.get(ef.idFunc) ?? cadPorNome.get(normNome(ef.nome));
@@ -810,10 +806,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       const isCg = !!cad?.isCg;
       const isAdm = !!cad?.isAdm;
       if (!cad) {
-        alertas.push({
-          tipo: "info",
-          msg: `${ef.nome} (${ef.idFunc || "sem matrícula"}) não está no cadastro — tratado como BM comum (sem COV/CG/ADM).`,
-        });
+        naoCadastrados.push(`${ef.nome}${ef.idFunc ? ` (${ef.idFunc})` : ""}`);
       }
       const m: MilitarRT = {
         rowOrd,
@@ -821,7 +814,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
         nomeNorm: normNome(ef.nome),
         matricula: ef.idFunc,
         isCov, isCg, isAdm,
-        ativo: true,
+        // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
+        ativo: !!cad,
         cargaH: 0,
         ultimoServico: 0,
         afastDias: new Set(),
@@ -845,6 +839,13 @@ export const gerarEscala = createServerFn({ method: "POST" })
       }
       return m;
     });
+
+    if (naoCadastrados.length) {
+      alertas.push({
+        tipo: "info",
+        msg: `${naoCadastrados.length} militar(es) da planilha não estão cadastrados e foram ignorados: ${naoCadastrados.join(", ")}.`,
+      });
+    }
 
     /* 6) IA interpretando observações */
     const ia = await interpretarObservacoes(
@@ -911,13 +912,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
             dias: [dia],
             linha: "EXP",
             sigla,
+            __silent: true,
           });
         }
       }
       if (admMilitares.length) {
         alertas.push({
           tipo: "info",
-          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados.`,
+          msg: `Expediente lançado para: ${admMilitares.map((m) => m.nome).join(", ")} (EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados).`,
         });
       }
     }
