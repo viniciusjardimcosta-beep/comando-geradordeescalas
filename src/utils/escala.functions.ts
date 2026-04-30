@@ -610,8 +610,8 @@ function escalar(
     const ref = reforcoMap.get(dia);
     const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
 
-    // conta militares efetivamente em serviço 24h no dia
-    const escalados24 = Array.from(slotOrd.values()).filter((s) => s === SIGLA_24).length;
+    // conta militares efetivamente em serviço operacional no dia
+    const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
     let faltam = totalAlvo - escalados24;
     if (faltam <= 0) continue;
 
@@ -621,19 +621,20 @@ function escalar(
         if (!m.ativo) return false;
         if (m.isAdm) return false;
         if (indisp.has(m.rowOrd)) return false;
+        if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
+        if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotHe.has(m.rowOrd)) return false;
-        // folga mínima de ~12h: não pode ter feito 24h no dia anterior
-        if (m.ultimoServico > 0 && dia - m.ultimoServico < 1) return false;
+        if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+        // folga mínima após serviço 24h anterior
+        if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
         return true;
       })
       .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
 
     for (const m of candidatos) {
       if (faltam <= 0) break;
-      slotHe.set(m.rowOrd, "HE24");
-      m.cargaH += 24;
-      m.ultimoServico = dia;
+      lancaServico24(m, dia, true);
       faltam--;
     }
     if (faltam > 0) {
