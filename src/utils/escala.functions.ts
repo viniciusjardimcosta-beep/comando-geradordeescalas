@@ -679,6 +679,173 @@ function escalar(
     }
   }
 
+  /* 5ª ETAPA — Acerto de carga horária mensal.
+     Para cada militar ativo (não-ADM): se a soma de horas ORD ficou
+     abaixo da carga mínima do mês, lança CM (complemento) na linha EXP
+     do último serviço; se ultrapassou, converte o excedente em HE. */
+
+  // Carga mínima base por dias do mês (espelha as fórmulas da planilha)
+  const cargaBase = (d: number): number =>
+    d === 28 ? 160 : d === 29 ? 165 : d === 30 ? 171 : d === 31 ? 177 : Math.round(d * 5.7);
+
+  // Tamanho em horas de cada sigla ORD parcial (já suportadas pela planilha)
+  const ORD_HORAS: Record<string, number> = {
+    "2": 6, "3": 6, "4": 6, "1": 6,
+    "23": 12, "34": 12, "234": 18, "2341": 24, "234 1": 24,
+  };
+  const horasOrdSigla = (s: string): number => ORD_HORAS[s] ?? 0;
+
+  // Total de horas ordinárias no mês para o militar (somando sigla do dia + sigla do D+1 se for "1" da virada)
+  const horasOrdMes = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      // contar somente lançamentos que são turnos operacionais (não afastamentos/sigla 1 contínua)
+      if (s === "1") {
+        // pertence ao serviço iniciado em D-1 — só conta se D-1 também tem sigla operacional
+        const prev = ord.get(d - 1)?.get(m.rowOrd);
+        if (prev && (prev === "234" || prev === "23")) total += 6;
+        continue;
+      }
+      total += horasOrdSigla(s);
+    }
+    return total;
+  };
+
+  // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
+  const diasAfastadoMap = new Map<number, number>();
+  for (const m of militares) {
+    let count = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && SIGLAS_AFASTAMENTO.has(s)) count++;
+    }
+    diasAfastadoMap.set(m.rowOrd, count);
+  }
+
+  // Encontra dia do último serviço 24h ORD do militar (sigla "234" no dia + "1" no D+1)
+  const ultimoServico24 = (m: MilitarRT): number | null => {
+    for (let d = dias; d >= 1; d--) {
+      if (ord.get(d)?.get(m.rowOrd) === "234") return d;
+    }
+    return null;
+  };
+
+  const acertosCm: string[] = [];
+  const acertosHe: string[] = [];
+  const cmAvulso: string[] = [];
+
+  for (const m of militares) {
+    if (!m.ativo || m.isAdm) continue;
+    const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
+    const cargaMin = Math.round(cargaBase(dias) * (1 - diasAf / dias));
+    if (cargaMin <= 0) continue;
+    const cargaOrd = horasOrdMes(m);
+
+    if (cargaOrd === cargaMin) continue;
+
+    if (cargaOrd > cargaMin) {
+      // EXCEDENTE → converter último serviço 24h em parcial + HE no resto
+      const excedente = cargaOrd - cargaMin;
+      const dia = ultimoServico24(m);
+      if (dia === null) continue;
+      // serviço 24h atual = "234" no dia + "1" no D+1 (totaliza 24h)
+      // queremos manter (24 - excedente) horas como ORD e jogar `excedente` horas em HE
+      const horasOrdManter = 24 - excedente;
+      // escolher melhor combinação ORD parcial sem ultrapassar
+      let novaSiglaDia = "";
+      let novaSiglaDiaPos = "";
+      let horasOrdReais = 0;
+      if (horasOrdManter >= 18) { novaSiglaDia = "234"; horasOrdReais = 18; }
+      else if (horasOrdManter >= 12) { novaSiglaDia = "23"; horasOrdReais = 12; }
+      else if (horasOrdManter >= 6) { novaSiglaDia = "2"; horasOrdReais = 6; }
+      // 0 → sem ORD, tudo vira HE
+      const horasHe = 24 - horasOrdReais;
+      // limpa "1" do dia seguinte (se houver) e reescreve
+      ord.get(dia)!.delete(m.rowOrd);
+      if (dia < dias) ord.get(dia + 1)!.delete(m.rowOrd);
+      if (novaSiglaDia) ord.get(dia)!.set(m.rowOrd, novaSiglaDia);
+      if (novaSiglaDiaPos && dia < dias) ord.get(dia + 1)!.set(m.rowOrd, novaSiglaDiaPos);
+      // distribuir horasHe entre dia e D+1 (até 18h no dia, resto no D+1)
+      const heDia = Math.min(horasHe, 24 - (horasOrdReais === 18 ? 18 : horasOrdReais)); // simples: no dia até 18h
+      const heDiaFinal = Math.min(heDia, 18);
+      const heProx = horasHe - heDiaFinal;
+      if (heDiaFinal > 0 && heDiaFinal <= 24) he.get(dia)!.set(m.rowOrd, `HE${heDiaFinal}`);
+      if (heProx > 0 && dia < dias && heProx <= 24) he.get(dia + 1)!.set(m.rowOrd, `HE${heProx}`);
+      acertosHe.push(`${m.nome} (${excedente}h dia ${dia})`);
+    } else {
+      // FALTANTE → CM no último serviço 24h
+      const faltam = cargaMin - cargaOrd;
+      if (faltam > 16) {
+        // CM máx é CM16; se faltar mais que isso, fica como aviso
+        acertosCm.push(`${m.nome} (faltam ${faltam}h — manual)`);
+        continue;
+      }
+      const dia = ultimoServico24(m);
+      const cmSigla = `CM${faltam}`;
+      if (dia === null) {
+        // sem serviço 24h restante → lança CM avulso em qualquer dia útil livre
+        let lancou = false;
+        for (let d = 1; d <= dias; d++) {
+          if (!isDiaExpediente(ano, mes, d)) continue;
+          const sOrd = ord.get(d)?.get(m.rowOrd);
+          if (sOrd && SIGLAS_AFASTAMENTO.has(sOrd)) continue;
+          if (expm.get(d)?.has(m.rowOrd)) continue;
+          expm.get(d)!.set(m.rowOrd, cmSigla);
+          cmAvulso.push(`${m.nome} (${cmSigla} dia ${d})`);
+          lancou = true;
+          break;
+        }
+        if (!lancou) acertosCm.push(`${m.nome} (faltam ${faltam}h — sem dia livre)`);
+        continue;
+      }
+      // tem serviço 24h: reduz ORD para que ORD + CM == cargaMin (mantendo serviço físico de 24h)
+      // Estrutura final no dia: ORD parcial (X h) + CM (faltam h) + HE (24 - X - faltam) divididos no dia/D+1
+      // X = maior tamanho ORD que somado a faltam não ultrapasse 24 e mantenha cargaOrd+X+faltam <= cargaMin (garantido pois X = horas que já contavam menos as não cumpridas)
+      // Como o serviço já está como 24h ord (= 24h contam), na verdade já temos cargaOrd incluindo essas 24h.
+      // Para fechar EXATAMENTE cargaMin: ORD precisa virar (24 - faltam) horas e adicionar CM(faltam). HE = 0.
+      const horasOrdManter = 24 - faltam;
+      let novaSigla = "";
+      let horasOrdReais = 0;
+      if (horasOrdManter >= 18) { novaSigla = "234"; horasOrdReais = 18; }
+      else if (horasOrdManter >= 12) { novaSigla = "23"; horasOrdReais = 12; }
+      else if (horasOrdManter >= 6) { novaSigla = "2"; horasOrdReais = 6; }
+      const horasHe = 24 - horasOrdReais - faltam;
+      ord.get(dia)!.delete(m.rowOrd);
+      if (dia < dias) ord.get(dia + 1)!.delete(m.rowOrd);
+      if (novaSigla) ord.get(dia)!.set(m.rowOrd, novaSigla);
+      expm.get(dia)!.set(m.rowOrd, cmSigla);
+      if (horasHe > 0) {
+        const heDia = Math.min(horasHe, 18 - (horasOrdReais === 18 ? 18 : 0));
+        const heDiaFinal = Math.max(0, Math.min(heDia, 18));
+        const heProx = horasHe - heDiaFinal;
+        if (heDiaFinal > 0) he.get(dia)!.set(m.rowOrd, `HE${heDiaFinal}`);
+        if (heProx > 0 && dia < dias) he.get(dia + 1)!.set(m.rowOrd, `HE${heProx}`);
+      }
+      acertosCm.push(`${m.nome} (${cmSigla} dia ${dia})`);
+    }
+  }
+
+  if (acertosCm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Complemento de carga (CM) lançado: ${acertosCm.join(", ")}.`,
+    });
+  }
+  if (cmAvulso.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Complemento avulso (sem serviço 24h restante): ${cmAvulso.join(", ")}.`,
+    });
+  }
+  if (acertosHe.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Excedente convertido em HE: ${acertosHe.join(", ")}.`,
+    });
+  }
+
   return { ord, exp: expm, he };
 }
 
