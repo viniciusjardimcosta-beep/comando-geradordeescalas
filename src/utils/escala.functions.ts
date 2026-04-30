@@ -936,6 +936,13 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
     wsAnexo.getCell(8, 1).value = `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`;
     let escritas = 0;
+    for (const m of militares) {
+      for (let offset = 0; offset <= 2; offset++) {
+        for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
+          wsAnexo.getCell(m.rowOrd + offset, COL_INI + (d - 1)).value = null;
+        }
+      }
+    }
     const escreve = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
       const cell = wsAnexo!.getCell(rowOrd + linhaOffset, COL_INI + (dia - 1));
       cell.value = sigla;
