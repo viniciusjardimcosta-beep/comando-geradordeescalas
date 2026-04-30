@@ -706,23 +706,74 @@ export const gerarEscala = createServerFn({ method: "POST" })
       data.mes, data.ano,
     );
 
-    /* 6.1) Pré-aplicar FER vindos do plano anual nos slots ORD */
-    // (o motor escalar() não conhece o slot ord ainda — vamos passar via ia.afastamentos sintéticos)
+    /* 6.1) Pré-aplicar afastamentos do plano anual agrupando dias contíguos por sigla
+            (gera 1 ia.afastamento por período → 1 alerta consolidado). */
     for (const m of militares) {
-      for (const [dia, sigla] of m.afastSigla.entries()) {
+      const diasOrdenados = Array.from(m.afastSigla.keys()).sort((a, b) => a - b);
+      let i = 0;
+      while (i < diasOrdenados.length) {
+        const sigla = m.afastSigla.get(diasOrdenados[i])!;
+        let j = i;
+        while (
+          j + 1 < diasOrdenados.length &&
+          diasOrdenados[j + 1] === diasOrdenados[j] + 1 &&
+          m.afastSigla.get(diasOrdenados[j + 1]) === sigla
+        ) {
+          j++;
+        }
         ia.afastamentos.push({
           matricula: m.matricula,
           nome: m.nome,
-          diaInicio: dia,
-          diaFim: dia,
+          diaInicio: diasOrdenados[i],
+          diaFim: diasOrdenados[j],
           sigla,
-          motivo: sigla === "FER" ? "ferias" : sigla,
+          motivo: sigla === "FER" ? "férias (plano anual)" : sigla,
         });
+        i = j + 1;
       }
       // limpa para não duplicar dentro do motor
       m.afastDias = new Set();
       m.afastSigla = new Map();
     }
+
+    /* 6.2) ETAPA 2 — Aplicar expediente ADM (EXP9 seg-qui, EXP6 sex) na linha EXP.
+            Lançado direto via ia.lancamentos para garantir que o motor não conflite. */
+    {
+      const dias = diasNoMes(data.mes, data.ano);
+      const expPorDia = new Map<number, string>(); // dia -> EXP9 ou EXP6
+      for (let d = 1; d <= dias; d++) {
+        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 0=dom..6=sab
+        if (dow >= 1 && dow <= 4) expPorDia.set(d, "EXP9");
+        else if (dow === 5) expPorDia.set(d, "EXP6");
+      }
+      const admMilitares = militares.filter((m) => m.isAdm);
+      for (const m of admMilitares) {
+        // dias em que o militar ADM tem afastamento (já em ia.afastamentos)
+        const diasAfastado = new Set<number>();
+        for (const af of ia.afastamentos) {
+          if (af.matricula === m.matricula || normNome(af.nome) === m.nomeNorm) {
+            for (let d = af.diaInicio; d <= af.diaFim; d++) diasAfastado.add(d);
+          }
+        }
+        for (const [dia, sigla] of expPorDia.entries()) {
+          if (diasAfastado.has(dia)) continue;
+          ia.lancamentos.push({
+            matricula: m.matricula,
+            nome: m.nome,
+            dias: [dia],
+            linha: "EXP",
+            sigla,
+          });
+        }
+      }
+      if (admMilitares.length) {
+        alertas.push({
+          tipo: "info",
+          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex.`,
+        });
+      }
+    }
+
 
     /* 7) Motor */
     const dias = diasNoMes(data.mes, data.ano);
