@@ -858,7 +858,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
       const dias = diasNoMes(data.mes, data.ano);
       const expPorDia = new Map<number, string>(); // dia -> EXP9 ou EXP6
       for (let d = 1; d <= dias; d++) {
-        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 0=dom..6=sab
+        if (!isDiaExpediente(data.ano, data.mes, d)) continue;
+        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 1=seg..5=sex
         if (dow >= 1 && dow <= 4) expPorDia.set(d, "EXP9");
         else if (dow === 5) expPorDia.set(d, "EXP6");
       }
@@ -885,7 +886,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       if (admMilitares.length) {
         alertas.push({
           tipo: "info",
-          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex.`,
+          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados.`,
         });
       }
     }
@@ -899,6 +900,20 @@ export const gerarEscala = createServerFn({ method: "POST" })
           NÃO tocar em colunas A-E, linhas 10-11, nem em outras abas.
           Preservamos estilo da célula (usamos só .value). */
     const COL_INI = 6; // F
+    const DIAS_MAX_PLANILHA = 31;
+    for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
+      const col = COL_INI + (d - 1);
+      if (d <= dias) {
+        const dt = new Date(Date.UTC(data.ano, data.mes - 1, d));
+        wsAnexo.getCell(10, col).value = dt;
+        wsAnexo.getCell(10, col).numFmt = "d";
+        wsAnexo.getCell(11, col).value = rotuloSemana(data.ano, data.mes, d);
+      } else {
+        wsAnexo.getCell(10, col).value = null;
+        wsAnexo.getCell(11, col).value = null;
+      }
+    }
+    wsAnexo.getCell(8, 1).value = `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`;
     let escritas = 0;
     const escreve = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
       const cell = wsAnexo!.getCell(rowOrd + linhaOffset, COL_INI + (dia - 1));
