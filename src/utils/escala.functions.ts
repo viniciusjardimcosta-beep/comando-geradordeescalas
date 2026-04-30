@@ -649,6 +649,8 @@ function escalar(
     if (faltam <= 0) continue;
 
     const indisp = naoEscalar.get(dia)!;
+    // Candidatos para HE: lançamento é previsão de necessidade de HE,
+    // por isso NÃO aplicamos cooldown de folga aqui (apenas afastamento e conflito de ORD/HE).
     const candidatos = militares
       .filter((m) => {
         if (!m.ativo) return false;
@@ -659,8 +661,6 @@ function escalar(
         if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotHe.has(m.rowOrd)) return false;
         if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
-        // folga mínima após serviço 24h anterior
-        if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
         return true;
       })
       .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
@@ -689,12 +689,8 @@ function escalar(
       if (usadosHe.has(m.rowOrd)) continue;
       escalaHe(m);
     }
-    if (faltam > 0) {
-      alertas.push({
-        tipo: "warn",
-        msg: `Dia ${dia}: ainda faltam ${faltam} militar(es) — sem HE elegível disponível.`,
-      });
-    }
+    // Sem warn quando não há candidato — o lançamento de HE é apenas previsão
+    // de necessidade da guarnição mínima, não uma falha de geração.
   }
 
   /* 5ª ETAPA — Acerto de carga horária mensal.
