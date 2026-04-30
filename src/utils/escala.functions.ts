@@ -108,6 +108,66 @@ function diasNoMes(mes: number, ano: number) {
   return new Date(ano, mes, 0).getDate();
 }
 
+function dataKey(ano: number, mes: number, dia: number) {
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+function pascoaGregoriana(ano: number) {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function feriadosBrasil(ano: number) {
+  const keys = new Set<string>();
+  const add = (mes: number, dia: number) => keys.add(dataKey(ano, mes, dia));
+  [
+    [1, 1], [4, 21], [5, 1], [9, 7], [9, 20], [10, 12], [11, 2], [11, 15], [11, 20], [12, 25],
+  ].forEach(([mes, dia]) => add(mes, dia));
+  const pascoa = pascoaGregoriana(ano);
+  const addRel = (offset: number) => {
+    const d = new Date(pascoa);
+    d.setUTCDate(d.getUTCDate() + offset);
+    add(d.getUTCMonth() + 1, d.getUTCDate());
+  };
+  addRel(-48); // Carnaval segunda
+  addRel(-47); // Carnaval terça
+  addRel(-2);  // Sexta-feira Santa
+  addRel(60);  // Corpus Christi
+  return keys;
+}
+
+function isFeriado(ano: number, mes: number, dia: number) {
+  return feriadosBrasil(ano).has(dataKey(ano, mes, dia));
+}
+
+function isDiaExpediente(ano: number, mes: number, dia: number) {
+  const dow = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  return dow >= 1 && dow <= 5 && !isFeriado(ano, mes, dia);
+}
+
+function rotuloSemana(ano: number, mes: number, dia: number) {
+  return ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."][
+    new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()
+  ];
+}
+
+function excelSerialUTC(ano: number, mes: number, dia: number) {
+  return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000) + 25569;
+}
+
 /* ------------------------------------------------------------------ */
 /* Lovable AI — interpretar observações livres em JSON                */
 /* ------------------------------------------------------------------ */
@@ -293,6 +353,8 @@ interface MilitarRT {
 function escalar(
   militares: MilitarRT[],
   dias: number,
+  mes: number,
+  ano: number,
   par: z.infer<typeof ParametrosSchema>,
   ia: InterpretacaoIA,
   alertas: Alerta[],
@@ -383,7 +445,15 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
-        setDest.get(d)!.set(m.rowOrd, sigla);
+        if (linha === "ORD" && sigla === "2341") {
+          ord.get(d)!.set(m.rowOrd, "234");
+          if (d < dias && !ord.get(d + 1)!.has(m.rowOrd)) ord.get(d + 1)!.set(m.rowOrd, "1");
+        } else if (linha === "HE" && sigla === "HE24") {
+          he.get(d)!.set(m.rowOrd, "HE18");
+          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE6");
+        } else {
+          setDest.get(d)!.set(m.rowOrd, sigla);
+        }
       }
     }
     alertas.push({
@@ -420,8 +490,29 @@ function escalar(
   const reforcoMap = new Map<number, ReforcoIA>();
   for (const r of ia.reforcos) reforcoMap.set(r.dia, r);
 
-  const SIGLA_24 = "2341";
+  const SIGLA_ORD_DIA = "234";
+  const SIGLA_ORD_MADRUGADA = "1";
+  const SIGLA_HE_DIA = "HE18";
+  const SIGLA_HE_MADRUGADA = "HE6";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
+
+  const estaEmServico24 = (m: MilitarRT, dia: number) =>
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
+    (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA);
+
+  const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
+    if (destinoHe) {
+      he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
+      if (dia < dias) he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
+    } else {
+      ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
+      if (dia < dias && !ord.get(dia + 1)!.has(m.rowOrd)) {
+        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+      }
+    }
+    m.cargaH += 24;
+    m.ultimoServico = dia;
+  };
 
   for (let dia = 1; dia <= dias; dia++) {
     const slot = ord.get(dia)!; // slot já pode conter lançamentos/afastamentos
@@ -446,7 +537,9 @@ function escalar(
       if (!m.ativo) return false;
       if (m.isAdm) return false; // ADM nunca entra na escala operacional
       if (indisp.has(m.rowOrd)) return false;
+      if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
       if (jaOcupado(m)) return false;
+      if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
       if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
       const restr = apFunc.get(m.rowOrd);
       if (restr) {
@@ -465,11 +558,8 @@ function escalar(
     const grupoDoDia = ((dia - 1) % 4) + 1;
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
       const candidatos = militares
-        .filter((m) => elegivel(m, papel))
+        .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
         .sort((a, b) => {
-          const ag = a.grupoOrdem === grupoDoDia ? 0 : 1;
-          const bg = b.grupoOrdem === grupoDoDia ? 0 : 1;
-          if (ag !== bg) return ag - bg;
           return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
         });
       return candidatos[0] ?? null;
@@ -479,61 +569,43 @@ function escalar(
     for (const rowOrd of obriga) {
       const m = militares.find((x) => x.rowOrd === rowOrd);
       if (m && !slot.has(rowOrd) && !m.isAdm) {
-        slot.set(rowOrd, SIGLA_24);
-        m.cargaH += 24;
-        m.ultimoServico = dia;
+        lancaServico24(m, dia);
       }
     }
 
     // CGs
-    let cgEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCg).length;
+    let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
     while (cgEscalados < minCg) {
       const cg = escolher("CG");
       if (!cg) {
         alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou CG (mínimo ${minCg}).` });
         break;
       }
-      slot.set(cg.rowOrd, SIGLA_24);
-      cg.cargaH += 24;
-      cg.ultimoServico = dia;
+      lancaServico24(cg, dia);
       cgEscalados++;
     }
 
     // COVs
-    let covEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCov).length;
+    let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     while (covEscalados < minCov) {
       const cov = escolher("COV");
       if (!cov) {
         alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou COV (mínimo ${minCov}).` });
         break;
       }
-      slot.set(cov.rowOrd, SIGLA_24);
-      cov.cargaH += 24;
-      cov.ultimoServico = dia;
+      lancaServico24(cov, dia);
       covEscalados++;
     }
 
     // completar
-    const escalados24 = () => militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24).length;
+    const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
     while (escalados24() < totalAlvo) {
       let m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
       if (!m) {
-        const flex = militares
-          .filter((x) => x.ativo && !x.isAdm && !indisp.has(x.rowOrd) && !slot.has(x.rowOrd))
-          .sort((a, b) => a.cargaH - b.cargaH);
-        m = flex[0] ?? null;
-        if (m) alertas.push({
-          tipo: "warn",
-          msg: `Dia ${dia}: 24x72 quebrado para ${m.nome} por falta de efetivo.`,
-        });
-      }
-      if (!m) {
-        alertas.push({ tipo: "error", msg: `Dia ${dia}: efetivo insuficiente.` });
+        alertas.push({ tipo: "warn", msg: `Dia ${dia}: guarnição ordinária ficou abaixo do mínimo; será tentado complemento por HE.` });
         break;
       }
-      slot.set(m.rowOrd, SIGLA_24);
-      m.cargaH += 24;
-      m.ultimoServico = dia;
+      lancaServico24(m, dia);
     }
   }
 
@@ -545,9 +617,11 @@ function escalar(
     const slotHe = he.get(dia)!;
     const ref = reforcoMap.get(dia);
     const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
 
-    // conta militares efetivamente em serviço 24h no dia
-    const escalados24 = Array.from(slotOrd.values()).filter((s) => s === SIGLA_24).length;
+    // conta militares efetivamente em serviço operacional no dia
+    const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
     let faltam = totalAlvo - escalados24;
     if (faltam <= 0) continue;
 
@@ -557,20 +631,40 @@ function escalar(
         if (!m.ativo) return false;
         if (m.isAdm) return false;
         if (indisp.has(m.rowOrd)) return false;
+        if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
+        if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotHe.has(m.rowOrd)) return false;
-        // folga mínima de ~12h: não pode ter feito 24h no dia anterior
-        if (m.ultimoServico > 0 && dia - m.ultimoServico < 1) return false;
+        if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+        // folga mínima após serviço 24h anterior
+        if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
         return true;
       })
       .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
 
+    const usadosHe = new Set<number>();
+    const escalaHe = (m: MilitarRT) => {
+      lancaServico24(m, dia, true);
+      usadosHe.add(m.rowOrd);
+      faltam--;
+    };
+    const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
+    const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
+
+    while (faltam > 0 && cgAtuais() < minCg) {
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
+      if (!m) break;
+      escalaHe(m);
+    }
+    while (faltam > 0 && covAtuais() < minCov) {
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
+      if (!m) break;
+      escalaHe(m);
+    }
     for (const m of candidatos) {
       if (faltam <= 0) break;
-      slotHe.set(m.rowOrd, "HE24");
-      m.cargaH += 24;
-      m.ultimoServico = dia;
-      faltam--;
+      if (usadosHe.has(m.rowOrd)) continue;
+      escalaHe(m);
     }
     if (faltam > 0) {
       alertas.push({
@@ -785,7 +879,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
       const dias = diasNoMes(data.mes, data.ano);
       const expPorDia = new Map<number, string>(); // dia -> EXP9 ou EXP6
       for (let d = 1; d <= dias; d++) {
-        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 0=dom..6=sab
+        if (!isDiaExpediente(data.ano, data.mes, d)) continue;
+        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 1=seg..5=sex
         if (dow >= 1 && dow <= 4) expPorDia.set(d, "EXP9");
         else if (dow === 5) expPorDia.set(d, "EXP6");
       }
@@ -812,7 +907,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       if (admMilitares.length) {
         alertas.push({
           tipo: "info",
-          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex.`,
+          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados.`,
         });
       }
     }
@@ -820,13 +915,34 @@ export const gerarEscala = createServerFn({ method: "POST" })
 
     /* 7) Motor */
     const dias = diasNoMes(data.mes, data.ano);
-    const { ord, exp: expm, he } = escalar(militares, dias, data.parametros, ia, alertas);
+    const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
 
     /* 8) Escrever SOMENTE nas células de dia (F=6 até F+dias-1).
           NÃO tocar em colunas A-E, linhas 10-11, nem em outras abas.
           Preservamos estilo da célula (usamos só .value). */
     const COL_INI = 6; // F
+    const DIAS_MAX_PLANILHA = 31;
+    for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
+      const col = COL_INI + (d - 1);
+      if (d <= dias) {
+        const dt = new Date(Date.UTC(data.ano, data.mes - 1, d));
+        wsAnexo.getCell(10, col).value = dt;
+        wsAnexo.getCell(10, col).numFmt = "d";
+        wsAnexo.getCell(11, col).value = rotuloSemana(data.ano, data.mes, d);
+      } else {
+        wsAnexo.getCell(10, col).value = null;
+        wsAnexo.getCell(11, col).value = null;
+      }
+    }
+    wsAnexo.getCell(8, 1).value = `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`;
     let escritas = 0;
+    for (const m of militares) {
+      for (let offset = 0; offset <= 2; offset++) {
+        for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
+          wsAnexo.getCell(m.rowOrd + offset, COL_INI + (d - 1)).value = null;
+        }
+      }
+    }
     const escreve = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
       const cell = wsAnexo!.getCell(rowOrd + linhaOffset, COL_INI + (dia - 1));
       cell.value = sigla;
