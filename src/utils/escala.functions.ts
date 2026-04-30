@@ -1,7 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import ExcelJS from "exceljs";
+import {
+  loadXlsx,
+  saveXlsx,
+  getSheetXml,
+  readCell,
+  iterRows,
+  applyEdits,
+  writeSheetXml,
+  makeRef,
+  type CellEdit,
+} from "./xlsx-surgical";
 
 /* ------------------------------------------------------------------ */
 /* Tipos                                                              */
@@ -689,43 +699,43 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const alertas: Alerta[] = [];
 
-    /* 1) Carregar workbook com ExcelJS (preserva estilos/merges/fórmulas) */
+    /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
-    const wb = new ExcelJS.Workbook();
+    let bundle;
     try {
-      await wb.xlsx.load(bin.buffer as ArrayBuffer);
+      bundle = loadXlsx(bin);
     } catch (e) {
       throw new Error("Não foi possível ler o arquivo XLSX: " + (e instanceof Error ? e.message : ""));
     }
 
-    /* 2) Localizar abas */
-    let wsAnexo: ExcelJS.Worksheet | undefined;
-    let wsEfetivo: ExcelJS.Worksheet | undefined;
-    wb.eachSheet((ws) => {
-      const n = ws.name.trim().toLowerCase();
-      if (n.includes("anexo b")) wsAnexo = ws;
-      else if (n === "efetivo") wsEfetivo = ws;
-    });
-    if (!wsAnexo) throw new Error('Arquivo não possui aba "Anexo B - Escala".');
-    if (!wsEfetivo) throw new Error('Arquivo não possui aba "Efetivo".');
+    /* 2) Localizar abas — Anexo B (escrita) e Efetivo (somente leitura) */
+    let anexoSheet: { path: string; xml: string } | null = null;
+    let efetivoSheet: { path: string; xml: string } | null = null;
+    for (const [name, path] of bundle.sheetByName.entries()) {
+      if (!anexoSheet && name.includes("anexo b")) {
+        anexoSheet = { path, xml: "" };
+      } else if (!efetivoSheet && name === "efetivo") {
+        efetivoSheet = { path, xml: "" };
+      }
+    }
+    if (!anexoSheet) throw new Error('Arquivo não possui aba "Anexo B - Escala".');
+    if (!efetivoSheet) throw new Error('Arquivo não possui aba "Efetivo".');
+    anexoSheet = getSheetXml(bundle, "anexo b");
+    efetivoSheet = getSheetXml(bundle, "efetivo");
 
     /* 3) Ler Efetivo — B=id func, C=nome, D=posto */
     const efetivoRows: { idFunc: string; nome: string; postoGrad: string }[] = [];
-    const maxEfRow = wsEfetivo.rowCount || 100;
+    const efRows = iterRows(efetivoSheet.xml);
+    const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
     for (let r = 2; r <= maxEfRow; r++) {
-      const idFunc = wsEfetivo.getCell(r, 2).value;
-      const nomeCell = wsEfetivo.getCell(r, 3).value;
-      const posto = wsEfetivo.getCell(r, 4).value;
-      const nomeStr =
-        typeof nomeCell === "string" ? nomeCell :
-        nomeCell && typeof nomeCell === "object" && "result" in nomeCell ? String(nomeCell.result ?? "") :
-        nomeCell && typeof nomeCell === "object" && "richText" in nomeCell ? (nomeCell.richText as { text: string }[]).map(t => t.text).join("") :
-        String(nomeCell ?? "");
+      const idFunc = readCell(bundle, efetivoSheet.xml, makeRef(r, 2));
+      const nomeStr = readCell(bundle, efetivoSheet.xml, makeRef(r, 3));
+      const posto = readCell(bundle, efetivoSheet.xml, makeRef(r, 4));
       if (!nomeStr.trim()) continue;
       efetivoRows.push({
         idFunc: normMatricula(idFunc),
         nome: nomeStr,
-        postoGrad: String(posto ?? ""),
+        postoGrad: posto,
       });
     }
     if (efetivoRows.length === 0) throw new Error("Aba Efetivo está vazia.");
@@ -917,53 +927,59 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const dias = diasNoMes(data.mes, data.ano);
     const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
 
-    /* 8) Escrever SOMENTE nas células de dia (F=6 até F+dias-1).
-          NÃO tocar em colunas A-E, linhas 10-11, nem em outras abas.
-          Preservamos estilo da célula (usamos só .value). */
+    /* 8) Acumular edições para a aba Anexo B (cirúrgico — não toca em
+          estilos, validações, fórmulas das demais células). */
     const COL_INI = 6; // F
     const DIAS_MAX_PLANILHA = 31;
+    const edits: CellEdit[] = [];
+
+    // Cabeçalho do mês (A8)
+    edits.push({
+      ref: makeRef(8, 1),
+      value: `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`,
+    });
+
+    // Linhas 10 (dias) e 11 (rótulo da semana)
     for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
       const col = COL_INI + (d - 1);
       if (d <= dias) {
-        const dt = new Date(Date.UTC(data.ano, data.mes - 1, d));
-        wsAnexo.getCell(10, col).value = dt;
-        wsAnexo.getCell(10, col).numFmt = "d";
-        wsAnexo.getCell(11, col).value = rotuloSemana(data.ano, data.mes, d);
+        edits.push({ ref: makeRef(10, col), value: String(d) });
+        edits.push({ ref: makeRef(11, col), value: rotuloSemana(data.ano, data.mes, d) });
       } else {
-        wsAnexo.getCell(10, col).value = null;
-        wsAnexo.getCell(11, col).value = null;
+        edits.push({ ref: makeRef(10, col), value: "" });
+        edits.push({ ref: makeRef(11, col), value: "" });
       }
     }
-    wsAnexo.getCell(8, 1).value = `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`;
+
+    // Limpar células de dia dos blocos de cada militar (mantém estilo herdado)
     let escritas = 0;
     for (const m of militares) {
       for (let offset = 0; offset <= 2; offset++) {
         for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
-          wsAnexo.getCell(m.rowOrd + offset, COL_INI + (d - 1)).value = null;
+          edits.push({ ref: makeRef(m.rowOrd + offset, COL_INI + (d - 1)), value: "" });
         }
       }
     }
-    const escreve = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
-      const cell = wsAnexo!.getCell(rowOrd + linhaOffset, COL_INI + (dia - 1));
-      cell.value = sigla;
-      // força string para evitar que "1234" vire número
-      cell.numFmt = "@";
+
+    const setSigla = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
+      edits.push({ ref: makeRef(rowOrd + linhaOffset, COL_INI + (dia - 1)), value: sigla });
       escritas++;
     };
 
     for (const [dia, slot] of ord.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 0, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 0, sigla);
     }
     for (const [dia, slot] of expm.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 1, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 1, sigla);
     }
     for (const [dia, slot] of he.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 2, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 2, sigla);
     }
 
-    /* 9) Serializar preservando layout original */
-    const outBuf = await wb.xlsx.writeBuffer();
-    const outBytes = new Uint8Array(outBuf as ArrayBuffer);
+    /* 9) Aplicar edições e serializar preservando layout original */
+    const newAnexoXml = applyEdits(anexoSheet.xml, edits);
+    writeSheetXml(bundle, anexoSheet.path, newAnexoXml);
+    const outBytes = saveXlsx(bundle);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `${userId}/${data.ano}-${String(data.mes).padStart(2, "0")}-${ts}.xlsx`;
 
