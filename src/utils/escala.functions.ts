@@ -788,7 +788,7 @@ function escalar(
         // sem serviço 24h restante → lança CM avulso em qualquer dia útil livre
         let lancou = false;
         for (let d = 1; d <= dias; d++) {
-          if (!isDiaExpediente(data.ano ?? 0, data.mes ?? 0, d)) continue;
+          if (!isDiaExpediente(ano, mes, d)) continue;
           const sOrd = ord.get(d)?.get(m.rowOrd);
           if (sOrd && SIGLAS_AFASTAMENTO.has(sOrd)) continue;
           if (expm.get(d)?.has(m.rowOrd)) continue;
