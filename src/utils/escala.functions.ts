@@ -893,7 +893,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
 
     /* 7) Motor */
     const dias = diasNoMes(data.mes, data.ano);
-    const { ord, exp: expm, he } = escalar(militares, dias, data.parametros, ia, alertas);
+    const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
 
     /* 8) Escrever SOMENTE nas células de dia (F=6 até F+dias-1).
           NÃO tocar em colunas A-E, linhas 10-11, nem em outras abas.
