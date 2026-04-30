@@ -537,6 +537,49 @@ function escalar(
     }
   }
 
+  /* 4ª ETAPA — Tapar furos com HE: dias em que a ordinária ficou abaixo do alvo
+     recebem militares elegíveis (não-ADM, sem indisponibilidade no dia, sem
+     ordinária no dia, respeitando cooldown de 12h ≈ 1 dia) lançados como HE24. */
+  for (let dia = 1; dia <= dias; dia++) {
+    const slotOrd = ord.get(dia)!;
+    const slotHe = he.get(dia)!;
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+
+    // conta militares efetivamente em serviço 24h no dia
+    const escalados24 = Array.from(slotOrd.values()).filter((s) => s === SIGLA_24).length;
+    let faltam = totalAlvo - escalados24;
+    if (faltam <= 0) continue;
+
+    const indisp = naoEscalar.get(dia)!;
+    const candidatos = militares
+      .filter((m) => {
+        if (!m.ativo) return false;
+        if (m.isAdm) return false;
+        if (indisp.has(m.rowOrd)) return false;
+        if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
+        if (slotHe.has(m.rowOrd)) return false;
+        // folga mínima de ~12h: não pode ter feito 24h no dia anterior
+        if (m.ultimoServico > 0 && dia - m.ultimoServico < 1) return false;
+        return true;
+      })
+      .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+
+    for (const m of candidatos) {
+      if (faltam <= 0) break;
+      slotHe.set(m.rowOrd, "HE24");
+      m.cargaH += 24;
+      m.ultimoServico = dia;
+      faltam--;
+    }
+    if (faltam > 0) {
+      alertas.push({
+        tipo: "warn",
+        msg: `Dia ${dia}: ainda faltam ${faltam} militar(es) — sem HE elegível disponível.`,
+      });
+    }
+  }
+
   return { ord, exp: expm, he };
 }
 
