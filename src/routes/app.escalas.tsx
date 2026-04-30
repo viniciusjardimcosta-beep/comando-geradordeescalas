@@ -160,6 +160,12 @@ function EscalasOrdinariasPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {escalas.map((e) => {
             const ids = membros[e.id] ?? [];
+            const tomadosPorOutras = new Set(
+              Object.entries(membros)
+                .filter(([eid]) => eid !== e.id)
+                .flatMap(([, mids]) => mids)
+            );
+            const visiveis = operacionais.filter((m) => !tomadosPorOutras.has(m.id));
             return (
               <div key={e.id} className="panel p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -172,7 +178,9 @@ function EscalasOrdinariasPage() {
                   </Button>
                 </div>
                 <div className="max-h-72 overflow-y-auto space-y-1 rounded border border-border p-2">
-                  {operacionais.map((m) => {
+                  {visiveis.length === 0 ? (
+                    <p className="text-xs text-muted-foreground p-2">Nenhum militar disponível — todos já estão em outras escalas.</p>
+                  ) : visiveis.map((m) => {
                     const checked = ids.includes(m.id);
                     return (
                       <label key={m.id} className="flex items-center gap-2 rounded p-1 hover:bg-muted cursor-pointer text-sm">
@@ -189,7 +197,7 @@ function EscalasOrdinariasPage() {
                   })}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {ids.length} militar(es) · {ids.filter(id => operacionais.find(m => m.id === id)?.is_cg).length} CG · {ids.filter(id => operacionais.find(m => m.id === id)?.is_cov).length} COV
+                  {ids.length} militar(es) · {ids.filter(id => operacionais.find(m => m.id === id)?.is_cg).length} CG · {ids.filter(id => operacionais.find(m => m.id === id)?.is_cov).length} COV · {Math.max(0, visiveis.length - ids.length)} disponível(is)
                 </div>
               </div>
             );
