@@ -445,7 +445,15 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
-        setDest.get(d)!.set(m.rowOrd, sigla);
+        if (linha === "ORD" && sigla === "2341") {
+          ord.get(d)!.set(m.rowOrd, "234");
+          if (d < dias && !ord.get(d + 1)!.has(m.rowOrd)) ord.get(d + 1)!.set(m.rowOrd, "1");
+        } else if (linha === "HE" && sigla === "HE24") {
+          he.get(d)!.set(m.rowOrd, "HE18");
+          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE6");
+        } else {
+          setDest.get(d)!.set(m.rowOrd, sigla);
+        }
       }
     }
     alertas.push({
