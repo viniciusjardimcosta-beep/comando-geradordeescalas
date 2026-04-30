@@ -36,27 +36,28 @@ export function loadXlsx(bytes: Uint8Array): XlsxBundle {
     ? dec(files["xl/_rels/workbook.xml.rels"])
     : "";
 
-  // Mapear rId -> Target (caminho do XML)
+  // Mapear rId -> Target (caminho do XML). Atributos podem vir em qualquer ordem.
   const rIdToTarget = new Map<string, string>();
-  for (const m of relsXml.matchAll(
-    /<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*\/>/g,
-  )) {
-    rIdToTarget.set(m[1], m[2]);
+  for (const m of relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)) {
+    const attrs = m[1];
+    const id = /\bId="([^"]+)"/.exec(attrs)?.[1];
+    const target = /\bTarget="([^"]+)"/.exec(attrs)?.[1];
+    if (id && target) rIdToTarget.set(id, target);
   }
 
-  // Mapear nome da aba -> rId
+  // Mapear nome da aba -> rId. Atributos podem estar em qualquer ordem.
   const sheetByName = new Map<string, string>();
-  for (const m of wbXml.matchAll(
-    /<sheet\b[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"[^>]*\/>/g,
-  )) {
-    const name = decodeXmlAttr(m[1]).trim().toLowerCase();
-    const target = rIdToTarget.get(m[2]);
+  for (const m of wbXml.matchAll(/<sheet\b([^>]*)\/>/g)) {
+    const attrs = m[1];
+    const name = /\bname="([^"]+)"/.exec(attrs)?.[1];
+    const rid = /\br:id="([^"]+)"/.exec(attrs)?.[1];
+    if (!name || !rid) continue;
+    const target = rIdToTarget.get(rid);
     if (!target) continue;
-    // Target costuma ser "worksheets/sheetN.xml" — caminho relativo a xl/
     const path = target.startsWith("/")
       ? target.slice(1)
       : `xl/${target.replace(/^\.?\//, "")}`;
-    sheetByName.set(name, path);
+    sheetByName.set(decodeXmlAttr(name).trim().toLowerCase(), path);
   }
 
   return { files, sheetByName, sharedStrings: null };
