@@ -798,6 +798,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
     /* 5) Runtime dos militares — linhas R12, R15, R18... */
+    const naoCadastrados: string[] = [];
     const militares: MilitarRT[] = efetivoRows.map((ef, i) => {
       const rowOrd = 12 + i * 3;
       const cad = cadPorMat.get(ef.idFunc) ?? cadPorNome.get(normNome(ef.nome));
@@ -805,10 +806,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       const isCg = !!cad?.isCg;
       const isAdm = !!cad?.isAdm;
       if (!cad) {
-        alertas.push({
-          tipo: "info",
-          msg: `${ef.nome} (${ef.idFunc || "sem matrícula"}) não está no cadastro — tratado como BM comum (sem COV/CG/ADM).`,
-        });
+        naoCadastrados.push(`${ef.nome}${ef.idFunc ? ` (${ef.idFunc})` : ""}`);
       }
       const m: MilitarRT = {
         rowOrd,
@@ -816,7 +814,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
         nomeNorm: normNome(ef.nome),
         matricula: ef.idFunc,
         isCov, isCg, isAdm,
-        ativo: true,
+        // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
+        ativo: !!cad,
         cargaH: 0,
         ultimoServico: 0,
         afastDias: new Set(),
@@ -840,6 +839,13 @@ export const gerarEscala = createServerFn({ method: "POST" })
       }
       return m;
     });
+
+    if (naoCadastrados.length) {
+      alertas.push({
+        tipo: "info",
+        msg: `${naoCadastrados.length} militar(es) da planilha não estão cadastrados e foram ignorados: ${naoCadastrados.join(", ")}.`,
+      });
+    }
 
     /* 6) IA interpretando observações */
     const ia = await interpretarObservacoes(
