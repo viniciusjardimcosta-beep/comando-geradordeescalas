@@ -353,6 +353,8 @@ interface MilitarRT {
 function escalar(
   militares: MilitarRT[],
   dias: number,
+  mes: number,
+  ano: number,
   par: z.infer<typeof ParametrosSchema>,
   ia: InterpretacaoIA,
   alertas: Alerta[],
@@ -480,8 +482,29 @@ function escalar(
   const reforcoMap = new Map<number, ReforcoIA>();
   for (const r of ia.reforcos) reforcoMap.set(r.dia, r);
 
-  const SIGLA_24 = "2341";
+  const SIGLA_ORD_DIA = "234";
+  const SIGLA_ORD_MADRUGADA = "1";
+  const SIGLA_HE_DIA = "HE18";
+  const SIGLA_HE_MADRUGADA = "HE6";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
+
+  const estaEmServico24 = (m: MilitarRT, dia: number) =>
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
+    (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA);
+
+  const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
+    if (destinoHe) {
+      he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
+      if (dia < dias) he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
+    } else {
+      ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
+      if (dia < dias && !ord.get(dia + 1)!.has(m.rowOrd)) {
+        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+      }
+    }
+    m.cargaH += 24;
+    m.ultimoServico = dia;
+  };
 
   for (let dia = 1; dia <= dias; dia++) {
     const slot = ord.get(dia)!; // slot já pode conter lançamentos/afastamentos
