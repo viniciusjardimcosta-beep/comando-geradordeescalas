@@ -514,17 +514,35 @@ function escalar(
     ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
     (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA);
 
+  // No último dia do mês, só temos 16h físicas disponíveis (08h–00h);
+  // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
+  const horasMaximasNoDia = (dia: number) => (dia === dias ? 16 : 24);
+
   const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
+    const ultimoDia = dia === dias;
     if (destinoHe) {
-      he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-      if (dia < dias) he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
+      // No último dia, no máximo HE16 (sem extensão para D+1, que seria do próximo mês)
+      if (ultimoDia) {
+        he.get(dia)!.set(m.rowOrd, "HE16");
+        m.cargaH += 16;
+      } else {
+        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
+        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
+        m.cargaH += 24;
+      }
     } else {
-      ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
-      if (dia < dias && !ord.get(dia + 1)!.has(m.rowOrd)) {
-        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+      if (ultimoDia) {
+        // Último dia: serviço operacional só até 02h (sigla "234" = 18h, sem "1" no mês seguinte)
+        ord.get(dia)!.set(m.rowOrd, "234");
+        m.cargaH += 18;
+      } else {
+        ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
+        if (!ord.get(dia + 1)!.has(m.rowOrd)) {
+          ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+        }
+        m.cargaH += 24;
       }
     }
-    m.cargaH += 24;
     m.ultimoServico = dia;
   };
 
