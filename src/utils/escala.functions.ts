@@ -681,7 +681,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         afastSigla: new Map(),
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
       };
-      // pré-aplica férias do plano anual
+      // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
       if (cad) {
         const periodos = feriasPorMilitar.get(cad.id) ?? [];
         for (const p of periodos) {
@@ -694,12 +694,6 @@ export const gerarEscala = createServerFn({ method: "POST" })
               m.afastSigla.set(dia, "FER");
             }
           }
-        }
-        if (periodos.length) {
-          alertas.push({
-            tipo: "info",
-            msg: `${ef.nome}: férias aplicadas automaticamente do plano anual.`,
-          });
         }
       }
       return m;
