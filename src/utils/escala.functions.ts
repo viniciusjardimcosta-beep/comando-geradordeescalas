@@ -348,7 +348,13 @@ function escalar(
       m.afastSigla.set(d, sigla);
       ord.get(d)!.set(m.rowOrd, sigla);
     }
-    alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} do dia ${ini} ao ${fim} (${af.motivo ?? "afastamento"})` });
+    // alerta consolidado: um por período (não um por dia)
+    const motivoTxt = af.motivo ?? (sigla === "FER" ? "férias" : "afastamento");
+    if (ini === fim) {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} no dia ${ini} (${motivoTxt}).` });
+    } else {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} do dia ${ini} ao dia ${fim} (${motivoTxt}).` });
+    }
   }
 
   // 2) lançamentos diretos (HE/EXP/ORD)
