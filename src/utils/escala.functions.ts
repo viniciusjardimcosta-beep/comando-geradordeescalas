@@ -529,7 +529,9 @@ function escalar(
       if (!m.ativo) return false;
       if (m.isAdm) return false; // ADM nunca entra na escala operacional
       if (indisp.has(m.rowOrd)) return false;
+      if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
       if (jaOcupado(m)) return false;
+      if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
       if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
       const restr = apFunc.get(m.rowOrd);
       if (restr) {
@@ -548,11 +550,8 @@ function escalar(
     const grupoDoDia = ((dia - 1) % 4) + 1;
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
       const candidatos = militares
-        .filter((m) => elegivel(m, papel))
+        .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
         .sort((a, b) => {
-          const ag = a.grupoOrdem === grupoDoDia ? 0 : 1;
-          const bg = b.grupoOrdem === grupoDoDia ? 0 : 1;
-          if (ag !== bg) return ag - bg;
           return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
         });
       return candidatos[0] ?? null;
@@ -562,61 +561,43 @@ function escalar(
     for (const rowOrd of obriga) {
       const m = militares.find((x) => x.rowOrd === rowOrd);
       if (m && !slot.has(rowOrd) && !m.isAdm) {
-        slot.set(rowOrd, SIGLA_24);
-        m.cargaH += 24;
-        m.ultimoServico = dia;
+        lancaServico24(m, dia);
       }
     }
 
     // CGs
-    let cgEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCg).length;
+    let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
     while (cgEscalados < minCg) {
       const cg = escolher("CG");
       if (!cg) {
         alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou CG (mínimo ${minCg}).` });
         break;
       }
-      slot.set(cg.rowOrd, SIGLA_24);
-      cg.cargaH += 24;
-      cg.ultimoServico = dia;
+      lancaServico24(cg, dia);
       cgEscalados++;
     }
 
     // COVs
-    let covEscalados = militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24 && m.isCov).length;
+    let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     while (covEscalados < minCov) {
       const cov = escolher("COV");
       if (!cov) {
         alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou COV (mínimo ${minCov}).` });
         break;
       }
-      slot.set(cov.rowOrd, SIGLA_24);
-      cov.cargaH += 24;
-      cov.ultimoServico = dia;
+      lancaServico24(cov, dia);
       covEscalados++;
     }
 
     // completar
-    const escalados24 = () => militares.filter((m) => slot.get(m.rowOrd) === SIGLA_24).length;
+    const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
     while (escalados24() < totalAlvo) {
       let m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
       if (!m) {
-        const flex = militares
-          .filter((x) => x.ativo && !x.isAdm && !indisp.has(x.rowOrd) && !slot.has(x.rowOrd))
-          .sort((a, b) => a.cargaH - b.cargaH);
-        m = flex[0] ?? null;
-        if (m) alertas.push({
-          tipo: "warn",
-          msg: `Dia ${dia}: 24x72 quebrado para ${m.nome} por falta de efetivo.`,
-        });
-      }
-      if (!m) {
-        alertas.push({ tipo: "error", msg: `Dia ${dia}: efetivo insuficiente.` });
+        alertas.push({ tipo: "warn", msg: `Dia ${dia}: guarnição ordinária ficou abaixo do mínimo; será tentado complemento por HE.` });
         break;
       }
-      slot.set(m.rowOrd, SIGLA_24);
-      m.cargaH += 24;
-      m.ultimoServico = dia;
+      lancaServico24(m, dia);
     }
   }
 
