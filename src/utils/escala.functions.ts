@@ -617,6 +617,8 @@ function escalar(
     const slotHe = he.get(dia)!;
     const ref = reforcoMap.get(dia);
     const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
 
     // conta militares efetivamente em serviço operacional no dia
     const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
@@ -640,10 +642,29 @@ function escalar(
       })
       .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
 
+    const usadosHe = new Set<number>();
+    const escalaHe = (m: MilitarRT) => {
+      lancaServico24(m, dia, true);
+      usadosHe.add(m.rowOrd);
+      faltam--;
+    };
+    const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
+    const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
+
+    while (faltam > 0 && cgAtuais() < minCg) {
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
+      if (!m) break;
+      escalaHe(m);
+    }
+    while (faltam > 0 && covAtuais() < minCov) {
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
+      if (!m) break;
+      escalaHe(m);
+    }
     for (const m of candidatos) {
       if (faltam <= 0) break;
-      lancaServico24(m, dia, true);
-      faltam--;
+      if (usadosHe.has(m.rowOrd)) continue;
+      escalaHe(m);
     }
     if (faltam > 0) {
       alertas.push({
