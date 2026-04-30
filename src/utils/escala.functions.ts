@@ -928,53 +928,59 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const dias = diasNoMes(data.mes, data.ano);
     const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
 
-    /* 8) Escrever SOMENTE nas células de dia (F=6 até F+dias-1).
-          NÃO tocar em colunas A-E, linhas 10-11, nem em outras abas.
-          Preservamos estilo da célula (usamos só .value). */
+    /* 8) Acumular edições para a aba Anexo B (cirúrgico — não toca em
+          estilos, validações, fórmulas das demais células). */
     const COL_INI = 6; // F
     const DIAS_MAX_PLANILHA = 31;
+    const edits: CellEdit[] = [];
+
+    // Cabeçalho do mês (A8)
+    edits.push({
+      ref: makeRef(8, 1),
+      value: `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`,
+    });
+
+    // Linhas 10 (dias) e 11 (rótulo da semana)
     for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
       const col = COL_INI + (d - 1);
       if (d <= dias) {
-        const dt = new Date(Date.UTC(data.ano, data.mes - 1, d));
-        wsAnexo.getCell(10, col).value = dt;
-        wsAnexo.getCell(10, col).numFmt = "d";
-        wsAnexo.getCell(11, col).value = rotuloSemana(data.ano, data.mes, d);
+        edits.push({ ref: makeRef(10, col), value: String(d) });
+        edits.push({ ref: makeRef(11, col), value: rotuloSemana(data.ano, data.mes, d) });
       } else {
-        wsAnexo.getCell(10, col).value = null;
-        wsAnexo.getCell(11, col).value = null;
+        edits.push({ ref: makeRef(10, col), value: "" });
+        edits.push({ ref: makeRef(11, col), value: "" });
       }
     }
-    wsAnexo.getCell(8, 1).value = `MAPA DE ESCALA DE SERVIÇO EXECUTADO  - REFERENTE AO MÊS  DE ${NOMES_MES[data.mes - 1].toUpperCase()} DE   ${data.ano}`;
+
+    // Limpar células de dia dos blocos de cada militar (mantém estilo herdado)
     let escritas = 0;
     for (const m of militares) {
       for (let offset = 0; offset <= 2; offset++) {
         for (let d = 1; d <= DIAS_MAX_PLANILHA; d++) {
-          wsAnexo.getCell(m.rowOrd + offset, COL_INI + (d - 1)).value = null;
+          edits.push({ ref: makeRef(m.rowOrd + offset, COL_INI + (d - 1)), value: "" });
         }
       }
     }
-    const escreve = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
-      const cell = wsAnexo!.getCell(rowOrd + linhaOffset, COL_INI + (dia - 1));
-      cell.value = sigla;
-      // força string para evitar que "1234" vire número
-      cell.numFmt = "@";
+
+    const setSigla = (dia: number, rowOrd: number, linhaOffset: number, sigla: string) => {
+      edits.push({ ref: makeRef(rowOrd + linhaOffset, COL_INI + (dia - 1)), value: sigla });
       escritas++;
     };
 
     for (const [dia, slot] of ord.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 0, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 0, sigla);
     }
     for (const [dia, slot] of expm.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 1, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 1, sigla);
     }
     for (const [dia, slot] of he.entries()) {
-      for (const [rowOrd, sigla] of slot.entries()) escreve(dia, rowOrd, 2, sigla);
+      for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 2, sigla);
     }
 
-    /* 9) Serializar preservando layout original */
-    const outBuf = await wb.xlsx.writeBuffer();
-    const outBytes = new Uint8Array(outBuf as ArrayBuffer);
+    /* 9) Aplicar edições e serializar preservando layout original */
+    const newAnexoXml = applyEdits(anexoSheet.xml, edits);
+    writeSheetXml(bundle, anexoSheet.path, newAnexoXml);
+    const outBytes = saveXlsx(bundle);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `${userId}/${data.ano}-${String(data.mes).padStart(2, "0")}-${ts}.xlsx`;
 
