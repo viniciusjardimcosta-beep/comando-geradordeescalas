@@ -591,10 +591,7 @@ function escalar(
     let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
     while (cgEscalados < minCg) {
       const cg = escolher("CG");
-      if (!cg) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou CG (mínimo ${minCg}).` });
-        break;
-      }
+      if (!cg) break; // furo será reavaliado depois da etapa de HE
       lancaServico24(cg, dia);
       cgEscalados++;
     }
@@ -603,10 +600,7 @@ function escalar(
     let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     while (covEscalados < minCov) {
       const cov = escolher("COV");
-      if (!cov) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: faltou COV (mínimo ${minCov}).` });
-        break;
-      }
+      if (!cov) break;
       lancaServico24(cov, dia);
       covEscalados++;
     }
@@ -614,11 +608,8 @@ function escalar(
     // completar
     const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
     while (escalados24() < totalAlvo) {
-      let m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
-      if (!m) {
-        alertas.push({ tipo: "warn", msg: `Dia ${dia}: guarnição ordinária ficou abaixo do mínimo; será tentado complemento por HE.` });
-        break;
-      }
+      const m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
+      if (!m) break;
       lancaServico24(m, dia);
     }
   }
