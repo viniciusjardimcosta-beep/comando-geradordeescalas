@@ -348,7 +348,13 @@ function escalar(
       m.afastSigla.set(d, sigla);
       ord.get(d)!.set(m.rowOrd, sigla);
     }
-    alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} do dia ${ini} ao ${fim} (${af.motivo ?? "afastamento"})` });
+    // alerta consolidado: um por período (não um por dia)
+    const motivoTxt = af.motivo ?? (sigla === "FER" ? "férias" : "afastamento");
+    if (ini === fim) {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} no dia ${ini} (${motivoTxt}).` });
+    } else {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} do dia ${ini} ao dia ${fim} (${motivoTxt}).` });
+    }
   }
 
   // 2) lançamentos diretos (HE/EXP/ORD)
@@ -531,6 +537,49 @@ function escalar(
     }
   }
 
+  /* 4ª ETAPA — Tapar furos com HE: dias em que a ordinária ficou abaixo do alvo
+     recebem militares elegíveis (não-ADM, sem indisponibilidade no dia, sem
+     ordinária no dia, respeitando cooldown de 12h ≈ 1 dia) lançados como HE24. */
+  for (let dia = 1; dia <= dias; dia++) {
+    const slotOrd = ord.get(dia)!;
+    const slotHe = he.get(dia)!;
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+
+    // conta militares efetivamente em serviço 24h no dia
+    const escalados24 = Array.from(slotOrd.values()).filter((s) => s === SIGLA_24).length;
+    let faltam = totalAlvo - escalados24;
+    if (faltam <= 0) continue;
+
+    const indisp = naoEscalar.get(dia)!;
+    const candidatos = militares
+      .filter((m) => {
+        if (!m.ativo) return false;
+        if (m.isAdm) return false;
+        if (indisp.has(m.rowOrd)) return false;
+        if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
+        if (slotHe.has(m.rowOrd)) return false;
+        // folga mínima de ~12h: não pode ter feito 24h no dia anterior
+        if (m.ultimoServico > 0 && dia - m.ultimoServico < 1) return false;
+        return true;
+      })
+      .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+
+    for (const m of candidatos) {
+      if (faltam <= 0) break;
+      slotHe.set(m.rowOrd, "HE24");
+      m.cargaH += 24;
+      m.ultimoServico = dia;
+      faltam--;
+    }
+    if (faltam > 0) {
+      alertas.push({
+        tipo: "warn",
+        msg: `Dia ${dia}: ainda faltam ${faltam} militar(es) — sem HE elegível disponível.`,
+      });
+    }
+  }
+
   return { ord, exp: expm, he };
 }
 
@@ -675,7 +724,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         afastSigla: new Map(),
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
       };
-      // pré-aplica férias do plano anual
+      // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
       if (cad) {
         const periodos = feriasPorMilitar.get(cad.id) ?? [];
         for (const p of periodos) {
@@ -689,12 +738,6 @@ export const gerarEscala = createServerFn({ method: "POST" })
             }
           }
         }
-        if (periodos.length) {
-          alertas.push({
-            tipo: "info",
-            msg: `${ef.nome}: férias aplicadas automaticamente do plano anual.`,
-          });
-        }
       }
       return m;
     });
@@ -706,23 +749,74 @@ export const gerarEscala = createServerFn({ method: "POST" })
       data.mes, data.ano,
     );
 
-    /* 6.1) Pré-aplicar FER vindos do plano anual nos slots ORD */
-    // (o motor escalar() não conhece o slot ord ainda — vamos passar via ia.afastamentos sintéticos)
+    /* 6.1) Pré-aplicar afastamentos do plano anual agrupando dias contíguos por sigla
+            (gera 1 ia.afastamento por período → 1 alerta consolidado). */
     for (const m of militares) {
-      for (const [dia, sigla] of m.afastSigla.entries()) {
+      const diasOrdenados = Array.from(m.afastSigla.keys()).sort((a, b) => a - b);
+      let i = 0;
+      while (i < diasOrdenados.length) {
+        const sigla = m.afastSigla.get(diasOrdenados[i])!;
+        let j = i;
+        while (
+          j + 1 < diasOrdenados.length &&
+          diasOrdenados[j + 1] === diasOrdenados[j] + 1 &&
+          m.afastSigla.get(diasOrdenados[j + 1]) === sigla
+        ) {
+          j++;
+        }
         ia.afastamentos.push({
           matricula: m.matricula,
           nome: m.nome,
-          diaInicio: dia,
-          diaFim: dia,
+          diaInicio: diasOrdenados[i],
+          diaFim: diasOrdenados[j],
           sigla,
-          motivo: sigla === "FER" ? "ferias" : sigla,
+          motivo: sigla === "FER" ? "férias (plano anual)" : sigla,
         });
+        i = j + 1;
       }
       // limpa para não duplicar dentro do motor
       m.afastDias = new Set();
       m.afastSigla = new Map();
     }
+
+    /* 6.2) ETAPA 2 — Aplicar expediente ADM (EXP9 seg-qui, EXP6 sex) na linha EXP.
+            Lançado direto via ia.lancamentos para garantir que o motor não conflite. */
+    {
+      const dias = diasNoMes(data.mes, data.ano);
+      const expPorDia = new Map<number, string>(); // dia -> EXP9 ou EXP6
+      for (let d = 1; d <= dias; d++) {
+        const dow = new Date(Date.UTC(data.ano, data.mes - 1, d)).getUTCDay(); // 0=dom..6=sab
+        if (dow >= 1 && dow <= 4) expPorDia.set(d, "EXP9");
+        else if (dow === 5) expPorDia.set(d, "EXP6");
+      }
+      const admMilitares = militares.filter((m) => m.isAdm);
+      for (const m of admMilitares) {
+        // dias em que o militar ADM tem afastamento (já em ia.afastamentos)
+        const diasAfastado = new Set<number>();
+        for (const af of ia.afastamentos) {
+          if (af.matricula === m.matricula || normNome(af.nome) === m.nomeNorm) {
+            for (let d = af.diaInicio; d <= af.diaFim; d++) diasAfastado.add(d);
+          }
+        }
+        for (const [dia, sigla] of expPorDia.entries()) {
+          if (diasAfastado.has(dia)) continue;
+          ia.lancamentos.push({
+            matricula: m.matricula,
+            nome: m.nome,
+            dias: [dia],
+            linha: "EXP",
+            sigla,
+          });
+        }
+      }
+      if (admMilitares.length) {
+        alertas.push({
+          tipo: "info",
+          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex.`,
+        });
+      }
+    }
+
 
     /* 7) Motor */
     const dias = diasNoMes(data.mes, data.ano);
