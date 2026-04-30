@@ -912,13 +912,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
             dias: [dia],
             linha: "EXP",
             sigla,
+            __silent: true,
           });
         }
       }
       if (admMilitares.length) {
         alertas.push({
           tipo: "info",
-          msg: `Expediente ADM aplicado a ${admMilitares.length} militar(es): EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados.`,
+          msg: `Expediente lançado para: ${admMilitares.map((m) => m.nome).join(", ")} (EXP9 seg-qui, EXP6 sex; sem fins de semana/feriados).`,
         });
       }
     }
