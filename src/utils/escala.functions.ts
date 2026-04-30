@@ -468,10 +468,12 @@ function escalar(
         }
       }
     }
-    alertas.push({
-      tipo: "info",
-      msg: `Lançado ${sigla} (${linha}) em ${alvos.length} militar(es) nos dias ${l.dias.join(",")}.`,
-    });
+    if (!l.__silent) {
+      alertas.push({
+        tipo: "info",
+        msg: `Lançado ${sigla} (${linha}) em ${alvos.length} militar(es) nos dias ${l.dias.join(",")}.`,
+      });
+    }
   }
 
   // 3) exceções
