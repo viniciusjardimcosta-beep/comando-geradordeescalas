@@ -24,6 +24,8 @@ export const Route = createFileRoute("/app/militares")({
   component: MilitaresPage,
 });
 
+type TipoEscala = "24h" | "parcial";
+
 interface Militar {
   id: string;
   nome: string;
@@ -35,6 +37,7 @@ interface Militar {
   ativo: boolean;
   observacoes: string | null;
   created_at: string;
+  tipo_escala: TipoEscala;
 }
 
 interface FormState {
@@ -46,6 +49,7 @@ interface FormState {
   is_adm: boolean;
   ativo: boolean;
   observacoes: string;
+  tipo_escala: TipoEscala;
 }
 
 const emptyForm: FormState = {
@@ -57,6 +61,7 @@ const emptyForm: FormState = {
   is_adm: false,
   ativo: true,
   observacoes: "",
+  tipo_escala: "24h",
 };
 
 type Filter = "todos" | "cov" | "cg" | "adm" | "bm";
@@ -116,6 +121,7 @@ function MilitaresPage() {
       is_adm: m.is_adm,
       ativo: m.ativo,
       observacoes: m.observacoes ?? "",
+      tipo_escala: m.tipo_escala ?? "24h",
     });
     setDialogOpen(true);
   }
@@ -139,6 +145,7 @@ function MilitaresPage() {
       funcao: funcaoCompat,
       ativo: form.ativo,
       observacoes: form.observacoes.trim() || null,
+      tipo_escala: form.tipo_escala,
     } as never;
     let error;
     if (editing) {
