@@ -423,6 +423,36 @@ function escalar(
     return undefined;
   };
 
+  // 0ª ETAPA — Virada do mês anterior.
+  // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
+  //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
+  //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
+  const bloqueioPosVirada = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) bloqueioPosVirada.set(d, new Set());
+  const viradasAplicadas: string[] = [];
+  for (const v of ia.viradaAnterior ?? []) {
+    const m = findMilitar(v.matricula, v.nome);
+    if (!m) continue;
+    if (v.tipo === "ord") {
+      ord.get(1)!.set(m.rowOrd, "1");
+      expm.get(1)!.set(m.rowOrd, "CM2");
+      m.cargaH += 8;
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      if (dias >= 2) bloqueioPosVirada.get(2)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (ORD 1+CM2 dia 01)`);
+    } else if (v.tipo === "he") {
+      he.get(1)!.set(m.rowOrd, "HE8");
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (HE8 dia 01)`);
+    }
+  }
+  if (viradasAplicadas.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Virada do mês anterior aplicada: ${viradasAplicadas.join(", ")}.`,
+    });
+  }
+
   // 1) aplica afastamentos (na linha ORD com a sigla correspondente)
   for (const af of ia.afastamentos) {
     const m = findMilitar(af.matricula, af.nome);
