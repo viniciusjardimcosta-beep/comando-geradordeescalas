@@ -1085,19 +1085,26 @@ function escalar(
           if (ord.get(d)?.get(m.rowOrd) === "234") diasPlantao.push(d);
         }
         let restante = aLancar;
-        // Estratégia: distribuir o excedente em blocos de até HE16 (limite operacional
-        // do dia de entrada do plantão). Sem fragmentar HE em dias livres aleatórios.
-        // Quebras pequenas (HE3..HE8) só quando o resto for menor que 16h.
+        // Estratégia: distribuir o excedente em blocos vinculados ao plantão real.
+        // Primeira passada: lança até HE16 no dia de entrada do plantão e HE8 na madrugada
+        // do dia seguinte (espelha o padrão HE 24h = HE16+HE8). Segunda passada: completa
+        // resíduos pequenos no próprio dia de plantão sem ultrapassar o teto físico.
         for (const d of diasPlantao) {
           if (restante <= 0) break;
-          // já há HE no dia? então acumula respeitando HE16 máximo
           const hAtual = horasHeDia(m, d);
-          if (hAtual >= 16) continue;
-          const espacoHe = 16 - hAtual;
-          const add = Math.min(restante, espacoHe);
-          if (add <= 0) continue;
-          he.get(d)!.set(m.rowOrd, `HE${hAtual + add}`);
-          restante -= add;
+          const espacoHe = Math.min(16 - hAtual, restante);
+          if (espacoHe > 0) {
+            he.get(d)!.set(m.rowOrd, `HE${hAtual + espacoHe}`);
+            restante -= espacoHe;
+          }
+          if (restante > 0 && d < dias) {
+            const hProx = horasHeDia(m, d + 1);
+            const espacoProx = Math.min(8 - hProx, restante);
+            if (espacoProx > 0) {
+              he.get(d + 1)!.set(m.rowOrd, `HE${hProx + espacoProx}`);
+              restante -= espacoProx;
+            }
+          }
         }
         const lancouHe = aLancar - restante;
         if (lancouHe > 0) acertosHe.push(`${m.nome} (+${lancouHe}h HE — excedente da carga mensal)`);
