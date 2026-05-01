@@ -1038,6 +1038,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         afastDias: new Set(),
         afastSigla: new Map(),
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
+        tipoEscala: cad?.tipoEscala ?? "24h",
       };
       // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
       if (cad) {
