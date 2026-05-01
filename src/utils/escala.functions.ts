@@ -1183,6 +1183,47 @@ function escalar(
     });
   }
 
+  /* 6ª ETAPA — Sanidade final: nenhuma combinação ORD+EXP+HE pode passar de
+     24h físicas no mesmo dia. Se encontrar, ajusta primeiro EXP/CM/TELE para
+     baixo, depois HE. Emite alerta para cada correção. */
+  const correcoes: string[] = [];
+  for (const m of militares) {
+    for (let d = 1; d <= dias; d++) {
+      const ocup = horasOcupadasNoDia(m, d);
+      if (ocup <= 24) continue;
+      let excesso = ocup - 24;
+      // 1) reduz EXP/CM/TELE
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp && excesso > 0) {
+        const hExp = horasExpSigla(sExp);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sExp)?.[1].toUpperCase() ?? "EXP";
+        const cortar = Math.min(excesso, hExp);
+        const novo = hExp - cortar;
+        if (novo > 0) expm.get(d)!.set(m.rowOrd, `${tipo}${novo}`);
+        else expm.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sExp}→${novo > 0 ? `${tipo}${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+      // 2) reduz HE se ainda sobra
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe && excesso > 0) {
+        const hHe = horasHeSigla(sHe);
+        const cortar = Math.min(excesso, hHe);
+        const novo = hHe - cortar;
+        if (novo > 0) he.get(d)!.set(m.rowOrd, `HE${novo}`);
+        else he.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sHe}→${novo > 0 ? `HE${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+    }
+  }
+  if (correcoes.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Combinações que passariam de 24h no mesmo dia foram ajustadas automaticamente: ${correcoes.join("; ")}.`,
+    });
+  }
+
   return { ord, exp: expm, he };
 }
 
