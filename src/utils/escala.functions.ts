@@ -1001,9 +1001,9 @@ function escalar(
       }
       // se proibido fragmentar, desiste deste candidato
       if (lim?.evitarFragmentar) return false;
-      // fragmenta no próprio dia respeitando espaço físico (16h úteis)
+      // fragmenta no próprio dia respeitando espaço físico
       const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
-      const h = Math.min(restante, espacoFisico, 16);
+      const h = Math.min(restante, espacoFisico, horasMaximasNoDia(dia));
       if (h <= 0) return false;
       // arredonda pra blocos típicos (8, 12, 16, 6) — preferindo o maior que couber
       let bloco = h;
@@ -1012,13 +1012,14 @@ function escalar(
       }
       he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
       m.cargaH += bloco;
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
       return true;
     };
-    const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
-    const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
 
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
