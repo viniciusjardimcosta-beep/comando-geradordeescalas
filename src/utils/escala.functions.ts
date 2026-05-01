@@ -760,118 +760,75 @@ function escalar(
   // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
   const horasMaximasNoDia = (dia: number) => (dia === dias ? 18 : 24);
 
-  // Lança o plantão 24h respeitando o teto ORD do mês.
-  // - destinoHe = true → força HE (usado pela etapa de tapar furo).
-  // - destinoHe = false → escolhe automaticamente:
-  //     * se cabe 24h ORD sem estourar a carga mensal → ORD (234 + 1).
-  //     * se NÃO cabe nada de ORD → HE puro (HE16 + HE8).
-  //     * se cabe parcialmente (ex.: faltam 6h pra fechar 177) → ORD parcial + HE
-  //       cobrindo o restante das 24h físicas.
-  // Mantém sempre 24h físicos cobertos no par de dias D/D+1 (16h no último dia do mês).
+  const siglaOrdPorHoras = (h: number): string | null => {
+    if (h >= 18) return "234";
+    if (h >= 12) return "23";
+    if (h >= 6) return "2";
+    return null;
+  };
+
+  // Lança uma jornada completa: primeiro consome carga ordinária mensal (ORD+CM)
+  // exatamente até o teto do ME; tudo que passar disso vira HE na própria jornada.
   const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
     const ultimoDia = dia === dias;
-    const horasFisicas = ultimoDia ? 18 : 24; // 234 sozinho = 18h no último dia
+    const horasDia = 18;
+    const horasMadrugada = ultimoDia ? 0 : 6;
+    const horasFisicas = horasDia + horasMadrugada;
+    const setHe = (d: number, h: number) => {
+      if (h <= 0) return;
+      he.get(d)!.set(m.rowOrd, `HE${h}`);
+      m.cargaH += h;
+    };
+    const setCm = (d: number, h: number) => {
+      if (h <= 0) return;
+      expm.get(d)!.set(m.rowOrd, `CM${h}`);
+      m.cargaH += h;
+    };
 
     // Caminho HE explícito (etapa de furo)
     if (destinoHe) {
-      if (ultimoDia) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-      } else {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-      }
+      setHe(dia, ultimoDia ? horasDia : 16);
+      if (!ultimoDia) setHe(dia + 1, 8);
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
     }
 
     // Decisão ORD vs HE pela carga mensal
     const tetoOrd = cargaMaxOrd(m);
-    const usadoOrd = horasOrdAcumuladas(m);
+    const usadoOrd = horasOrdinariasAcumuladas(m);
     const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
+    const ordUsar = Math.min(espacoOrd, horasFisicas);
 
-    // Cabe o plantão inteiro como ORD
-    if (espacoOrd >= horasFisicas) {
-      if (ultimoDia) {
-        ord.get(dia)!.set(m.rowOrd, "234");
-        m.cargaH += 18;
-      } else {
-        ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
-        if (!ord.get(dia + 1)!.has(m.rowOrd)) {
-          ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
-        }
-        m.cargaH += 24;
-      }
+    if (ordUsar <= 0) {
+      setHe(dia, ultimoDia ? horasDia : 16);
+      if (!ultimoDia) setHe(dia + 1, 8);
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
     }
 
-    // Não cabe nada de ORD → plantão 100% HE
-    if (espacoOrd <= 0) {
-      if (ultimoDia) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-      } else {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-      }
-      m.ultimoServico = dia;
-      return;
+    const ordDiaAlvo = Math.min(ordUsar, horasDia);
+    const ordDiaTurno = Math.floor(ordDiaAlvo / 6) * 6;
+    const ordDiaSigla = siglaOrdPorHoras(ordDiaTurno);
+    if (ordDiaSigla) {
+      ord.get(dia)!.set(m.rowOrd, ordDiaSigla);
+      m.cargaH += ordDiaTurno;
     }
+    setCm(dia, ordDiaAlvo - ordDiaTurno);
+    setHe(dia, horasDia - ordDiaAlvo);
 
-    // Cabe parcial: parte ORD (até preencher tetoOrd), restante vira HE.
-    // ORD parcial em D usando os turnos diurnos: 234=18h, 23=12h, 2=6h.
-    // HE cobre o que faltar pra fechar 24h físicos (HE da madrugada em D+1).
-    let ordD = 0;
-    let siglaOrdD: string | null = null;
     if (!ultimoDia) {
-      if (espacoOrd >= 18) { siglaOrdD = "234"; ordD = 18; }
-      else if (espacoOrd >= 12) { siglaOrdD = "23"; ordD = 12; }
-      else if (espacoOrd >= 6) { siglaOrdD = "2"; ordD = 6; }
-      // Se espacoOrd < 6, ORD parcial não cabe num turno completo → cai pra 100% HE
-      if (!siglaOrdD) {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-        m.ultimoServico = dia;
-        return;
+      const ordMadAlvo = Math.min(Math.max(0, ordUsar - horasDia), horasMadrugada);
+      if (ordMadAlvo >= 6) {
+        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+        m.cargaH += 6;
+      } else {
+        setCm(dia + 1, ordMadAlvo);
       }
-      ord.get(dia)!.set(m.rowOrd, siglaOrdD);
-      m.cargaH += ordD;
-      // HE cobre o restante das 24h físicas. NUNCA acumula em cima de HE pré-existente
-      // do mesmo militar/dia (evita "234+HE6" duplicando o plantão quando a etapa 4
-      // já havia lançado HE pra esse militar nesse dia).
-      const heD = 18 - ordD;            // restante em D (até 02h)
-      const heMad = 6;                  // madrugada do dia seguinte
-      if (heD > 0 && !he.get(dia)!.has(m.rowOrd)) {
-        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
-        m.cargaH += heD;
-      }
-      if (heMad > 0 && !ord.get(dia + 1)!.has(m.rowOrd) && !he.get(dia + 1)!.has(m.rowOrd)) {
-        he.get(dia + 1)!.set(m.rowOrd, `HE${heMad}`);
-        m.cargaH += heMad;
-      }
-    } else {
-      // Último dia do mês: 18h físicas no máximo (sem D+1 dentro do mês)
-      if (espacoOrd >= 18) { siglaOrdD = "234"; ordD = 18; }
-      else if (espacoOrd >= 12) { siglaOrdD = "23"; ordD = 12; }
-      else if (espacoOrd >= 6) { siglaOrdD = "2"; ordD = 6; }
-      if (!siglaOrdD) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-        m.ultimoServico = dia;
-        return;
-      }
-      ord.get(dia)!.set(m.rowOrd, siglaOrdD);
-      m.cargaH += ordD;
-      const heD = 18 - ordD;
-      if (heD > 0) {
-        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
-        m.cargaH += heD;
-      }
+      setHe(dia + 1, horasMadrugada - ordMadAlvo);
     }
+    marcaInicioServico(m, dia);
     m.ultimoServico = dia;
   };
 
