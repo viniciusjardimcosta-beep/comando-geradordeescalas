@@ -1056,8 +1056,81 @@ function escalar(
       if (usadosHe.has(m.rowOrd)) continue;
       escalaHeCheio(m);
     }
-    // Sem warn quando não há candidato — o lançamento de HE é apenas previsão
-    // de necessidade da guarnição mínima, não uma falha de geração.
+
+    // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
+    // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
+    // fora para que o alerta seja acionável (ex: "todos os CG atingiram o teto
+    // de 24h de HE configurado nas observações").
+    const cgFalta = Math.max(0, minCg - cgAtuais());
+    const covFalta = Math.max(0, minCov - covAtuais());
+    const efetivoFalta = Math.max(0, faltam);
+    if (efetivoFalta > 0 || cgFalta > 0 || covFalta > 0) {
+      // recontagem de motivos sobre o universo operacional (não-ADM, não-parcial, ativo)
+      const universo = militares.filter(
+        (m) => m.ativo && !m.isAdm && m.tipoEscala !== "parcial",
+      );
+      const motivos = {
+        afastado: 0,
+        ordNoDia: 0,
+        descansoPosPlantao: 0,
+        descansoPrePlantao: 0,
+        jaTemHe: 0,
+        tetoHeAtingido: 0,
+      };
+      const tetoHeMilitares: string[] = [];
+      for (const m of universo) {
+        if (estaEmServico24(m, dia)) continue; // já está cobrindo
+        const indispDia = indisp.has(m.rowOrd);
+        const posVir = bloqueioPosVirada.get(dia)?.has(m.rowOrd) ?? false;
+        const ordHoje = slotOrd.has(m.rowOrd);
+        const ordAmanha = dia < dias && ord.get(dia + 1)?.has(m.rowOrd);
+        const heAmanha = dia < dias && he.get(dia + 1)?.has(m.rowOrd);
+        const heHoje = slotHe.has(m.rowOrd);
+        const tetoHe = limiteRestanteHe(m) <= 0;
+        if (indispDia) motivos.afastado++;
+        else if (ordHoje) motivos.ordNoDia++;
+        else if (posVir || (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234"))
+          motivos.descansoPosPlantao++;
+        else if (ordAmanha || (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234"))
+          motivos.descansoPrePlantao++;
+        else if (heHoje || heAmanha) motivos.jaTemHe++;
+        else if (tetoHe) {
+          motivos.tetoHeAtingido++;
+          tetoHeMilitares.push(m.nome);
+        }
+      }
+
+      const detalhes: string[] = [];
+      if (motivos.tetoHeAtingido > 0) {
+        detalhes.push(
+          `${motivos.tetoHeAtingido} militar(es) já atingiram o teto de HE configurado` +
+            (tetoHeMilitares.length <= 4
+              ? ` (${tetoHeMilitares.join(", ")})`
+              : ""),
+        );
+      }
+      if (motivos.afastado > 0) detalhes.push(`${motivos.afastado} afastado(s)`);
+      if (motivos.descansoPosPlantao > 0)
+        detalhes.push(`${motivos.descansoPosPlantao} em descanso pós-plantão`);
+      if (motivos.descansoPrePlantao > 0)
+        detalhes.push(`${motivos.descansoPrePlantao} bloqueado(s) por plantão no dia seguinte`);
+      if (motivos.jaTemHe > 0) detalhes.push(`${motivos.jaTemHe} já com HE no dia/véspera`);
+      if (motivos.ordNoDia > 0) detalhes.push(`${motivos.ordNoDia} já em ORD no dia`);
+
+      const partes: string[] = [];
+      if (cgFalta > 0) partes.push(`${cgFalta} CG`);
+      if (covFalta > 0) partes.push(`${covFalta} COV`);
+      if (efetivoFalta > 0 && partes.length === 0) partes.push(`${efetivoFalta} militar(es)`);
+
+      const motivoTxt = detalhes.length > 0
+        ? ` Motivo: ${detalhes.join("; ")}.`
+        : " Não há candidatos disponíveis no efetivo.";
+
+      alertas.push({
+        tipo: "warn",
+        msg: `Dia ${dia}: guarnição mínima incompleta — falta ${partes.join(" e ")}.${motivoTxt}`,
+      });
+    }
   }
 
   /* 5ª ETAPA — Acerto de carga horária mensal.
