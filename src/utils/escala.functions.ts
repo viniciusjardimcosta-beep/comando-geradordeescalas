@@ -92,11 +92,18 @@ interface ExcecaoIA {
   dias: number[];
   acao: "nao_escalar" | "somente_cg" | "somente_cov" | "obrigatorio";
 }
+interface ViradaAnteriorIA {
+  matricula?: string;
+  nome?: string;
+  /** "ord" = serviço 24h ordinário em D31 do mês anterior; "he" = HE 24h em D31 anterior */
+  tipo: "ord" | "he";
+}
 interface InterpretacaoIA {
   afastamentos: AfastamentoIA[];
   reforcos: ReforcoIA[];
   excecoes: ExcecaoIA[];
   lancamentos: LancamentoIA[];
+  viradaAnterior: ViradaAnteriorIA[];
 }
 
 const NOMES_MES = [
@@ -360,6 +367,8 @@ interface MilitarRT {
   afastSigla: Map<number, string>; // dia -> sigla afastamento (ex: FER, LTS)
   /** ordem do grupo de escala ordinária (1..N). undefined = sem grupo definido */
   grupoOrdem?: number;
+  /** "24h" = ciclo operacional 24x72; "parcial" = só turnos curtos em dias úteis */
+  tipoEscala: "24h" | "parcial";
 }
 
 function escalar(
