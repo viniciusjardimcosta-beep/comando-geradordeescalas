@@ -954,36 +954,9 @@ function escalar(
      abaixo da carga mínima do mês, lança CM (complemento) na linha EXP
      do último serviço; se ultrapassou, converte o excedente em HE. */
 
-  // Carga mínima base por dias do mês (espelha as fórmulas da planilha)
-  const cargaBase = (d: number): number =>
-    ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
-
-  // Tamanho em horas de cada sigla ORD — segue a lógica REAL da planilha (cada
-  // célula vale exatamente as horas do(s) turno(s) escritos nela).
-  // Turnos: 1=02-08 (6h), 2=08-14 (6h), 3=14-20 (6h), 4=20-02 (6h, vira o dia).
-  // Plantão de 24h é representado por "234" (18h) no dia D + "1" (6h) no dia D+1.
-  const ORD_HORAS: Record<string, number> = {
-    "1": 6, "2": 6, "3": 6, "4": 6,
-    "12": 12, "13": 12, "14": 12, "23": 12, "24": 12, "34": 12,
-    "123": 18, "124": 18, "134": 18, "234": 18,
-    "1234": 24, "2341": 24,
-  };
-  const horasOrdSigla = (s: string): number => ORD_HORAS[s] ?? 0;
-
-  // Total de horas ordinárias no mês para o militar — SOMA cada célula como ela
-  // está escrita, igual à fórmula da planilha. Não há mais regra "234 vale 24h e
-  // ignora o 1": agora 234=18h e o 1 do dia seguinte soma seus 6h normalmente.
-  const horasOrdMes = (m: MilitarRT): number => {
-    let total = 0;
-    for (let d = 1; d <= dias; d++) {
-      const s = ord.get(d)?.get(m.rowOrd);
-      if (!s) continue;
-      total += horasOrdSigla(s);
-    }
-    return total;
-  };
-
-  // (horasExpMes removido — não é usado no fluxo atual)
+  // (cargaBase, ORD_HORAS, horasOrdSigla, horasOrdAcumuladas e cargaMaxOrd já
+  //  declarados antes da etapa 3 — necessários no momento da escolha do plantão.)
+  const horasOrdMes = horasOrdAcumuladas;
 
   // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
   const diasAfastadoMap = new Map<number, number>();
