@@ -807,8 +807,9 @@ function escalar(
     if (faltam <= 0) continue;
 
     const indisp = naoEscalar.get(dia)!;
-    // Candidatos para HE: lançamento é previsão de necessidade de HE,
-    // por isso NÃO aplicamos cooldown de folga aqui (apenas afastamento e conflito de ORD/HE).
+    // Candidatos para HE: lançamento é previsão de necessidade de HE.
+    // BLOQUEIOS DE FOLGA: HE só vale se o militar estiver realmente livre — sem
+    // ORD adjacente (folga 12h pré-plantão D+1 e pós-plantão D-1).
     const candidatos = militares
       .filter((m) => {
         if (!m.ativo) return false;
@@ -819,17 +820,50 @@ function escalar(
         if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
         if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+        // BLOQUEIO PRÉ-PLANTÃO: se o militar entra de ORD 234 no D+1, não pode HE em D
+        if (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234") return false;
+        // BLOQUEIO PÓS-PLANTÃO: se o militar saiu de ORD 234 em D-1 (com "1" em D), bloqueia
+        if (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234") return false;
         if (slotHe.has(m.rowOrd)) return false;
         if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+        // Respeita teto de HE no mês: bloqueia se já atingiu o limite (sem espaço para 1h sequer)
+        if (limiteRestanteHe(m) <= 0) return false;
         return true;
-      })
-      .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+      });
+
+    // Equalização: se algum candidato tem flag `equalizar`, ordena por menor HE no mês.
+    // Caso contrário, mantém o ordenamento clássico por menor cargaH.
+    const algumEqualizar = candidatos.some((m) => limiteHePorMilitar.get(m.rowOrd)?.equalizar);
+    candidatos.sort((a, b) => {
+      if (algumEqualizar) {
+        const ha = horasHeMes(a), hb = horasHeMes(b);
+        if (ha !== hb) return ha - hb;
+      }
+      return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+    });
 
     const usadosHe = new Set<number>();
-    const escalaHe = (m: MilitarRT) => {
-      lancaServico24(m, dia, true);
+    const escalaHeCheio = (m: MilitarRT): boolean => {
+      // HE 24h cabe? Se não cabe inteiro mas cabe parcial e o militar permite fragmentar, lança HE-restante.
+      const restante = limiteRestanteHe(m);
+      const lim = limiteHePorMilitar.get(m.rowOrd);
+      if (restante >= 24) {
+        lancaServico24(m, dia, true);
+        usadosHe.add(m.rowOrd);
+        faltam--;
+        return true;
+      }
+      // Não cabe 24h. Se evitarFragmentar = true, pula esse candidato.
+      if (lim?.evitarFragmentar) return false;
+      // Lança HE parcial num único dia (sem partir em D+1 que poderia estourar o teto).
+      const h = Math.min(restante, horasMaximasNoDia(dia));
+      if (h <= 0) return false;
+      he.get(dia)!.set(m.rowOrd, `HE${h}`);
+      m.cargaH += h;
+      m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
+      return true;
     };
     const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
     const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
@@ -837,17 +871,17 @@ function escalar(
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
-      escalaHe(m);
+      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
     }
     while (faltam > 0 && covAtuais() < minCov) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
-      escalaHe(m);
+      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
     }
     for (const m of candidatos) {
       if (faltam <= 0) break;
       if (usadosHe.has(m.rowOrd)) continue;
-      escalaHe(m);
+      escalaHeCheio(m);
     }
     // Sem warn quando não há candidato — o lançamento de HE é apenas previsão
     // de necessidade da guarnição mínima, não uma falha de geração.
