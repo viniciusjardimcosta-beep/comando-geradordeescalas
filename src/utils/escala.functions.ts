@@ -745,18 +745,20 @@ function escalar(
   const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
-  // Cobertura física do dia D: militar conta como "em serviço no dia D" se
-  // entrou no plantão das 18h (sigla "234" em D) OU está saindo da madrugada
-  // 00h-06h em D (sigla "1" em D, vinda de "234" em D-1). Ambos os casos
-  // fisicamente cobrem a guarnição do dia D — então ambos devem evitar que
-  // a etapa 4 lance HE redundante "para tapar furo".
+  const inicioServico = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) inicioServico.set(d, new Set());
+  const marcaInicioServico = (m: MilitarRT, dia: number) => inicioServico.get(dia)?.add(m.rowOrd);
+
+  // Para cumprir o mínimo diário, conta quem INICIA jornada no dia D — seja ORD,
+  // CM+HE ou HE pura. A célula "1" do dia seguinte é só continuação da jornada
+  // anterior e não pode abrir vaga extra nem impedir a próxima guarnição de entrar.
   const estaEmServico24 = (m: MilitarRT, dia: number) =>
-    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
-    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA;
+    inicioServico.get(dia)?.has(m.rowOrd) ||
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA;
 
   // No último dia do mês, só temos 16h físicas disponíveis (08h–00h);
   // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
-  const horasMaximasNoDia = (dia: number) => (dia === dias ? 16 : 24);
+  const horasMaximasNoDia = (dia: number) => (dia === dias ? 18 : 24);
 
   // Lança o plantão 24h respeitando o teto ORD do mês.
   // - destinoHe = true → força HE (usado pela etapa de tapar furo).
