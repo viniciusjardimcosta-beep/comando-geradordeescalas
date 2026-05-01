@@ -1249,6 +1249,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
         nome: ef.nome,
         nomeNorm: normNome(ef.nome),
         matricula: ef.idFunc,
+        posto: ef.postoGrad ?? "",
+        postoCat: classificarPosto(ef.postoGrad ?? ""),
         isCov, isCg, isAdm,
         // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
         ativo: !!cad,
