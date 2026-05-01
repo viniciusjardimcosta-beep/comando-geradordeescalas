@@ -980,12 +980,17 @@ function escalar(
       tipo: "info",
       msg: `Excedente convertido em HE: ${acertosHe.join(", ")}.`,
     });
+  }
   if (acertosExpAdm.length) {
     alertas.push({
       tipo: "info",
       msg: `Expediente complementar (ADM): ${acertosExpAdm.join(", ")}.`,
     });
   }
+
+  return { ord, exp: expm, he };
+}
+
 
 
 /* ------------------------------------------------------------------ */
