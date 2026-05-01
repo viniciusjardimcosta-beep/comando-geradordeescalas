@@ -478,7 +478,47 @@ function escalar(
     return undefined;
   };
 
-  // 0ª ETAPA — Virada do mês anterior.
+  // ===== Limites de HE (vindos de ia.limitesHe) =====
+  // Para cada militar, calcular o teto de HE no mês e flags equalizar/evitarFragmentar.
+  const limiteHePorMilitar = new Map<number, { max: number; equalizar: boolean; evitarFragmentar: boolean }>();
+  const aplicaLimiteEm = (m: MilitarRT, lim: LimiteHeIA) => {
+    const cur = limiteHePorMilitar.get(m.rowOrd);
+    const max = Math.min(cur?.max ?? Number.POSITIVE_INFINITY, lim.maxHoras);
+    limiteHePorMilitar.set(m.rowOrd, {
+      max,
+      equalizar: !!(cur?.equalizar || lim.equalizar),
+      evitarFragmentar: !!(cur?.evitarFragmentar || lim.evitarFragmentar),
+    });
+  };
+  for (const lim of ia.limitesHe ?? []) {
+    if (lim.matricula || lim.nome) {
+      const m = findMilitar(lim.matricula, lim.nome);
+      if (m) aplicaLimiteEm(m, lim);
+      continue;
+    }
+    const cat = lim.postoOuPapel ?? "all";
+    for (const m of militares) {
+      if (cat === "all" || m.postoCat === cat) aplicaLimiteEm(m, lim);
+    }
+  }
+  // Soma de horas HE já lançadas no mês para um militar
+  const horasHeMes = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = he.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      const mt = /^HE(\d{1,2})$/i.exec(s);
+      if (mt) total += Number(mt[1]);
+    }
+    return total;
+  };
+  const limiteRestanteHe = (m: MilitarRT): number => {
+    const lim = limiteHePorMilitar.get(m.rowOrd);
+    if (!lim) return Number.POSITIVE_INFINITY;
+    return Math.max(0, lim.max - horasHeMes(m));
+  };
+
+
   // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
   //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
   //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
