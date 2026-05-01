@@ -213,12 +213,14 @@ function ImportarPage() {
     setBusy(true);
     try {
       const base64 = await fileToBase64(file);
+      const viradaAnterior = Object.entries(viradaSel).map(([militarId, tipo]) => ({ militarId, tipo }));
       const result = await gerarFn({
         data: {
           fileBase64: base64,
           fileName: file.name,
           mes, ano,
           parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto },
+          viradaAnterior,
         },
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
