@@ -732,7 +732,7 @@ function escalar(
 
   // Carga mínima base por dias do mês (espelha as fórmulas da planilha)
   const cargaBase = (d: number): number =>
-    d === 28 ? 160 : d === 29 ? 165 : d === 30 ? 171 : d === 31 ? 177 : Math.round(d * 5.7);
+    ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
 
   // Tamanho em horas de cada sigla ORD parcial (já suportadas pela planilha)
   const ORD_HORAS: Record<string, number> = {
