@@ -834,8 +834,61 @@ function escalar(
   const acertosHe: string[] = [];
   const cmAvulso: string[] = [];
 
+  // Helper: extrai horas de uma sigla EXP/CM/TELE (formato LETRAS+NÚMERO)
+  const horasExpSigla = (s: string): number => {
+    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasExpDia = (m: MilitarRT, d: number): number => {
+    const s = expm.get(d)?.get(m.rowOrd);
+    return s ? horasExpSigla(s) : 0;
+  };
+
+  const acertosExpAdm: string[] = [];
+
   for (const m of militares) {
-    if (!m.ativo || m.isAdm) continue;
+    if (!m.ativo) continue;
+
+    // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
+    if (m.isAdm) {
+      const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
+      const alvoAdm = Math.round(cargaBase(dias) * (1 - diasAfAdm / dias));
+      if (alvoAdm <= 0) continue;
+      let totalExp = 0;
+      for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
+      let faltamAdm = alvoAdm - totalExp;
+      if (faltamAdm <= 0) continue;
+      // 1ª passada: aumentar siglas EXP existentes até 12h por dia
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue; // afastamento
+        const sAtual = expm.get(d)?.get(m.rowOrd);
+        if (!sAtual) continue;
+        const hAtual = horasExpSigla(sAtual);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sAtual)?.[1].toUpperCase() ?? "EXP";
+        const espacoLivre = 12 - hAtual;
+        if (espacoLivre <= 0) continue;
+        const add = Math.min(faltamAdm, espacoLivre);
+        expm.get(d)!.set(m.rowOrd, `${tipo}${hAtual + add}`);
+        faltamAdm -= add;
+      }
+      // 2ª passada: lançar EXP novo em dias úteis ainda vazios
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue;
+        if (expm.get(d)?.has(m.rowOrd)) continue;
+        const add = Math.min(faltamAdm, 12);
+        expm.get(d)!.set(m.rowOrd, `EXP${add}`);
+        faltamAdm -= add;
+      }
+      const fechado = (alvoAdm - totalExp) - faltamAdm;
+      if (fechado > 0) acertosExpAdm.push(`${m.nome} (+${fechado}h EXP)`);
+      if (faltamAdm > 0) acertosExpAdm.push(`${m.nome} (faltam ${faltamAdm}h — sem dia útil livre)`);
+      continue;
+    }
+
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
     const cargaMin = Math.round(cargaBase(dias) * (1 - diasAf / dias));
     if (cargaMin <= 0) continue;
