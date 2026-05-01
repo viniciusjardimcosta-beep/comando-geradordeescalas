@@ -487,12 +487,14 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
-        if (linha === "ORD" && sigla === "2341") {
+        if (linha === "ORD" && (sigla === "2341" || sigla === "1234")) {
+          // Serviço 24h SEMPRE em duas células: 234 em D + 1 em D+1
           ord.get(d)!.set(m.rowOrd, "234");
           if (d < dias && !ord.get(d + 1)!.has(m.rowOrd)) ord.get(d + 1)!.set(m.rowOrd, "1");
-        } else if (linha === "HE" && sigla === "HE24") {
-          he.get(d)!.set(m.rowOrd, "HE18");
-          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE6");
+        } else if (linha === "HE" && (sigla === "HE24" || sigla === "HE23")) {
+          // HE 24h SEMPRE em par HE16 + HE8 (regra confirmada pelo usuário)
+          he.get(d)!.set(m.rowOrd, "HE16");
+          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE8");
         } else {
           setDest.get(d)!.set(m.rowOrd, sigla);
         }
