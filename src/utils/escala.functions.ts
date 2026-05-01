@@ -517,8 +517,7 @@ function escalar(
     if (!lim) return Number.POSITIVE_INFINITY;
     return Math.max(0, lim.max - horasHeMes(m));
   };
-
-
+  // 0ª ETAPA — Virada do mês anterior.
   // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
   //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
   //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
