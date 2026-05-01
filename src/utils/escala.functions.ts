@@ -1109,6 +1109,35 @@ export const gerarEscala = createServerFn({ method: "POST" })
       data.mes, data.ano,
     );
 
+    /* 6.0) Virada do mês anterior selecionada explicitamente na UI tem prioridade
+            sobre qualquer inferência da IA — evita duplicidade e garante 8h. */
+    if (data.viradaAnterior?.length) {
+      const idToCad = new Map<string, CadInfo>();
+      for (const c of cadastrados ?? []) idToCad.set(c.id as string, {
+        id: c.id as string,
+        nome: c.nome as string,
+        isCov: !!c.is_cov,
+        isCg: !!c.is_cg,
+        isAdm: !!c.is_adm,
+        tipoEscala: ((c as { tipo_escala?: string }).tipo_escala === "parcial" ? "parcial" : "24h"),
+      });
+      const matsExplicitas = new Set<string>();
+      for (const v of data.viradaAnterior) {
+        const cad = idToCad.get(v.militarId);
+        if (!cad) continue;
+        // localizar matrícula no efetivo (via cadPorNome)
+        const m = militares.find((x) => normNome(x.nome) === normNome(cad.nome));
+        if (!m) continue;
+        matsExplicitas.add(m.matricula || m.nomeNorm);
+        // remove duplicatas vindas da IA p/ esse militar
+        ia.viradaAnterior = (ia.viradaAnterior ?? []).filter((iv) => {
+          const im = militares.find((x) => (iv.matricula && normMatricula(iv.matricula) === x.matricula) || (iv.nome && normNome(iv.nome) === x.nomeNorm));
+          return im?.rowOrd !== m.rowOrd;
+        });
+        ia.viradaAnterior.push({ matricula: m.matricula, nome: m.nome, tipo: v.tipo });
+      }
+    }
+
     /* 6.1) Pré-aplicar afastamentos do plano anual agrupando dias contíguos por sigla
             (gera 1 ia.afastamento por período → 1 alerta consolidado). */
     for (const m of militares) {
