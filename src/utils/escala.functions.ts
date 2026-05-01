@@ -907,32 +907,32 @@ function escalar(
   const cargaBase = (d: number): number =>
     ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
 
-  // Tamanho em horas de cada sigla ORD parcial (já suportadas pela planilha)
+  // Tamanho em horas de cada sigla ORD — segue a lógica REAL da planilha (cada
+  // célula vale exatamente as horas do(s) turno(s) escritos nela).
+  // Turnos: 1=02-08 (6h), 2=08-14 (6h), 3=14-20 (6h), 4=20-02 (6h, vira o dia).
+  // Plantão de 24h é representado por "234" (18h) no dia D + "1" (6h) no dia D+1.
   const ORD_HORAS: Record<string, number> = {
-    "2": 6, "3": 6, "4": 6, "1": 6,
-    "23": 12, "34": 12, "234": 18, "2341": 24, "234 1": 24,
+    "1": 6, "2": 6, "3": 6, "4": 6,
+    "12": 12, "13": 12, "14": 12, "23": 12, "24": 12, "34": 12,
+    "123": 18, "124": 18, "134": 18, "234": 18,
+    "1234": 24, "2341": 24,
   };
   const horasOrdSigla = (s: string): number => ORD_HORAS[s] ?? 0;
 
-  // Total de horas ordinárias no mês para o militar (somando sigla do dia + sigla do D+1 se for "1" da virada)
+  // Total de horas ordinárias no mês para o militar — SOMA cada célula como ela
+  // está escrita, igual à fórmula da planilha. Não há mais regra "234 vale 24h e
+  // ignora o 1": agora 234=18h e o 1 do dia seguinte soma seus 6h normalmente.
   const horasOrdMes = (m: MilitarRT): number => {
     let total = 0;
     for (let d = 1; d <= dias; d++) {
       const s = ord.get(d)?.get(m.rowOrd);
       if (!s) continue;
-      // sigla "1" no D+1 é apenas extensão visual da madrugada do serviço iniciado em D-1;
-      // não soma horas (o serviço completo de 24h já é contado em "234"/"2341" do dia D).
-      if (s === "1") continue;
-      // "234" representa serviço 24h (08h-08h) iniciado naquele dia → 24h.
-      // "2341" também = 24h. Demais parciais conforme tabela.
-      if (s === "234" || s === "2341" || s === "234 1") {
-        total += 24;
-        continue;
-      }
       total += horasOrdSigla(s);
     }
     return total;
   };
+
+  // (horasExpMes removido — não é usado no fluxo atual)
 
   // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
   const diasAfastadoMap = new Map<number, number>();
@@ -996,10 +996,9 @@ function escalar(
     if (sOrd) {
       // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
       if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
-      // serviço 24h iniciado neste dia → 24h
-      if (sOrd === "234" || sOrd === "2341" || sOrd === "234 1") total += 24;
-      else if (sOrd === "1") total += 0; // madrugada de plantão do dia anterior, não bloqueia
-      else total += horasOrdSigla(sOrd);
+      // "234" = 18h físicas (08h-02h); "1" = 6h físicas (02h-08h da madrugada).
+      // Demais combinações somam pelas horas reais.
+      total += horasOrdSigla(sOrd);
     }
     total += horasExpDia(m, d);
     total += horasHeDia(m, d);

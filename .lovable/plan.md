@@ -1,96 +1,176 @@
-Vou corrigir o motor para tratar esse caso como regra estrutural da escala, não como interpretação da IA.
+Analisei o Anexo B do arquivo enviado e você está certo: o erro principal é que o motor está tratando errado a representação dos turnos ordinários.
 
-## Problema confirmado
+## O que o documento mostra
 
-Na escala gerada, quando o sistema transforma um plantão de 24h para algo como:
-
-```text
-Dia 28: ORD 23 + CM4
-```
-
-ele limita corretamente o dia 28 a 16h, mas não cria a continuação no dia 29:
+No arquivo enviado, o padrão correto dos turnos de 24h não é escrever tudo como um bloco único no mesmo dia. A planilha usa a lógica visual por dia:
 
 ```text
-Dia 29: CM8
+Dia D:     ORD/EFE = 234
+Dia D + 1: ORD/EFE = 1
 ```
 
-Com isso, o militar deixa de cobrir a madrugada de 00h às 08h, e o dia 29 fica com menos militares do que o mínimo exigido. Além disso, a última escala segue sem HE porque o lançamento de excedente mensal está amarrado de forma incorreta à contagem de carga e aos plantões reais.
+Ou seja:
 
-## O que vou ajustar
+- `2` = 08h–14h
+- `3` = 14h–20h
+- `4` = 20h–02h
+- `1` = 02h–08h do dia seguinte
 
-### 1) Criar uma regra de “serviço físico 24h dividido”
-Quando o sistema precisar converter parte de um plantão ordinário em CM para fechar carga horária, ele deve preservar a cobertura física de 24h do serviço.
+Então um serviço de 24h iniciado no dia 4 aparece como:
+
+```text
+Dia 4: 234
+Dia 5: 1
+```
+
+E não deve ser tratado internamente como se `234` sozinho já valesse todo o serviço na planilha.
+
+Também confirmei no documento o padrão de virada do mês anterior:
+
+```text
+Dia 1: ORD/EFE = 1
+Dia 1: EXP/COM = CM2
+```
+
+Isso representa o final do serviço que começou no mês anterior, fechando a madrugada.
+
+## Erro atual do sistema
+
+O motor está misturando duas coisas diferentes:
+
+1. **bloco operacional de 24h**;
+2. **células reais que a planilha usa para calcular horas**.
+
+Hoje o código ainda trata `234` como se fosse 24h em alguns cálculos internos e ignora o `1` do dia seguinte na contagem mensal. Isso pode até fechar a lógica interna do sistema, mas não bate com a fórmula real da planilha, que precisa enxergar os turnos lançados dia a dia.
+
+Também aparece o problema que você apontou:
+
+```text
+Dia 28: ORD/EFE = 23
+Dia 28: EXP/COM = CM4
+```
+
+Esse lançamento fecha apenas 16h no dia 28. Para manter o serviço físico de 24h, o sistema precisa lançar a continuação no dia seguinte:
+
+```text
+Dia 29: EXP/COM = CM8
+```
+
+Se isso não acontece, a madrugada de 00h às 08h fica descoberta para aquele militar.
+
+Além disso, no arquivo enviado a linha `HE` está vazia nos militares analisados, mesmo havendo excesso de carga indicado nos totais. Isso confirma que o sistema não está escrevendo as horas extras no campo certo da planilha.
+
+## Correção que vou implementar
+
+### 1) Mudar a contagem interna para seguir a planilha
+Vou corrigir a tabela de horas para a contagem mensal considerar exatamente o que está escrito em cada célula:
+
+```text
+ORD/EFE:
+1   = 6h
+2   = 6h
+3   = 6h
+4   = 6h
+23  = 12h
+234 = 18h
+```
+
+E o serviço completo será entendido como:
+
+```text
+234 no dia D + 1 no dia D+1 = 24h
+```
+
+O sistema não deve mais somar `234` como 24h e ignorar o `1` na contagem da planilha.
+
+### 2) Separar “plantão operacional” de “lançamento em célula”
+Internamente, o motor pode continuar entendendo que um militar entrou em um serviço de 24h, mas na hora de escrever e calcular precisa usar a forma da planilha:
+
+```text
+entrada do serviço: 234
+saída/madrugada: 1
+```
+
+Isso evita erro na carga horária mensal e na fórmula do arquivo.
+
+### 3) Corrigir serviços parcialmente convertidos em CM
+Quando o sistema precisar ajustar um serviço para fechar carga, ele deverá preservar a continuidade física.
 
 Exemplo correto:
 
 ```text
-Dia 28: ORD 23 + CM4  = 16h de 08h a 00h
-Dia 29: EXP/CM8       = 8h de 00h a 08h
+Dia 28 ORD/EFE: 23
+Dia 28 EXP/COM: CM4
+Dia 29 EXP/COM: CM8
 ```
 
-Ou seja: se o plantão original era 24h, mas no dia de entrada só coube `CM4`, o restante da madrugada precisa ser lançado no dia seguinte como `CM8`, desde que exista dia seguinte dentro da planilha.
+O sistema não poderá deixar apenas `23 + CM4`, porque isso cobre só 16h.
 
-### 2) Separar “limite físico do dia de entrada” de “cobertura da madrugada”
-A regra anterior tratou o limite de 16h como se o serviço acabasse ali. Vou ajustar para o motor entender:
-
-- dia de entrada comporta no máximo 16h úteis até meia-noite;
-- a madrugada de 00h às 08h pertence visualmente ao dia seguinte;
-- se o militar estava cobrindo serviço 24h, essa madrugada precisa aparecer no dia seguinte (`1` ou `CM8`/`HE8`, conforme o tipo do lançamento);
-- não pode simplesmente cortar as 8h finais, pois isso reduz a guarnição mínima.
-
-### 3) Corrigir o acerto de carga mensal com CM
-A parte que hoje transforma o último `234 + 1` em `23 + CM4` será alterada para trabalhar por blocos:
-
-- manter parte ordinária no dia de entrada (`234`, `23` ou `2` conforme o necessário);
-- lançar CM no dia de entrada somente até completar 16h no mesmo dia;
-- lançar o restante obrigatório da madrugada no dia seguinte como CM, quando o plantão original exigia cobertura de 24h;
-- atualizar corretamente a carga computada para não achar que ainda faltam horas nem remover cobertura.
-
-Exemplo para 12h faltantes:
+### 4) Fazer a HE ser lançada na linha HE, não escondida em ORD/EXP
+Quando o militar ultrapassar a carga mensal, o excedente precisa aparecer em:
 
 ```text
-Antes: 234 + 1
-Depois: dia D = 23 + CM4; dia D+1 = CM8
-Total físico preservado: 24h
+Linha HE: HE1, HE2, ..., HE24
 ```
 
-### 4) Fazer a HE voltar a aparecer corretamente
-Vou revisar a etapa de excedente mensal para garantir que:
-
-- o excedente acima da carga mínima seja lançado como `HE`;
-- HE de serviço 24h seja quebrada como `HE16` no dia de entrada + `HE8` no dia seguinte;
-- HE não seja lançada em dia livre aleatório;
-- limites por posto, como “sargentos no máximo 24h e equalizado”, continuem valendo;
-- se o teto impedir o lançamento, o sistema gere alerta claro informando que a HE foi bloqueada por limite definido.
-
-### 5) Recontar guarnição mínima considerando a madrugada do dia seguinte
-A validação final será fortalecida para detectar o caso que você apontou:
+O sistema deve lançar HE em dias reais de serviço, preferencialmente seguindo o padrão:
 
 ```text
-Dia 28: 2 militares 234+1
-Dia 28: 2 militares 23+CM4 sem CM8 no dia 29
+Dia D: HE16
+Dia D+1: HE8
 ```
 
-O sistema deve entender que, na madrugada do dia 29, esses dois últimos militares também precisam estar cobertos. Se não estiverem, deve completar com `CM8`/`HE8` conforme o caso, ou alertar caso não haja possibilidade.
+ou frações menores quando necessário, respeitando o limite físico do dia e evitando quebrar demais quando você pedir para não fragmentar.
 
-### 6) Ajustar a sanidade final para não apagar complemento necessário
-A validação final atual só corta excesso acima de 24h, mas não garante que a continuação de madrugada exista. Vou adicionar uma validação inversa:
+### 5) Recalcular o excedente usando a mesma lógica da planilha
+Depois de montar ORD/EFE e EXP/COM, o motor vai recalcular:
 
-- se um serviço foi reduzido para `23 + CM4`, exigir continuação `CM8` no dia seguinte;
-- se uma HE foi `HE16`, exigir `HE8` no dia seguinte quando for serviço 24h;
-- se estiver no último dia do mês, não inventar dia seguinte dentro da planilha atual; esse caso pertence à virada do mês seguinte.
+```text
+horas ordinárias reais + complementos + HE já lançada
+```
 
-## Arquivo afetado
+Depois compara com a carga mensal alvo. Se passar da carga, o excesso será lançado no campo `HE`.
+
+### 6) Respeitar teto e equalização de HE
+As regras que você definir nas observações continuarão valendo:
+
+```text
+sargentos no máximo 24h de HE cada, equalizado
+soldados equalizados na medida do possível, sem quebrar demais em horas pequenas
+```
+
+Se o teto impedir lançamento de HE, o sistema vai avisar claramente no alerta da escala.
+
+### 7) Validações finais obrigatórias
+Vou adicionar uma checagem final antes de salvar a planilha:
+
+- se houver `234`, deve existir `1` no dia seguinte, exceto no último dia do mês;
+- se houver `23 + CM4` como ajuste de um plantão de 24h, deve existir `CM8` no dia seguinte;
+- se houver `HE16` de serviço 24h, deve existir `HE8` no dia seguinte;
+- nenhum militar pode receber mais horas físicas em um dia do que a planilha comporta;
+- a linha HE não pode ficar vazia quando houver excesso real de carga;
+- a contagem interna do sistema deve bater com a lógica de turnos da planilha.
+
+## Arquivo a alterar
 
 - `src/utils/escala.functions.ts`
 
 ## Resultado esperado
 
-Depois da correção, o caso do Sd Willian Kramer da Silva no dia 28 deve ficar no padrão correto:
+Depois da correção, a escala gerada deve seguir o padrão do documento enviado:
 
 ```text
-Dia 28: 23 + CM4
-Dia 29: CM8
+Plantão normal:
+Dia D:     234
+Dia D + 1: 1
+
+Plantão ajustado com CM:
+Dia D:     23 + CM4
+Dia D + 1: CM8
+
+Hora extra:
+Dia D:     HE16
+Dia D + 1: HE8
 ```
 
-E a escala não deve mais deixar a madrugada do dia seguinte abaixo do mínimo de 4 militares quando o serviço original era de 24h. Também vou corrigir a lógica para a previsão de HE aparecer novamente quando houver excedente mensal real.
+E, principalmente, as horas extras passarão a ser escritas na linha `HE`, permitindo que a fórmula da planilha contabilize corretamente o excesso de carga horária.
