@@ -799,16 +799,16 @@ function escalar(
       }
       ord.get(dia)!.set(m.rowOrd, siglaOrdD);
       m.cargaH += ordD;
-      // HE cobre o restante das 24h físicas
+      // HE cobre o restante das 24h físicas. NUNCA acumula em cima de HE pré-existente
+      // do mesmo militar/dia (evita "234+HE6" duplicando o plantão quando a etapa 4
+      // já havia lançado HE pra esse militar nesse dia).
       const heD = 18 - ordD;            // restante em D (até 02h)
       const heMad = 6;                  // madrugada do dia seguinte
-      if (heD > 0) {
-        const cur = he.get(dia)?.get(m.rowOrd);
-        const ja = cur ? (parseInt(cur.replace(/\D/g, ""), 10) || 0) : 0;
-        he.get(dia)!.set(m.rowOrd, `HE${ja + heD}`);
+      if (heD > 0 && !he.get(dia)!.has(m.rowOrd)) {
+        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
         m.cargaH += heD;
       }
-      if (!ord.get(dia + 1)!.has(m.rowOrd)) {
+      if (heMad > 0 && !ord.get(dia + 1)!.has(m.rowOrd) && !he.get(dia + 1)!.has(m.rowOrd)) {
         he.get(dia + 1)!.set(m.rowOrd, `HE${heMad}`);
         m.cargaH += heMad;
       }
