@@ -32,6 +32,11 @@ const InputSchema = z.object({
   parametros: ParametrosSchema,
   /** ignorar aviso de mês/ano divergente da planilha */
   forcarMesAno: z.boolean().optional().default(false),
+  /** Militares que estavam de serviço no último dia do mês anterior. Iniciam o mês com apenas 8h. */
+  viradaAnterior: z.array(z.object({
+    militarId: z.string().uuid(),
+    tipo: z.enum(["ord", "he"]).default("ord"),
+  })).optional().default([]),
 });
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
