@@ -16,6 +16,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, Pencil, Trash2, UserSquare2 } from "lucide-react";
 import { toast } from "sonner";
@@ -338,6 +341,24 @@ function MilitaresPage() {
                   <p className="text-xs text-muted-foreground">Não entra na escala operacional; apenas EXP.</p>
                 </div>
               </label>
+            </div>
+
+            <div className="grid gap-2 rounded-md border border-border p-3">
+              <Label htmlFor="tipo_escala">Tipo de escala</Label>
+              <Select
+                value={form.tipo_escala}
+                onValueChange={(v) => setForm({ ...form, tipo_escala: v as TipoEscala })}
+              >
+                <SelectTrigger id="tipo_escala"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="24h">24h — serviço operacional 08h–08h</SelectItem>
+                  <SelectItem value="parcial">Parcial — apenas turnos curtos (2/23/3) em dias úteis</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                "Parcial" é típico de oficiais administrativos que não entram no serviço 24h
+                (recebem apenas turnos parciais durante o expediente).
+              </p>
             </div>
 
             <div className="flex items-center justify-between rounded-md border border-border p-3">
