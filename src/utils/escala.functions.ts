@@ -932,12 +932,7 @@ function escalar(
     return total;
   };
 
-  // Total de horas EXP/CM/TELE no mês
-  const horasExpMes = (m: MilitarRT): number => {
-    let total = 0;
-    for (let d = 1; d <= dias; d++) total += horasExpDia(m, d);
-    return total;
-  };
+  // (horasExpMes removido — não é usado no fluxo atual)
 
   // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
   const diasAfastadoMap = new Map<number, number>();
