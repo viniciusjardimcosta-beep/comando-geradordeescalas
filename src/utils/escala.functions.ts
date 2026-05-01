@@ -1046,7 +1046,7 @@ function escalar(
 
   // (cargaBase, ORD_HORAS, horasOrdSigla, horasOrdAcumuladas e cargaMaxOrd já
   //  declarados antes da etapa 3 — necessários no momento da escolha do plantão.)
-  const horasOrdMes = horasOrdAcumuladas;
+  const horasOrdMes = horasOrdinariasAcumuladas;
 
   // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
   const diasAfastadoMap = new Map<number, number>();
