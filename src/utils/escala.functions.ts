@@ -255,13 +255,15 @@ Converta o texto do usuário em JSON estruturado com 6 seções:
    - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
      "Sd Z entrou de HE no fim do mês passado".
 
-6) limitesHe: tetos de HE no mês e regras de equalização.
+6) limitesHe: tetos de HE no mês e regras de equalização. SEMPRE preencher se o usuário mencionar limite, máximo, igualar, equalizar, distribuir ou tetos por posto.
    - "limitar HE dos sargentos a 24h cada, equalizado" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "no máximo 24 HE para os sgts e equalizar" → MESMA estrutura acima
    - "equalizar HE dos soldados sem fragmentar muito" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true, evitarFragmentar: true }
    - "Sgt X no máximo 12h de HE no mês" → { nome: "X", maxHoras: 12 }
    - postoOuPapel aceita: "sgt", "sd", "cb", "ten", "all". Use "all" para todos.
    - equalizar=true → motor distribui HE preferindo quem tem MENOS HE no mês.
-   - evitarFragmentar=true → motor prefere lançar HE em blocos de 24h (HE16+HE8) e evita HE6/HE8 isolados.
+   - evitarFragmentar=true → motor prefere lançar HE em blocos maiores (HE16/HE8) e evita HE3/HE4 isolados.
+   - Sempre que houver "limite máximo" + "equalizado/igualitário", marcar equalizar=true.
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
@@ -975,6 +977,45 @@ function escalar(
     const s = expm.get(d)?.get(m.rowOrd);
     return s ? horasExpSigla(s) : 0;
   };
+  const horasHeSigla = (s: string): number => {
+    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasHeDia = (m: MilitarRT, d: number): number => {
+    const s = he.get(d)?.get(m.rowOrd);
+    return s ? horasHeSigla(s) : 0;
+  };
+  /**
+   * Horas físicas já ocupadas no dia para o militar (ORD + EXP + HE).
+   * Um dia tem no máximo 24h físicas (16h no último dia do mês p/ lançamento que não estoura).
+   * Usado para impedir combinações impossíveis tipo `23 + CM9` (12+9=21 num dia que só comporta 16h úteis).
+   */
+  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
+    let total = 0;
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) {
+      // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
+      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
+      // serviço 24h iniciado neste dia → 24h
+      if (sOrd === "234" || sOrd === "2341" || sOrd === "234 1") total += 24;
+      else if (sOrd === "1") total += 0; // madrugada de plantão do dia anterior, não bloqueia
+      else total += horasOrdSigla(sOrd);
+    }
+    total += horasExpDia(m, d);
+    total += horasHeDia(m, d);
+    return total;
+  };
+  /**
+   * Espaço útil restante no dia para receber CM/EXP/HE complementar.
+   * - Limite operacional: 16h úteis por dia (regra de exemplo: ORD 23 + CM4 fecha 16h).
+   * - No último dia do mês, mantém o mesmo teto.
+   * - Se o militar já tem plantão 24h no dia, retorna 0.
+   */
+  const espacoLivreNoDia = (m: MilitarRT, d: number): number => {
+    const ocup = horasOcupadasNoDia(m, d);
+    if (ocup >= 16) return 0;
+    return 16 - ocup;
+  };
 
   const acertosExpAdm: string[] = [];
 
@@ -1029,14 +1070,43 @@ function escalar(
     if (cargaOrd === cargaMin) continue;
 
     if (cargaOrd > cargaMin) {
-      // EXCEDENTE → NÃO converter em HE automática. Plantões 24h são fato consumado;
-      // o excesso de horas em relação à carga mínima é compensado em folga (24x72),
-      // não vira HE fantasma na planilha. HE só é lançada por:
-      //   1) comando explícito do usuário (ia.lancamentos)
-      //   2) furo de guarnição na etapa 4 (HE para tapar dia abaixo do alvo)
-      //   3) virada do mês anterior (HE8 quando marcado)
-      const excedente = cargaOrd - cargaMin;
-      acertosHe.push(`${m.nome} (+${excedente}h acima do alvo — compensado em folga)`);
+      // EXCEDENTE → lançar como HE nos dias em que o militar EFETIVAMENTE
+      // trabalhou plantão 24h (dias com sigla "234" na linha ORD). NUNCA em
+      // dias livres — isso evitaria a "HE fantasma" no dia 01/02. A planilha
+      // precisa do HE para que a fórmula identifique a previsão de hora extra.
+      // Respeita o teto de HE/mês definido em ia.limitesHe.
+      let excedente = cargaOrd - cargaMin;
+      const restanteTeto = limiteRestanteHe(m);
+      const aLancar = Math.min(excedente, restanteTeto);
+      if (aLancar > 0) {
+        // dias de plantão 24h reais do militar
+        const diasPlantao: number[] = [];
+        for (let d = 1; d <= dias; d++) {
+          if (ord.get(d)?.get(m.rowOrd) === "234") diasPlantao.push(d);
+        }
+        let restante = aLancar;
+        // Estratégia: distribuir o excedente em blocos de até HE16 (limite operacional
+        // do dia de entrada do plantão). Sem fragmentar HE em dias livres aleatórios.
+        // Quebras pequenas (HE3..HE8) só quando o resto for menor que 16h.
+        for (const d of diasPlantao) {
+          if (restante <= 0) break;
+          // já há HE no dia? então acumula respeitando HE16 máximo
+          const hAtual = horasHeDia(m, d);
+          if (hAtual >= 16) continue;
+          const espacoHe = 16 - hAtual;
+          const add = Math.min(restante, espacoHe);
+          if (add <= 0) continue;
+          he.get(d)!.set(m.rowOrd, `HE${hAtual + add}`);
+          restante -= add;
+        }
+        const lancouHe = aLancar - restante;
+        if (lancouHe > 0) acertosHe.push(`${m.nome} (+${lancouHe}h HE — excedente da carga mensal)`);
+        if (restante > 0) acertosHe.push(`${m.nome} (faltam ${restante}h excedentes sem espaço HE)`);
+      }
+      if (excedente > aLancar) {
+        const semTeto = excedente - aLancar;
+        acertosHe.push(`${m.nome} (+${semTeto}h acima do alvo — bloqueado por teto de HE)`);
+      }
     } else {
       // FALTANTE → CM puro até bater cargaMin. ZERO HE.
       let faltam = cargaMin - cargaOrd;
@@ -1053,27 +1123,29 @@ function escalar(
         if (horasOrdManter >= 18) { novaSigla = "234"; horasOrdReais = 18; }
         else if (horasOrdManter >= 12) { novaSigla = "23"; horasOrdReais = 12; }
         else if (horasOrdManter >= 6) { novaSigla = "2"; horasOrdReais = 6; }
-        // recalcula CM exato para fechar (24-horasOrdReais) horas, mas no máx CM16 e máx faltam
-        const cmFinal = Math.min(16, faltam, 24 - horasOrdReais);
+        // CM final: respeita limite físico do dia (16h totais incluindo ORD)
+        const cmFinal = Math.min(16, faltam, 16 - horasOrdReais);
         if (cmFinal > 0) {
           ord.get(dia)!.delete(m.rowOrd);
           if (dia < dias) ord.get(dia + 1)!.delete(m.rowOrd);
           if (novaSigla) ord.get(dia)!.set(m.rowOrd, novaSigla);
           expm.get(dia)!.set(m.rowOrd, `CM${cmFinal}`);
-          // ajuste de horas: tirou 24h ORD, colocou (horasOrdReais + cmFinal)h
           faltam -= cmFinal;
-          // se ainda sobra carga, vamos para CM avulso abaixo
         }
       }
 
-      // 2) Resto (ou tudo, se não tinha serviço 24h) → CM avulso em dias úteis livres
+      // 2) Resto (ou tudo, se não tinha serviço 24h) → CM avulso em dias úteis livres,
+      //    respeitando o limite físico do dia (espacoLivreNoDia).
       while (faltam > 0) {
         let lancou = false;
         for (let d = 1; d <= dias; d++) {
           if (!isDiaExpediente(ano, mes, d)) continue;
           if (!diaLivreParaLancamento(m, d)) continue;
           if (expm.get(d)?.has(m.rowOrd)) continue;
-          const cm = Math.min(faltam, 16);
+          const espaco = espacoLivreNoDia(m, d);
+          if (espaco <= 0) continue;
+          const cm = Math.min(faltam, 16, espaco);
+          if (cm <= 0) continue;
           expm.get(d)!.set(m.rowOrd, `CM${cm}`);
           faltam -= cm;
           lancou = true;
@@ -1103,13 +1175,54 @@ function escalar(
   if (acertosHe.length) {
     alertas.push({
       tipo: "info",
-      msg: `Excedente acima da carga mínima (compensado em folga, sem HE automática): ${acertosHe.join(", ")}.`,
+      msg: `Excedente da carga mínima lançado como HE nos plantões reais: ${acertosHe.join(", ")}.`,
     });
   }
   if (acertosExpAdm.length) {
     alertas.push({
       tipo: "info",
       msg: `Expediente complementar (ADM): ${acertosExpAdm.join(", ")}.`,
+    });
+  }
+
+  /* 6ª ETAPA — Sanidade final: nenhuma combinação ORD+EXP+HE pode passar de
+     24h físicas no mesmo dia. Se encontrar, ajusta primeiro EXP/CM/TELE para
+     baixo, depois HE. Emite alerta para cada correção. */
+  const correcoes: string[] = [];
+  for (const m of militares) {
+    for (let d = 1; d <= dias; d++) {
+      const ocup = horasOcupadasNoDia(m, d);
+      if (ocup <= 24) continue;
+      let excesso = ocup - 24;
+      // 1) reduz EXP/CM/TELE
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp && excesso > 0) {
+        const hExp = horasExpSigla(sExp);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sExp)?.[1].toUpperCase() ?? "EXP";
+        const cortar = Math.min(excesso, hExp);
+        const novo = hExp - cortar;
+        if (novo > 0) expm.get(d)!.set(m.rowOrd, `${tipo}${novo}`);
+        else expm.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sExp}→${novo > 0 ? `${tipo}${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+      // 2) reduz HE se ainda sobra
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe && excesso > 0) {
+        const hHe = horasHeSigla(sHe);
+        const cortar = Math.min(excesso, hHe);
+        const novo = hHe - cortar;
+        if (novo > 0) he.get(d)!.set(m.rowOrd, `HE${novo}`);
+        else he.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sHe}→${novo > 0 ? `HE${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+    }
+  }
+  if (correcoes.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Combinações que passariam de 24h no mesmo dia foram ajustadas automaticamente: ${correcoes.join("; ")}.`,
     });
   }
 
