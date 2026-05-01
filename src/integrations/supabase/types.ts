@@ -192,6 +192,7 @@ export type Database = {
           nome: string
           observacoes: string | null
           posto_graduacao: string | null
+          tipo_escala: string
           updated_at: string
           user_id: string
         }
@@ -208,6 +209,7 @@ export type Database = {
           nome: string
           observacoes?: string | null
           posto_graduacao?: string | null
+          tipo_escala?: string
           updated_at?: string
           user_id: string
         }
@@ -224,6 +226,7 @@ export type Database = {
           nome?: string
           observacoes?: string | null
           posto_graduacao?: string | null
+          tipo_escala?: string
           updated_at?: string
           user_id?: string
         }

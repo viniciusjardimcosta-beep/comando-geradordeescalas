@@ -92,11 +92,18 @@ interface ExcecaoIA {
   dias: number[];
   acao: "nao_escalar" | "somente_cg" | "somente_cov" | "obrigatorio";
 }
+interface ViradaAnteriorIA {
+  matricula?: string;
+  nome?: string;
+  /** "ord" = serviço 24h ordinário em D31 do mês anterior; "he" = HE 24h em D31 anterior */
+  tipo: "ord" | "he";
+}
 interface InterpretacaoIA {
   afastamentos: AfastamentoIA[];
   reforcos: ReforcoIA[];
   excecoes: ExcecaoIA[];
   lancamentos: LancamentoIA[];
+  viradaAnterior: ViradaAnteriorIA[];
 }
 
 const NOMES_MES = [
@@ -191,7 +198,7 @@ async function interpretarObservacoes(
   ano: number,
 ): Promise<InterpretacaoIA> {
   const apiKey = process.env.LOVABLE_API_KEY;
-  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [] };
+  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [] };
   if (!apiKey || !texto.trim()) return vazia;
 
   const efetivoCompacto = efetivo
@@ -202,25 +209,33 @@ async function interpretarObservacoes(
   const sys = `Você é um interpretador de observações de escala militar (BM).
 Mês alvo: ${NOMES_MES[mes - 1]}/${ano}.
 
-Converta o texto do usuário em JSON estruturado com 4 seções:
+Converta o texto do usuário em JSON estruturado com 5 seções:
 
 1) afastamentos: períodos em que militar NÃO entra na escala ordinária.
    - motivos comuns → sigla a lançar na célula do dia (linha ORD):
      férias=FER, licença tratamento saúde=LTS, LP=LP, licença gestante=LGE, licença paternidade=LPA,
      licença adoção=LAD, dispensa=DIS, curso=CA, folga=F, RDC=RDC, afastamento médico=AFM,
-     luto=LNJ, atestado curto=FE, licença alun/aluno=LAA, etc.
+     luto=LNJ, atestado curto=FE, licença alun/aluno=LAA, trânsito=TRA, etc.
    - Se o usuário disser só "férias", use "FER". Se falar só "licença" sem detalhar, use "LTS".
 
 2) lancamentos: comandos diretos de sigla em dias específicos, em linhas específicas:
    - linha "HE" (hora extra) → siglas HE1..HE24
    - linha "EXP" (expediente/compensação) → siglas EXP1..EXP12, CM1..CM16, TELE1..TELE8
-   - linha "ORD" (padrão) → siglas numéricas (2341, 1234, 123, 12, 1, 2, 3, 4, etc), C1..C4, OS, CV1..CV12, SSxx
+   - linha "ORD" (padrão) → siglas numéricas (123, 12, 1, 2, 3, 4, 23, 234), C1..C4, OS, CV1..CV12, SSxx
+   - NUNCA usar a sigla "2341" — serviço de 24h é representado por "234" no dia D + "1" no dia D+1 automaticamente.
    - Ex.: "dia 04 lançar HE2 para todos" → lancamentos com sigla=HE2, linha=HE, dias=[4] (sem nome = todos).
    - Ex.: "Sgt X CM3 dia 10" → sigla=CM3, linha=EXP, dias=[10], nome=X.
 
 3) reforcos: alterar a quantidade padrão de militares/COV/CG em dias específicos.
 
 4) excecoes: regras pontuais (nao_escalar, somente_cg, somente_cov, obrigatorio).
+
+5) viradaAnterior: militares que estavam de SERVIÇO no ÚLTIMO DIA do mês ANTERIOR (esse serviço termina às 08h do dia 01 do mês corrente).
+   - tipo "ord": fez serviço 24h ordinário em D31 (ou D28/D30) anterior. No dia 01 do mês atual recebe automaticamente
+     ORD=1 (madrugada 02h-08h) + EXP=CM2 (00h-02h fechando 8h da virada). Bloqueia ORD nos dias 1 e 2.
+   - tipo "he": fez HE 24h em D31 anterior. No dia 01 atual recebe HE=HE8.
+   - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
+     "Sd Z entrou de HE no fim do mês passado".
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
@@ -230,7 +245,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
     type: "function",
     function: {
       name: "interpretar_observacoes",
-      description: "Estrutura observações em afastamentos, lançamentos, reforços e exceções.",
+      description: "Estrutura observações em afastamentos, lançamentos, reforços, exceções e virada do mês anterior.",
       parameters: {
         type: "object",
         properties: {
@@ -293,8 +308,20 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
               required: ["dias", "acao"],
             },
           },
+          viradaAnterior: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                tipo: { type: "string", enum: ["ord", "he"] },
+              },
+              required: ["tipo"],
+            },
+          },
         },
-        required: ["afastamentos", "lancamentos", "reforcos", "excecoes"],
+        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior"],
       },
     },
   }];
@@ -334,6 +361,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
       lancamentos: Array.isArray(parsed.lancamentos) ? parsed.lancamentos : [],
       reforcos: Array.isArray(parsed.reforcos) ? parsed.reforcos : [],
       excecoes: Array.isArray(parsed.excecoes) ? parsed.excecoes : [],
+      viradaAnterior: Array.isArray(parsed.viradaAnterior) ? parsed.viradaAnterior : [],
     };
   } catch (e) {
     console.error("interpretarObservacoes", e);
@@ -360,6 +388,8 @@ interface MilitarRT {
   afastSigla: Map<number, string>; // dia -> sigla afastamento (ex: FER, LTS)
   /** ordem do grupo de escala ordinária (1..N). undefined = sem grupo definido */
   grupoOrdem?: number;
+  /** "24h" = ciclo operacional 24x72; "parcial" = só turnos curtos em dias úteis */
+  tipoEscala: "24h" | "parcial";
 }
 
 function escalar(
@@ -392,6 +422,36 @@ function escalar(
     }
     return undefined;
   };
+
+  // 0ª ETAPA — Virada do mês anterior.
+  // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
+  //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
+  //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
+  const bloqueioPosVirada = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) bloqueioPosVirada.set(d, new Set());
+  const viradasAplicadas: string[] = [];
+  for (const v of ia.viradaAnterior ?? []) {
+    const m = findMilitar(v.matricula, v.nome);
+    if (!m) continue;
+    if (v.tipo === "ord") {
+      ord.get(1)!.set(m.rowOrd, "1");
+      expm.get(1)!.set(m.rowOrd, "CM2");
+      m.cargaH += 8;
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      if (dias >= 2) bloqueioPosVirada.get(2)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (ORD 1+CM2 dia 01)`);
+    } else if (v.tipo === "he") {
+      he.get(1)!.set(m.rowOrd, "HE8");
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (HE8 dia 01)`);
+    }
+  }
+  if (viradasAplicadas.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Virada do mês anterior aplicada: ${viradasAplicadas.join(", ")}.`,
+    });
+  }
 
   // 1) aplica afastamentos (na linha ORD com a sigla correspondente)
   for (const af of ia.afastamentos) {
@@ -457,12 +517,14 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
-        if (linha === "ORD" && sigla === "2341") {
+        if (linha === "ORD" && (sigla === "2341" || sigla === "1234")) {
+          // Serviço 24h SEMPRE em duas células: 234 em D + 1 em D+1
           ord.get(d)!.set(m.rowOrd, "234");
           if (d < dias && !ord.get(d + 1)!.has(m.rowOrd)) ord.get(d + 1)!.set(m.rowOrd, "1");
-        } else if (linha === "HE" && sigla === "HE24") {
-          he.get(d)!.set(m.rowOrd, "HE18");
-          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE6");
+        } else if (linha === "HE" && (sigla === "HE24" || sigla === "HE23")) {
+          // HE 24h SEMPRE em par HE16 + HE8 (regra confirmada pelo usuário)
+          he.get(d)!.set(m.rowOrd, "HE16");
+          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE8");
         } else {
           setDest.get(d)!.set(m.rowOrd, sigla);
         }
@@ -506,8 +568,8 @@ function escalar(
 
   const SIGLA_ORD_DIA = "234";
   const SIGLA_ORD_MADRUGADA = "1";
-  const SIGLA_HE_DIA = "HE18";
-  const SIGLA_HE_MADRUGADA = "HE6";
+  const SIGLA_HE_DIA = "HE16";       // regra: HE 24h sempre em par HE16+HE8
+  const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
   const estaEmServico24 = (m: MilitarRT, dia: number) =>
@@ -700,7 +762,7 @@ function escalar(
 
   // Carga mínima base por dias do mês (espelha as fórmulas da planilha)
   const cargaBase = (d: number): number =>
-    d === 28 ? 160 : d === 29 ? 165 : d === 30 ? 171 : d === 31 ? 177 : Math.round(d * 5.7);
+    ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
 
   // Tamanho em horas de cada sigla ORD parcial (já suportadas pela planilha)
   const ORD_HORAS: Record<string, number> = {
@@ -916,21 +978,30 @@ export const gerarEscala = createServerFn({ method: "POST" })
     /* 4) Militares cadastrados do usuário (com flags multi-papel) */
     const { data: cadastrados, error: errCad } = await supabase
       .from("militares")
-      .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo")
+      .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo, tipo_escala")
       .eq("user_id", userId)
       .eq("ativo", true);
     if (errCad) throw new Error("Falha ao ler militares: " + errCad.message);
 
-    interface CadInfo { id: string; nome: string; isCov: boolean; isCg: boolean; isAdm: boolean; }
+    interface CadInfo {
+      id: string;
+      nome: string;
+      isCov: boolean;
+      isCg: boolean;
+      isAdm: boolean;
+      tipoEscala: "24h" | "parcial";
+    }
     const cadPorMat = new Map<string, CadInfo>();
     const cadPorNome = new Map<string, CadInfo>();
     for (const c of cadastrados ?? []) {
+      const tipo = (c as { tipo_escala?: string }).tipo_escala === "parcial" ? "parcial" : "24h";
       const info: CadInfo = {
         id: c.id as string,
         nome: c.nome as string,
         isCov: !!c.is_cov,
         isCg: !!c.is_cg,
         isAdm: !!c.is_adm,
+        tipoEscala: tipo,
       };
       const mn = (c.matricula_norm as string | null) ?? "";
       if (mn) cadPorMat.set(mn, info);
@@ -999,6 +1070,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         afastDias: new Set(),
         afastSigla: new Map(),
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
+        tipoEscala: cad?.tipoEscala ?? "24h",
       };
       // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
       if (cad) {

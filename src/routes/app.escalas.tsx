@@ -27,6 +27,7 @@ interface Militar {
   is_cov: boolean;
   is_cg: boolean;
   is_adm: boolean;
+  tipo_escala: "24h" | "parcial";
 }
 interface Escala {
   id: string;
@@ -48,7 +49,7 @@ function EscalasOrdinariasPage() {
     if (!user) return;
     setLoading(true);
     const [{ data: m }, { data: e }] = await Promise.all([
-      supabase.from("militares").select("id, nome, matricula, posto_graduacao, is_cov, is_cg, is_adm").eq("user_id", user.id).eq("ativo", true).order("nome"),
+      supabase.from("militares").select("id, nome, matricula, posto_graduacao, is_cov, is_cg, is_adm, tipo_escala").eq("user_id", user.id).eq("ativo", true).order("nome"),
       supabase.from("escalas_ordinarias").select("id, nome, ordem").eq("user_id", user.id).eq("mes", mes).eq("ano", ano).order("ordem"),
     ]);
     setMilitares((m ?? []) as Militar[]);
@@ -111,7 +112,11 @@ function EscalasOrdinariasPage() {
     carregar();
   };
 
-  const operacionais = useMemo(() => militares.filter(m => !m.is_adm), [militares]);
+  const operacionais = useMemo(
+    () => militares.filter(m => !m.is_adm && m.tipo_escala !== "parcial"),
+    [militares],
+  );
+  const parciais = useMemo(() => militares.filter(m => m.tipo_escala === "parcial" && !m.is_adm), [militares]);
   const semGrupo = useMemo(() => {
     const todos = new Set(Object.values(membros).flat());
     return operacionais.filter(m => !todos.has(m.id));
@@ -126,7 +131,8 @@ function EscalasOrdinariasPage() {
         <div>
           <h1 className="text-2xl font-bold">Escalas Ordinárias</h1>
           <p className="text-sm text-muted-foreground">
-            Defina os grupos pré-formados (Escala 1, 2, 3, 4…) que entrarão no ciclo 24x72. ADMs não aparecem aqui.
+            Defina os grupos pré-formados (Escala 1, 2, 3, 4…) que entrarão no ciclo 24x72.
+            Militares ADM e os marcados como "Parcial" (turnos curtos) não aparecem aqui — entram automaticamente.
           </p>
         </div>
       </div>
@@ -215,6 +221,20 @@ function EscalasOrdinariasPage() {
           </div>
           <p className="text-xs text-muted-foreground mt-2">
             Estes militares operacionais não estão em nenhuma escala ordinária — entrarão por desempate de carga.
+          </p>
+        </div>
+      )}
+
+      {!loading && parciais.length > 0 && (
+        <div className="panel p-4">
+          <div className="text-sm font-semibold mb-2">Escala parcial ({parciais.length})</div>
+          <div className="flex flex-wrap gap-1">
+            {parciais.map((m) => (
+              <Badge key={m.id} variant="outline" className="text-xs">{m.nome}</Badge>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Estes militares só recebem turnos parciais (2/23/3) em dias úteis — não entram no ciclo 24x72.
           </p>
         </div>
       )}
