@@ -103,12 +103,25 @@ interface ViradaAnteriorIA {
   /** "ord" = serviço 24h ordinário em D31 do mês anterior; "he" = HE 24h em D31 anterior */
   tipo: "ord" | "he";
 }
+interface LimiteHeIA {
+  /** filtro por posto/papel: "sgt", "sd", "cb", "ten", "all". Mutuamente exclusivo com nome/matrícula. */
+  postoOuPapel?: "sgt" | "sd" | "cb" | "ten" | "all";
+  matricula?: string;
+  nome?: string;
+  /** teto absoluto de HE no mês para o(s) alvo(s). */
+  maxHoras: number;
+  /** preferir distribuir HE igualmente entre os alvos. */
+  equalizar?: boolean;
+  /** preferir blocos longos (HE16+HE8 = 24h) em vez de fragmentar em HE6/HE8 isolados. */
+  evitarFragmentar?: boolean;
+}
 interface InterpretacaoIA {
   afastamentos: AfastamentoIA[];
   reforcos: ReforcoIA[];
   excecoes: ExcecaoIA[];
   lancamentos: LancamentoIA[];
   viradaAnterior: ViradaAnteriorIA[];
+  limitesHe: LimiteHeIA[];
 }
 
 const NOMES_MES = [
@@ -203,7 +216,7 @@ async function interpretarObservacoes(
   ano: number,
 ): Promise<InterpretacaoIA> {
   const apiKey = process.env.LOVABLE_API_KEY;
-  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [] };
+  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [], limitesHe: [] };
   if (!apiKey || !texto.trim()) return vazia;
 
   const efetivoCompacto = efetivo
@@ -214,7 +227,7 @@ async function interpretarObservacoes(
   const sys = `Você é um interpretador de observações de escala militar (BM).
 Mês alvo: ${NOMES_MES[mes - 1]}/${ano}.
 
-Converta o texto do usuário em JSON estruturado com 5 seções:
+Converta o texto do usuário em JSON estruturado com 6 seções:
 
 1) afastamentos: períodos em que militar NÃO entra na escala ordinária.
    - motivos comuns → sigla a lançar na célula do dia (linha ORD):
@@ -241,6 +254,14 @@ Converta o texto do usuário em JSON estruturado com 5 seções:
    - tipo "he": fez HE 24h em D31 anterior. No dia 01 atual recebe HE=HE8.
    - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
      "Sd Z entrou de HE no fim do mês passado".
+
+6) limitesHe: tetos de HE no mês e regras de equalização.
+   - "limitar HE dos sargentos a 24h cada, equalizado" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "equalizar HE dos soldados sem fragmentar muito" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true, evitarFragmentar: true }
+   - "Sgt X no máximo 12h de HE no mês" → { nome: "X", maxHoras: 12 }
+   - postoOuPapel aceita: "sgt", "sd", "cb", "ten", "all". Use "all" para todos.
+   - equalizar=true → motor distribui HE preferindo quem tem MENOS HE no mês.
+   - evitarFragmentar=true → motor prefere lançar HE em blocos de 24h (HE16+HE8) e evita HE6/HE8 isolados.
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
@@ -325,8 +346,23 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
               required: ["tipo"],
             },
           },
+          limitesHe: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                postoOuPapel: { type: "string", enum: ["sgt", "sd", "cb", "ten", "all"] },
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                maxHoras: { type: "integer" },
+                equalizar: { type: "boolean" },
+                evitarFragmentar: { type: "boolean" },
+              },
+              required: ["maxHoras"],
+            },
+          },
         },
-        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior"],
+        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior", "limitesHe"],
       },
     },
   }];
@@ -367,6 +403,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
       reforcos: Array.isArray(parsed.reforcos) ? parsed.reforcos : [],
       excecoes: Array.isArray(parsed.excecoes) ? parsed.excecoes : [],
       viradaAnterior: Array.isArray(parsed.viradaAnterior) ? parsed.viradaAnterior : [],
+      limitesHe: Array.isArray(parsed.limitesHe) ? parsed.limitesHe : [],
     };
   } catch (e) {
     console.error("interpretarObservacoes", e);
@@ -383,6 +420,10 @@ interface MilitarRT {
   nome: string;
   nomeNorm: string;
   matricula: string;
+  /** posto/graduação textual (ex.: "1º Sargento QPBM", "Soldado QPBM – 1ª Classe", "1º Tenente QTBM"). */
+  posto: string;
+  /** categoria simplificada para limites de HE: "ten" | "sgt" | "cb" | "sd" | "outro". */
+  postoCat: "ten" | "sgt" | "cb" | "sd" | "outro";
   isCov: boolean;
   isCg: boolean;
   isAdm: boolean;
@@ -395,6 +436,15 @@ interface MilitarRT {
   grupoOrdem?: number;
   /** "24h" = ciclo operacional 24x72; "parcial" = só turnos curtos em dias úteis */
   tipoEscala: "24h" | "parcial";
+}
+
+function classificarPosto(p: string): "ten" | "sgt" | "cb" | "sd" | "outro" {
+  const s = (p ?? "").toLowerCase();
+  if (s.includes("tenente") || /\bten\b/.test(s)) return "ten";
+  if (s.includes("sargento") || /\bsgt\b/.test(s) || /\bsg\b/.test(s)) return "sgt";
+  if (s.includes("cabo") || /\bcb\b/.test(s)) return "cb";
+  if (s.includes("soldado") || /\bsd\b/.test(s)) return "sd";
+  return "outro";
 }
 
 function escalar(
@@ -428,6 +478,45 @@ function escalar(
     return undefined;
   };
 
+  // ===== Limites de HE (vindos de ia.limitesHe) =====
+  // Para cada militar, calcular o teto de HE no mês e flags equalizar/evitarFragmentar.
+  const limiteHePorMilitar = new Map<number, { max: number; equalizar: boolean; evitarFragmentar: boolean }>();
+  const aplicaLimiteEm = (m: MilitarRT, lim: LimiteHeIA) => {
+    const cur = limiteHePorMilitar.get(m.rowOrd);
+    const max = Math.min(cur?.max ?? Number.POSITIVE_INFINITY, lim.maxHoras);
+    limiteHePorMilitar.set(m.rowOrd, {
+      max,
+      equalizar: !!(cur?.equalizar || lim.equalizar),
+      evitarFragmentar: !!(cur?.evitarFragmentar || lim.evitarFragmentar),
+    });
+  };
+  for (const lim of ia.limitesHe ?? []) {
+    if (lim.matricula || lim.nome) {
+      const m = findMilitar(lim.matricula, lim.nome);
+      if (m) aplicaLimiteEm(m, lim);
+      continue;
+    }
+    const cat = lim.postoOuPapel ?? "all";
+    for (const m of militares) {
+      if (cat === "all" || m.postoCat === cat) aplicaLimiteEm(m, lim);
+    }
+  }
+  // Soma de horas HE já lançadas no mês para um militar
+  const horasHeMes = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = he.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      const mt = /^HE(\d{1,2})$/i.exec(s);
+      if (mt) total += Number(mt[1]);
+    }
+    return total;
+  };
+  const limiteRestanteHe = (m: MilitarRT): number => {
+    const lim = limiteHePorMilitar.get(m.rowOrd);
+    if (!lim) return Number.POSITIVE_INFINITY;
+    return Math.max(0, lim.max - horasHeMes(m));
+  };
   // 0ª ETAPA — Virada do mês anterior.
   // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
   //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
@@ -658,12 +747,21 @@ function escalar(
     // Em ciclo 24x72 com 4 grupos, grupo do dia D = ((D-1) mod 4) + 1
     const grupoDoDia = ((dia - 1) % 4) + 1;
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
-      const candidatos = militares
+      // 1) Preferir militares do grupo da vez
+      const noGrupo = militares
         .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
-        .sort((a, b) => {
-          return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
-        });
-      return candidatos[0] ?? null;
+        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+      if (noGrupo[0]) return noGrupo[0];
+      // 2) Fallback: militares SEM grupo definido (entram na rotação por menor carga)
+      const semGrupo = militares
+        .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
+        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+      if (semGrupo[0]) return semGrupo[0];
+      // 3) Último recurso: qualquer militar elegível de outro grupo (menor carga)
+      const outros = militares
+        .filter((m) => elegivel(m, papel))
+        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+      return outros[0] ?? null;
     };
 
     // obrigatórios primeiro
@@ -718,8 +816,9 @@ function escalar(
     if (faltam <= 0) continue;
 
     const indisp = naoEscalar.get(dia)!;
-    // Candidatos para HE: lançamento é previsão de necessidade de HE,
-    // por isso NÃO aplicamos cooldown de folga aqui (apenas afastamento e conflito de ORD/HE).
+    // Candidatos para HE: lançamento é previsão de necessidade de HE.
+    // BLOQUEIOS DE FOLGA: HE só vale se o militar estiver realmente livre — sem
+    // ORD adjacente (folga 12h pré-plantão D+1 e pós-plantão D-1).
     const candidatos = militares
       .filter((m) => {
         if (!m.ativo) return false;
@@ -730,17 +829,50 @@ function escalar(
         if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
         if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+        // BLOQUEIO PRÉ-PLANTÃO: se o militar entra de ORD 234 no D+1, não pode HE em D
+        if (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234") return false;
+        // BLOQUEIO PÓS-PLANTÃO: se o militar saiu de ORD 234 em D-1 (com "1" em D), bloqueia
+        if (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234") return false;
         if (slotHe.has(m.rowOrd)) return false;
         if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+        // Respeita teto de HE no mês: bloqueia se já atingiu o limite (sem espaço para 1h sequer)
+        if (limiteRestanteHe(m) <= 0) return false;
         return true;
-      })
-      .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+      });
+
+    // Equalização: se algum candidato tem flag `equalizar`, ordena por menor HE no mês.
+    // Caso contrário, mantém o ordenamento clássico por menor cargaH.
+    const algumEqualizar = candidatos.some((m) => limiteHePorMilitar.get(m.rowOrd)?.equalizar);
+    candidatos.sort((a, b) => {
+      if (algumEqualizar) {
+        const ha = horasHeMes(a), hb = horasHeMes(b);
+        if (ha !== hb) return ha - hb;
+      }
+      return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+    });
 
     const usadosHe = new Set<number>();
-    const escalaHe = (m: MilitarRT) => {
-      lancaServico24(m, dia, true);
+    const escalaHeCheio = (m: MilitarRT): boolean => {
+      // HE 24h cabe? Se não cabe inteiro mas cabe parcial e o militar permite fragmentar, lança HE-restante.
+      const restante = limiteRestanteHe(m);
+      const lim = limiteHePorMilitar.get(m.rowOrd);
+      if (restante >= 24) {
+        lancaServico24(m, dia, true);
+        usadosHe.add(m.rowOrd);
+        faltam--;
+        return true;
+      }
+      // Não cabe 24h. Se evitarFragmentar = true, pula esse candidato.
+      if (lim?.evitarFragmentar) return false;
+      // Lança HE parcial num único dia (sem partir em D+1 que poderia estourar o teto).
+      const h = Math.min(restante, horasMaximasNoDia(dia));
+      if (h <= 0) return false;
+      he.get(dia)!.set(m.rowOrd, `HE${h}`);
+      m.cargaH += h;
+      m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
+      return true;
     };
     const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
     const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
@@ -748,17 +880,17 @@ function escalar(
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
-      escalaHe(m);
+      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
     }
     while (faltam > 0 && covAtuais() < minCov) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
-      escalaHe(m);
+      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
     }
     for (const m of candidatos) {
       if (faltam <= 0) break;
       if (usadosHe.has(m.rowOrd)) continue;
-      escalaHe(m);
+      escalaHeCheio(m);
     }
     // Sem warn quando não há candidato — o lançamento de HE é apenas previsão
     // de necessidade da guarnição mínima, não uma falha de geração.
@@ -897,21 +1029,14 @@ function escalar(
     if (cargaOrd === cargaMin) continue;
 
     if (cargaOrd > cargaMin) {
-      // EXCEDENTE → manter serviços 24h intactos; distribuir excedente como HE
-      // em dias livres do militar (respeitando 16h máx no último dia do mês).
-      let restante = cargaOrd - cargaMin;
-      const inicio = cargaOrd - cargaMin; // total para reportar
-      for (let d = 1; d <= dias && restante > 0; d++) {
-        if (!diaLivreParaLancamento(m, d)) continue;
-        const max = horasMaximasNoDia(d);
-        const h = Math.min(restante, max);
-        if (h <= 0) continue;
-        he.get(d)!.set(m.rowOrd, `HE${h}`);
-        restante -= h;
-      }
-      const lancado = inicio - restante;
-      if (lancado > 0) acertosHe.push(`${m.nome} (${lancado}h excedente)`);
-      // se sobrou (sem dias livres), não emite warn — é só previsão
+      // EXCEDENTE → NÃO converter em HE automática. Plantões 24h são fato consumado;
+      // o excesso de horas em relação à carga mínima é compensado em folga (24x72),
+      // não vira HE fantasma na planilha. HE só é lançada por:
+      //   1) comando explícito do usuário (ia.lancamentos)
+      //   2) furo de guarnição na etapa 4 (HE para tapar dia abaixo do alvo)
+      //   3) virada do mês anterior (HE8 quando marcado)
+      const excedente = cargaOrd - cargaMin;
+      acertosHe.push(`${m.nome} (+${excedente}h acima do alvo — compensado em folga)`);
     } else {
       // FALTANTE → CM puro até bater cargaMin. ZERO HE.
       let faltam = cargaMin - cargaOrd;
@@ -978,7 +1103,7 @@ function escalar(
   if (acertosHe.length) {
     alertas.push({
       tipo: "info",
-      msg: `Excedente convertido em HE: ${acertosHe.join(", ")}.`,
+      msg: `Excedente acima da carga mínima (compensado em folga, sem HE automática): ${acertosHe.join(", ")}.`,
     });
   }
   if (acertosExpAdm.length) {
@@ -1133,6 +1258,8 @@ export const gerarEscala = createServerFn({ method: "POST" })
         nome: ef.nome,
         nomeNorm: normNome(ef.nome),
         matricula: ef.idFunc,
+        posto: ef.postoGrad ?? "",
+        postoCat: classificarPosto(ef.postoGrad ?? ""),
         isCov, isCg, isAdm,
         // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
         ativo: !!cad,
