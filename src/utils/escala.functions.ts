@@ -420,6 +420,10 @@ interface MilitarRT {
   nome: string;
   nomeNorm: string;
   matricula: string;
+  /** posto/graduação textual (ex.: "1º Sargento QPBM", "Soldado QPBM – 1ª Classe", "1º Tenente QTBM"). */
+  posto: string;
+  /** categoria simplificada para limites de HE: "ten" | "sgt" | "cb" | "sd" | "outro". */
+  postoCat: "ten" | "sgt" | "cb" | "sd" | "outro";
   isCov: boolean;
   isCg: boolean;
   isAdm: boolean;
@@ -432,6 +436,15 @@ interface MilitarRT {
   grupoOrdem?: number;
   /** "24h" = ciclo operacional 24x72; "parcial" = só turnos curtos em dias úteis */
   tipoEscala: "24h" | "parcial";
+}
+
+function classificarPosto(p: string): "ten" | "sgt" | "cb" | "sd" | "outro" {
+  const s = (p ?? "").toLowerCase();
+  if (s.includes("tenente") || /\bten\b/.test(s)) return "ten";
+  if (s.includes("sargento") || /\bsgt\b/.test(s) || /\bsg\b/.test(s)) return "sgt";
+  if (s.includes("cabo") || /\bcb\b/.test(s)) return "cb";
+  if (s.includes("soldado") || /\bsd\b/.test(s)) return "sd";
+  return "outro";
 }
 
 function escalar(
