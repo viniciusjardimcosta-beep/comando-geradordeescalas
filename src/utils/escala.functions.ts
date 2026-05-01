@@ -946,21 +946,30 @@ export const gerarEscala = createServerFn({ method: "POST" })
     /* 4) Militares cadastrados do usuário (com flags multi-papel) */
     const { data: cadastrados, error: errCad } = await supabase
       .from("militares")
-      .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo")
+      .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo, tipo_escala")
       .eq("user_id", userId)
       .eq("ativo", true);
     if (errCad) throw new Error("Falha ao ler militares: " + errCad.message);
 
-    interface CadInfo { id: string; nome: string; isCov: boolean; isCg: boolean; isAdm: boolean; }
+    interface CadInfo {
+      id: string;
+      nome: string;
+      isCov: boolean;
+      isCg: boolean;
+      isAdm: boolean;
+      tipoEscala: "24h" | "parcial";
+    }
     const cadPorMat = new Map<string, CadInfo>();
     const cadPorNome = new Map<string, CadInfo>();
     for (const c of cadastrados ?? []) {
+      const tipo = (c as { tipo_escala?: string }).tipo_escala === "parcial" ? "parcial" : "24h";
       const info: CadInfo = {
         id: c.id as string,
         nome: c.nome as string,
         isCov: !!c.is_cov,
         isCg: !!c.is_cg,
         isAdm: !!c.is_adm,
+        tipoEscala: tipo,
       };
       const mn = (c.matricula_norm as string | null) ?? "";
       if (mn) cadPorMat.set(mn, info);
