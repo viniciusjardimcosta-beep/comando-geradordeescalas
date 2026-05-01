@@ -187,10 +187,13 @@ export interface CellEdit {
   value: string;
   /**
    * Se true, força a célula a virar inline string mesmo se contiver fórmula.
-   * Default: true (queremos sobrescrever com sigla).
+   * Default: false — células com fórmula são PRESERVADAS por padrão.
    */
   overwriteFormula?: boolean;
 }
+
+/** Lista de refs (ex: "F12") que foram puladas porque contêm fórmula. */
+export type SkippedFormulaRefs = string[];
 
 /**
  * Aplica um conjunto de edições ao XML da sheet e devolve o XML novo.
