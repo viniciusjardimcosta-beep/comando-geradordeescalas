@@ -125,6 +125,40 @@ function ImportarPage() {
 
   useEffect(() => { loadHistorico(); }, []);
 
+  // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("militares")
+        .select("id, nome, matricula, is_cg, is_cov, is_adm, tipo_escala, ativo")
+        .eq("ativo", true);
+      const list = (data ?? [])
+        .filter((m) => !m.is_adm && (m.tipo_escala ?? "24h") === "24h")
+        .map((m) => ({ id: m.id, nome: m.nome, matricula: m.matricula, is_cg: !!m.is_cg, is_cov: !!m.is_cov }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+      setMilitaresOp(list);
+    })();
+  }, []);
+
+  const militaresFiltrados = useMemo(() => {
+    const f = filtroVirada.trim().toLowerCase();
+    if (!f) return militaresOp;
+    return militaresOp.filter((m) =>
+      m.nome.toLowerCase().includes(f) || (m.matricula ?? "").toLowerCase().includes(f)
+    );
+  }, [militaresOp, filtroVirada]);
+
+  const toggleVirada = (id: string) => {
+    setViradaSel((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id]; else next[id] = "ord";
+      return next;
+    });
+  };
+  const setTipoVirada = (id: string, tipo: "ord" | "he") => {
+    setViradaSel((prev) => ({ ...prev, [id]: tipo }));
+  };
+
   const handleFile = async (f: File) => {
     setFile(f);
     setSheetNames([]);
