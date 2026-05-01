@@ -854,23 +854,36 @@ function escalar(
     });
 
     const usadosHe = new Set<number>();
+    /**
+     * Tenta lançar HE para cobrir 1 vaga do dia. Estratégia:
+     * 1) Se cabe HE 24h (HE16+HE8) e o militar não viola descanso → preferido (mantém turno fechado).
+     * 2) Senão fragmenta: lança HE de tamanho viável (8h, 12h, 16h, 6h) no próprio dia,
+     *    respeitando espaço físico (16h úteis), teto mensal de HE e flag evitarFragmentar.
+     * Retorna true se conseguiu lançar (vaga preenchida), false se nada coube.
+     */
     const escalaHeCheio = (m: MilitarRT): boolean => {
-      // HE 24h cabe? Se não cabe inteiro mas cabe parcial e o militar permite fragmentar, lança HE-restante.
       const restante = limiteRestanteHe(m);
       const lim = limiteHePorMilitar.get(m.rowOrd);
-      if (restante >= 24) {
+      // tenta HE 24h fechado primeiro
+      if (restante >= 24 && (dia >= dias || !he.get(dia + 1)?.has(m.rowOrd))) {
         lancaServico24(m, dia, true);
         usadosHe.add(m.rowOrd);
         faltam--;
         return true;
       }
-      // Não cabe 24h. Se evitarFragmentar = true, pula esse candidato.
+      // se proibido fragmentar, desiste deste candidato
       if (lim?.evitarFragmentar) return false;
-      // Lança HE parcial num único dia (sem partir em D+1 que poderia estourar o teto).
-      const h = Math.min(restante, horasMaximasNoDia(dia));
+      // fragmenta no próprio dia respeitando espaço físico (16h úteis)
+      const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
+      const h = Math.min(restante, espacoFisico, 16);
       if (h <= 0) return false;
-      he.get(dia)!.set(m.rowOrd, `HE${h}`);
-      m.cargaH += h;
+      // arredonda pra blocos típicos (8, 12, 16, 6) — preferindo o maior que couber
+      let bloco = h;
+      for (const cand of [16, 12, 8, 6]) {
+        if (cand <= h) { bloco = cand; break; }
+      }
+      he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
+      m.cargaH += bloco;
       m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
@@ -882,12 +895,12 @@ function escalar(
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
-      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd); // marca pra não tentar de novo
     }
     while (faltam > 0 && covAtuais() < minCov) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
-      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd);
     }
     for (const m of candidatos) {
       if (faltam <= 0) break;
@@ -1250,6 +1263,59 @@ function escalar(
     });
   }
 
+  /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
+  const furos: string[] = [];
+  const conflitosDescanso: string[] = [];
+  for (let dia = 1; dia <= dias; dia++) {
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
+
+    // Conta militares cobertos no dia (ORD 24h OU HE)
+    const cobertos = militares.filter(
+      (m) => estaEmServico24(m, dia) || he.get(dia)?.has(m.rowOrd),
+    );
+    const cgs = cobertos.filter((m) => m.isCg).length;
+    const covs = cobertos.filter((m) => m.isCov).length;
+
+    if (cobertos.length < totalAlvo) {
+      furos.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
+    }
+    if (cgs < minCg) furos.push(`dia ${dia}: ${cgs}/${minCg} CG`);
+    if (covs < minCov) furos.push(`dia ${dia}: ${covs}/${minCov} COV`);
+  }
+  if (furos.length) {
+    alertas.push({
+      tipo: "error",
+      msg: `Furos de guarnição (sem efetivo disponível): ${furos.slice(0, 20).join("; ")}${furos.length > 20 ? "..." : ""}.`,
+    });
+  }
+
+  // Revalidação de descanso: militar não pode ter ORD/HE em 2 dias consecutivos
+  // (folga mínima 12h após plantão de 24h).
+  for (const m of militares) {
+    if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") continue;
+    for (let d = 1; d < dias; d++) {
+      const hojeAtivo =
+        ord.get(d)?.get(m.rowOrd) === "234" || he.get(d)?.has(m.rowOrd);
+      if (!hojeAtivo) continue;
+      const amanhaAtivo =
+        ord.get(d + 1)?.get(m.rowOrd) === "234" ||
+        (he.get(d + 1)?.has(m.rowOrd) && he.get(d + 1)?.get(m.rowOrd) !== "HE8");
+      // HE8 no dia seguinte é a madrugada do plantão (legítimo, não conta)
+      if (amanhaAtivo) {
+        conflitosDescanso.push(`${m.nome} (dias ${d}→${d + 1})`);
+      }
+    }
+  }
+  if (conflitosDescanso.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Possíveis violações de descanso (12h): ${conflitosDescanso.slice(0, 15).join(", ")}${conflitosDescanso.length > 15 ? "..." : ""}.`,
+    });
+  }
+
   return { ord, exp: expm, he };
 }
 
@@ -1593,7 +1659,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
     /* 9) Aplicar edições e serializar preservando layout original */
-    const newAnexoXml = applyEdits(anexoSheet.xml, edits);
+    const skippedFormulas: string[] = [];
+    const newAnexoXml = applyEdits(anexoSheet.xml, edits, skippedFormulas);
+    if (skippedFormulas.length) {
+      alertas.push({
+        tipo: "warn",
+        msg: `${skippedFormulas.length} célula(s) com fórmula preservada(s) (não sobrescrita): ${skippedFormulas.slice(0, 12).join(", ")}${skippedFormulas.length > 12 ? "..." : ""}.`,
+      });
+    }
     writeSheetXml(bundle, anexoSheet.path, newAnexoXml);
     const outBytes = saveXlsx(bundle);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
