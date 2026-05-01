@@ -1593,7 +1593,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
     /* 9) Aplicar edições e serializar preservando layout original */
-    const newAnexoXml = applyEdits(anexoSheet.xml, edits);
+    const skippedFormulas: string[] = [];
+    const newAnexoXml = applyEdits(anexoSheet.xml, edits, skippedFormulas);
+    if (skippedFormulas.length) {
+      alertas.push({
+        tipo: "warn",
+        msg: `${skippedFormulas.length} célula(s) com fórmula preservada(s) (não sobrescrita): ${skippedFormulas.slice(0, 12).join(", ")}${skippedFormulas.length > 12 ? "..." : ""}.`,
+      });
+    }
     writeSheetXml(bundle, anexoSheet.path, newAnexoXml);
     const outBytes = saveXlsx(bundle);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
