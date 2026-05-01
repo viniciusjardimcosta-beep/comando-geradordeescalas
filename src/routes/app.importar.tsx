@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -101,6 +102,12 @@ function ImportarPage() {
   const [minCgPorDia, setMinCgPorDia] = useState(1);
   const [observacoesTexto, setObservacoesTexto] = useState("");
 
+  // Virada do mês anterior
+  interface MilitarOp { id: string; nome: string; matricula: string | null; is_cg: boolean; is_cov: boolean; }
+  const [militaresOp, setMilitaresOp] = useState<MilitarOp[]>([]);
+  const [viradaSel, setViradaSel] = useState<Record<string, "ord" | "he">>({});
+  const [filtroVirada, setFiltroVirada] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
@@ -117,6 +124,40 @@ function ImportarPage() {
   };
 
   useEffect(() => { loadHistorico(); }, []);
+
+  // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("militares")
+        .select("id, nome, matricula, is_cg, is_cov, is_adm, tipo_escala, ativo")
+        .eq("ativo", true);
+      const list = (data ?? [])
+        .filter((m) => !m.is_adm && (m.tipo_escala ?? "24h") === "24h")
+        .map((m) => ({ id: m.id, nome: m.nome, matricula: m.matricula, is_cg: !!m.is_cg, is_cov: !!m.is_cov }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+      setMilitaresOp(list);
+    })();
+  }, []);
+
+  const militaresFiltrados = useMemo(() => {
+    const f = filtroVirada.trim().toLowerCase();
+    if (!f) return militaresOp;
+    return militaresOp.filter((m) =>
+      m.nome.toLowerCase().includes(f) || (m.matricula ?? "").toLowerCase().includes(f)
+    );
+  }, [militaresOp, filtroVirada]);
+
+  const toggleVirada = (id: string) => {
+    setViradaSel((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id]; else next[id] = "ord";
+      return next;
+    });
+  };
+  const setTipoVirada = (id: string, tipo: "ord" | "he") => {
+    setViradaSel((prev) => ({ ...prev, [id]: tipo }));
+  };
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -172,12 +213,14 @@ function ImportarPage() {
     setBusy(true);
     try {
       const base64 = await fileToBase64(file);
+      const viradaAnterior = Object.entries(viradaSel).map(([militarId, tipo]) => ({ militarId, tipo }));
       const result = await gerarFn({
         data: {
           fileBase64: base64,
           fileName: file.name,
           mes, ano,
           parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto },
+          viradaAnterior,
         },
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
@@ -196,6 +239,8 @@ function ImportarPage() {
       setOpenObs(false);
       setFile(null); setSheetNames([]); setAnexoBName(null);
       setObservacoesTexto("");
+      setViradaSel({});
+      setFiltroVirada("");
       if (fileRef.current) fileRef.current.value = "";
       loadHistorico();
     } catch (e) {
@@ -349,7 +394,7 @@ function ImportarPage() {
 
       {/* Modal de observações */}
       <Dialog open={openObs} onOpenChange={setOpenObs}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Observações para gerar a escala</DialogTitle>
             <DialogDescription>
@@ -370,6 +415,63 @@ function ImportarPage() {
             <div className="space-y-1">
               <Label>Mín. COV/dia</Label>
               <Input type="number" min={0} max={10} value={minCovPorDia} onChange={(e) => setMinCovPorDia(Number(e.target.value))} />
+            </div>
+          </div>
+
+          {/* Virada do mês anterior */}
+          <div className="space-y-2 rounded-md border border-border bg-input/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="text-sm font-semibold">Virada do mês anterior</Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque os militares que estavam de serviço no <strong>último dia do mês anterior</strong>. Eles iniciarão o mês com apenas 8h (00h–08h) e ficarão de folga em 01 e 02.
+                </p>
+              </div>
+              {Object.keys(viradaSel).length > 0 && (
+                <Badge variant="default">{Object.keys(viradaSel).length} marcado(s)</Badge>
+              )}
+            </div>
+            <Input
+              placeholder="Buscar por nome ou matrícula..."
+              value={filtroVirada}
+              onChange={(e) => setFiltroVirada(e.target.value)}
+              className="h-8"
+            />
+            <div className="max-h-48 overflow-y-auto rounded border border-border bg-background/40">
+              {militaresFiltrados.length === 0 ? (
+                <p className="p-3 text-xs text-muted-foreground">Nenhum militar operacional cadastrado.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {militaresFiltrados.map((m) => {
+                    const sel = viradaSel[m.id];
+                    return (
+                      <li key={m.id} className="flex items-center gap-3 px-3 py-2">
+                        <Checkbox
+                          checked={!!sel}
+                          onCheckedChange={() => toggleVirada(m.id)}
+                          id={`v-${m.id}`}
+                        />
+                        <label htmlFor={`v-${m.id}`} className="flex-1 cursor-pointer text-sm">
+                          {m.nome}
+                          {m.matricula && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.matricula}</span>}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {m.is_cg ? "CG " : ""}{m.is_cov ? "COV" : ""}
+                          </span>
+                        </label>
+                        {sel && (
+                          <Select value={sel} onValueChange={(v) => setTipoVirada(m.id, v as "ord" | "he")}>
+                            <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ord">ORD (1+CM2)</SelectItem>
+                              <SelectItem value="he">HE (HE8)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </div>
 

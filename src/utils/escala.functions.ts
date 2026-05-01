@@ -32,6 +32,11 @@ const InputSchema = z.object({
   parametros: ParametrosSchema,
   /** ignorar aviso de mês/ano divergente da planilha */
   forcarMesAno: z.boolean().optional().default(false),
+  /** Militares que estavam de serviço no último dia do mês anterior. Iniciam o mês com apenas 8h. */
+  viradaAnterior: z.array(z.object({
+    militarId: z.string().uuid(),
+    tipo: z.enum(["ord", "he"]).default("ord"),
+  })).optional().default([]),
 });
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
@@ -630,7 +635,9 @@ function escalar(
     const elegivel = (m: MilitarRT, papel: "CG" | "COV" | "BM") => {
       if (!m.ativo) return false;
       if (m.isAdm) return false; // ADM nunca entra na escala operacional
+      if (m.tipoEscala === "parcial") return false; // parcial não entra em ciclo 24h
       if (indisp.has(m.rowOrd)) return false;
+      if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
       if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
       if (jaOcupado(m)) return false;
       if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
@@ -717,7 +724,9 @@ function escalar(
       .filter((m) => {
         if (!m.ativo) return false;
         if (m.isAdm) return false;
+        if (m.tipoEscala === "parcial") return false;
         if (indisp.has(m.rowOrd)) return false;
+        if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
         if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
         if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
@@ -817,6 +826,7 @@ function escalar(
     if (sOrd) return false; // qualquer ORD bloqueia (serviço, afastamento, parcial)
     if (he.get(d)?.has(m.rowOrd)) return false;
     if (naoEscalar.get(d)?.has(m.rowOrd)) return false;
+    if (bloqueioPosVirada.get(d)?.has(m.rowOrd)) return false;
     return true;
   };
 
@@ -824,8 +834,61 @@ function escalar(
   const acertosHe: string[] = [];
   const cmAvulso: string[] = [];
 
+  // Helper: extrai horas de uma sigla EXP/CM/TELE (formato LETRAS+NÚMERO)
+  const horasExpSigla = (s: string): number => {
+    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasExpDia = (m: MilitarRT, d: number): number => {
+    const s = expm.get(d)?.get(m.rowOrd);
+    return s ? horasExpSigla(s) : 0;
+  };
+
+  const acertosExpAdm: string[] = [];
+
   for (const m of militares) {
-    if (!m.ativo || m.isAdm) continue;
+    if (!m.ativo) continue;
+
+    // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
+    if (m.isAdm) {
+      const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
+      const alvoAdm = Math.round(cargaBase(dias) * (1 - diasAfAdm / dias));
+      if (alvoAdm <= 0) continue;
+      let totalExp = 0;
+      for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
+      let faltamAdm = alvoAdm - totalExp;
+      if (faltamAdm <= 0) continue;
+      // 1ª passada: aumentar siglas EXP existentes até 12h por dia
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue; // afastamento
+        const sAtual = expm.get(d)?.get(m.rowOrd);
+        if (!sAtual) continue;
+        const hAtual = horasExpSigla(sAtual);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sAtual)?.[1].toUpperCase() ?? "EXP";
+        const espacoLivre = 12 - hAtual;
+        if (espacoLivre <= 0) continue;
+        const add = Math.min(faltamAdm, espacoLivre);
+        expm.get(d)!.set(m.rowOrd, `${tipo}${hAtual + add}`);
+        faltamAdm -= add;
+      }
+      // 2ª passada: lançar EXP novo em dias úteis ainda vazios
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue;
+        if (expm.get(d)?.has(m.rowOrd)) continue;
+        const add = Math.min(faltamAdm, 12);
+        expm.get(d)!.set(m.rowOrd, `EXP${add}`);
+        faltamAdm -= add;
+      }
+      const fechado = (alvoAdm - totalExp) - faltamAdm;
+      if (fechado > 0) acertosExpAdm.push(`${m.nome} (+${fechado}h EXP)`);
+      if (faltamAdm > 0) acertosExpAdm.push(`${m.nome} (faltam ${faltamAdm}h — sem dia útil livre)`);
+      continue;
+    }
+
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
     const cargaMin = Math.round(cargaBase(dias) * (1 - diasAf / dias));
     if (cargaMin <= 0) continue;
@@ -918,9 +981,17 @@ function escalar(
       msg: `Excedente convertido em HE: ${acertosHe.join(", ")}.`,
     });
   }
+  if (acertosExpAdm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Expediente complementar (ADM): ${acertosExpAdm.join(", ")}.`,
+    });
+  }
 
   return { ord, exp: expm, he };
 }
+
+
 
 /* ------------------------------------------------------------------ */
 /* Server function                                                    */
@@ -1103,6 +1174,35 @@ export const gerarEscala = createServerFn({ method: "POST" })
       militares.map((m) => ({ nome: m.nome, matricula: m.matricula })),
       data.mes, data.ano,
     );
+
+    /* 6.0) Virada do mês anterior selecionada explicitamente na UI tem prioridade
+            sobre qualquer inferência da IA — evita duplicidade e garante 8h. */
+    if (data.viradaAnterior?.length) {
+      const idToCad = new Map<string, CadInfo>();
+      for (const c of cadastrados ?? []) idToCad.set(c.id as string, {
+        id: c.id as string,
+        nome: c.nome as string,
+        isCov: !!c.is_cov,
+        isCg: !!c.is_cg,
+        isAdm: !!c.is_adm,
+        tipoEscala: ((c as { tipo_escala?: string }).tipo_escala === "parcial" ? "parcial" : "24h"),
+      });
+      const matsExplicitas = new Set<string>();
+      for (const v of data.viradaAnterior) {
+        const cad = idToCad.get(v.militarId);
+        if (!cad) continue;
+        // localizar matrícula no efetivo (via cadPorNome)
+        const m = militares.find((x) => normNome(x.nome) === normNome(cad.nome));
+        if (!m) continue;
+        matsExplicitas.add(m.matricula || m.nomeNorm);
+        // remove duplicatas vindas da IA p/ esse militar
+        ia.viradaAnterior = (ia.viradaAnterior ?? []).filter((iv) => {
+          const im = militares.find((x) => (iv.matricula && normMatricula(iv.matricula) === x.matricula) || (iv.nome && normNome(iv.nome) === x.nomeNorm));
+          return im?.rowOrd !== m.rowOrd;
+        });
+        ia.viradaAnterior.push({ matricula: m.matricula, nome: m.nome, tipo: v.tipo });
+      }
+    }
 
     /* 6.1) Pré-aplicar afastamentos do plano anual agrupando dias contíguos por sigla
             (gera 1 ia.afastamento por período → 1 alerta consolidado). */
