@@ -418,6 +418,63 @@ function ImportarPage() {
             </div>
           </div>
 
+          {/* Virada do mês anterior */}
+          <div className="space-y-2 rounded-md border border-border bg-input/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="text-sm font-semibold">Virada do mês anterior</Label>
+                <p className="text-xs text-muted-foreground">
+                  Marque os militares que estavam de serviço no <strong>último dia do mês anterior</strong>. Eles iniciarão o mês com apenas 8h (00h–08h) e ficarão de folga em 01 e 02.
+                </p>
+              </div>
+              {Object.keys(viradaSel).length > 0 && (
+                <Badge variant="default">{Object.keys(viradaSel).length} marcado(s)</Badge>
+              )}
+            </div>
+            <Input
+              placeholder="Buscar por nome ou matrícula..."
+              value={filtroVirada}
+              onChange={(e) => setFiltroVirada(e.target.value)}
+              className="h-8"
+            />
+            <div className="max-h-48 overflow-y-auto rounded border border-border bg-background/40">
+              {militaresFiltrados.length === 0 ? (
+                <p className="p-3 text-xs text-muted-foreground">Nenhum militar operacional cadastrado.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {militaresFiltrados.map((m) => {
+                    const sel = viradaSel[m.id];
+                    return (
+                      <li key={m.id} className="flex items-center gap-3 px-3 py-2">
+                        <Checkbox
+                          checked={!!sel}
+                          onCheckedChange={() => toggleVirada(m.id)}
+                          id={`v-${m.id}`}
+                        />
+                        <label htmlFor={`v-${m.id}`} className="flex-1 cursor-pointer text-sm">
+                          {m.nome}
+                          {m.matricula && <span className="ml-2 font-mono text-xs text-muted-foreground">{m.matricula}</span>}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {m.is_cg ? "CG " : ""}{m.is_cov ? "COV" : ""}
+                          </span>
+                        </label>
+                        {sel && (
+                          <Select value={sel} onValueChange={(v) => setTipoVirada(m.id, v as "ord" | "he")}>
+                            <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ord">ORD (1+CM2)</SelectItem>
+                              <SelectItem value="he">HE (HE8)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-1">
             <Label htmlFor="obs">Observações livres</Label>
             <Textarea
