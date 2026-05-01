@@ -394,7 +394,7 @@ function ImportarPage() {
 
       {/* Modal de observações */}
       <Dialog open={openObs} onOpenChange={setOpenObs}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Observações para gerar a escala</DialogTitle>
             <DialogDescription>
