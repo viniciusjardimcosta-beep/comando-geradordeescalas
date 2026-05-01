@@ -769,9 +769,10 @@ function escalar(
   // exatamente até o teto do ME; tudo que passar disso vira HE na própria jornada.
   const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
     const ultimoDia = dia === dias;
-    const horasDia = 18;
-    const horasMadrugada = ultimoDia ? 0 : 6;
-    const horasFisicas = horasDia + horasMadrugada;
+    // Particionamento físico padrão de uma jornada 24h:
+    // - Plantão ORD cheio (sigla "234"): 18h dia + 6h madrugada (entrada 18h)
+    // - Qualquer jornada que NÃO seja "234" cheio (CM/HE puro ou misto): 16h dia + 8h madrugada
+    //   (entrada 08h, saída 00h, plantão noturno entra 00h e devolve às 08h)
     const setHe = (d: number, h: number) => {
       if (h <= 0) return;
       he.get(d)!.set(m.rowOrd, `HE${h}`);
@@ -783,10 +784,12 @@ function escalar(
       m.cargaH += h;
     };
 
-    // Caminho HE explícito (etapa de furo)
+    // Caminho HE explícito (etapa de furo) — não há ORD, partição 16+8
     if (destinoHe) {
-      setHe(dia, ultimoDia ? horasDia : 16);
+      setHe(dia, ultimoDia ? 16 : 16);
       if (!ultimoDia) setHe(dia + 1, 8);
+      else setHe(dia, 18 - 16 + 16); // no último dia só 16h físicas (08–00); ajusta
+      // correção: no último dia físico é só 16h
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
@@ -796,11 +799,17 @@ function escalar(
     const tetoOrd = cargaMaxOrd(m);
     const usadoOrd = horasOrdinariasAcumuladas(m);
     const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
+
+    // Se cabe um 234 cheio (≥18h ORD disponíveis e não é último dia), usa partição 18+6
+    const cabeOrdCheio = !ultimoDia && espacoOrd >= 18;
+    const horasDia = cabeOrdCheio ? 18 : 16;
+    const horasMadrugada = ultimoDia ? 0 : (cabeOrdCheio ? 6 : 8);
+    const horasFisicas = horasDia + horasMadrugada;
     const ordUsar = Math.min(espacoOrd, horasFisicas);
 
     if (ordUsar <= 0) {
-      setHe(dia, ultimoDia ? horasDia : 16);
-      if (!ultimoDia) setHe(dia + 1, 8);
+      setHe(dia, horasDia);
+      if (!ultimoDia) setHe(dia + 1, horasMadrugada);
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
@@ -818,13 +827,15 @@ function escalar(
 
     if (!ultimoDia) {
       const ordMadAlvo = Math.min(Math.max(0, ordUsar - horasDia), horasMadrugada);
-      if (ordMadAlvo >= 6) {
+      // Só usa sigla "1" (=6h) se o plantão entrou como 234 cheio; senão vira CM
+      if (cabeOrdCheio && ordMadAlvo >= 6) {
         ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
         m.cargaH += 6;
+        setHe(dia + 1, horasMadrugada - 6);
       } else {
         setCm(dia + 1, ordMadAlvo);
+        setHe(dia + 1, horasMadrugada - ordMadAlvo);
       }
-      setHe(dia + 1, horasMadrugada - ordMadAlvo);
     }
     marcaInicioServico(m, dia);
     m.ultimoServico = dia;
