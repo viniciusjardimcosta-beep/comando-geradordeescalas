@@ -103,12 +103,25 @@ interface ViradaAnteriorIA {
   /** "ord" = serviço 24h ordinário em D31 do mês anterior; "he" = HE 24h em D31 anterior */
   tipo: "ord" | "he";
 }
+interface LimiteHeIA {
+  /** filtro por posto/papel: "sgt", "sd", "cb", "ten", "all". Mutuamente exclusivo com nome/matrícula. */
+  postoOuPapel?: "sgt" | "sd" | "cb" | "ten" | "all";
+  matricula?: string;
+  nome?: string;
+  /** teto absoluto de HE no mês para o(s) alvo(s). */
+  maxHoras: number;
+  /** preferir distribuir HE igualmente entre os alvos. */
+  equalizar?: boolean;
+  /** preferir blocos longos (HE16+HE8 = 24h) em vez de fragmentar em HE6/HE8 isolados. */
+  evitarFragmentar?: boolean;
+}
 interface InterpretacaoIA {
   afastamentos: AfastamentoIA[];
   reforcos: ReforcoIA[];
   excecoes: ExcecaoIA[];
   lancamentos: LancamentoIA[];
   viradaAnterior: ViradaAnteriorIA[];
+  limitesHe: LimiteHeIA[];
 }
 
 const NOMES_MES = [
