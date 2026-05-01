@@ -820,7 +820,7 @@ function escalar(
       const heDia = Math.min(horasDia, restanteHe);
       const heMad = ultimoDia ? 0 : Math.min(horasMadrugada, Math.max(0, restanteHe - heDia));
       setHe(dia, heDia);
-      if (!ultimoDia) setHe(dia + 1, horasMadrugada);
+      if (!ultimoDia) setHe(dia + 1, heMad);
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
