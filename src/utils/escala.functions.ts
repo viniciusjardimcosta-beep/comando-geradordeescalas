@@ -216,7 +216,7 @@ async function interpretarObservacoes(
   ano: number,
 ): Promise<InterpretacaoIA> {
   const apiKey = process.env.LOVABLE_API_KEY;
-  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [] };
+  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [], limitesHe: [] };
   if (!apiKey || !texto.trim()) return vazia;
 
   const efetivoCompacto = efetivo
@@ -227,7 +227,7 @@ async function interpretarObservacoes(
   const sys = `Você é um interpretador de observações de escala militar (BM).
 Mês alvo: ${NOMES_MES[mes - 1]}/${ano}.
 
-Converta o texto do usuário em JSON estruturado com 5 seções:
+Converta o texto do usuário em JSON estruturado com 6 seções:
 
 1) afastamentos: períodos em que militar NÃO entra na escala ordinária.
    - motivos comuns → sigla a lançar na célula do dia (linha ORD):
@@ -254,6 +254,14 @@ Converta o texto do usuário em JSON estruturado com 5 seções:
    - tipo "he": fez HE 24h em D31 anterior. No dia 01 atual recebe HE=HE8.
    - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
      "Sd Z entrou de HE no fim do mês passado".
+
+6) limitesHe: tetos de HE no mês e regras de equalização.
+   - "limitar HE dos sargentos a 24h cada, equalizado" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "equalizar HE dos soldados sem fragmentar muito" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true, evitarFragmentar: true }
+   - "Sgt X no máximo 12h de HE no mês" → { nome: "X", maxHoras: 12 }
+   - postoOuPapel aceita: "sgt", "sd", "cb", "ten", "all". Use "all" para todos.
+   - equalizar=true → motor distribui HE preferindo quem tem MENOS HE no mês.
+   - evitarFragmentar=true → motor prefere lançar HE em blocos de 24h (HE16+HE8) e evita HE6/HE8 isolados.
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
