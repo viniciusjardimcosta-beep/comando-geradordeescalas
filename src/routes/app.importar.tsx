@@ -102,6 +102,12 @@ function ImportarPage() {
   const [minCgPorDia, setMinCgPorDia] = useState(1);
   const [observacoesTexto, setObservacoesTexto] = useState("");
 
+  // Virada do mês anterior
+  interface MilitarOp { id: string; nome: string; matricula: string | null; is_cg: boolean; is_cov: boolean; }
+  const [militaresOp, setMilitaresOp] = useState<MilitarOp[]>([]);
+  const [viradaSel, setViradaSel] = useState<Record<string, "ord" | "he">>({});
+  const [filtroVirada, setFiltroVirada] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
