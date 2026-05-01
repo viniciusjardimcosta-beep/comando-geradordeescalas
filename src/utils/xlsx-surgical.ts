@@ -201,7 +201,7 @@ export type SkippedFormulaRefs = string[];
  * - Se a célula não existe, cria-a dentro da `<row>` correspondente,
  *   criando a `<row>` se necessário, mantendo ordem por coluna.
  */
-export function applyEdits(sheetXml: string, edits: CellEdit[]): string {
+export function applyEdits(sheetXml: string, edits: CellEdit[], skipped?: SkippedFormulaRefs): string {
   if (edits.length === 0) return sheetXml;
 
   // Agrupar edições por linha
@@ -226,7 +226,7 @@ export function applyEdits(sheetXml: string, edits: CellEdit[]): string {
   }
 
   for (const [rowNum, rowEdits] of byRow.entries()) {
-    xml = upsertRow(xml, rowNum, rowEdits);
+    xml = upsertRow(xml, rowNum, rowEdits, skipped);
   }
 
   return xml;
