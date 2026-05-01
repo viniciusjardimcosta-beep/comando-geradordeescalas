@@ -548,6 +548,45 @@ function escalar(
     return total;
   };
 
+  const horasCompSigla = (s: string): number => {
+    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasCompDia = (m: MilitarRT, d: number): number => {
+    const s = expm.get(d)?.get(m.rowOrd);
+    return s ? horasCompSigla(s) : 0;
+  };
+  const horasExpSigla = horasCompSigla;
+  const horasExpDia = horasCompDia;
+  const horasCompAcumuladas = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) total += horasCompDia(m, d);
+    return total;
+  };
+  const horasOrdinariasAcumuladas = (m: MilitarRT): number =>
+    horasOrdAcumuladas(m) + horasCompAcumuladas(m);
+
+  const horasHeSigla = (s: string): number => {
+    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasHeDia = (m: MilitarRT, d: number): number => {
+    const s = he.get(d)?.get(m.rowOrd);
+    return s ? horasHeSigla(s) : 0;
+  };
+
+  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
+    let total = 0;
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) {
+      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
+      total += horasOrdSigla(sOrd);
+    }
+    total += horasCompDia(m, d);
+    total += horasHeDia(m, d);
+    return total;
+  };
+
   // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
   // Calculado uma vez por chamada porque os afastamentos da etapa 1 já estão lançados.
   const cargaMaxOrdCache = new Map<number, number>();
@@ -702,135 +741,92 @@ function escalar(
 
   const SIGLA_ORD_DIA = "234";
   const SIGLA_ORD_MADRUGADA = "1";
-  const SIGLA_HE_DIA = "HE16";       // regra: HE 24h sempre em par HE16+HE8
-  const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
-  // Cobertura física do dia D: militar conta como "em serviço no dia D" se
-  // entrou no plantão das 18h (sigla "234" em D) OU está saindo da madrugada
-  // 00h-06h em D (sigla "1" em D, vinda de "234" em D-1). Ambos os casos
-  // fisicamente cobrem a guarnição do dia D — então ambos devem evitar que
-  // a etapa 4 lance HE redundante "para tapar furo".
+  const inicioServico = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) inicioServico.set(d, new Set());
+  const marcaInicioServico = (m: MilitarRT, dia: number) => inicioServico.get(dia)?.add(m.rowOrd);
+
+  // Para cumprir o mínimo diário, conta quem INICIA jornada no dia D — seja ORD,
+  // CM+HE ou HE pura. A célula "1" do dia seguinte é só continuação da jornada
+  // anterior e não pode abrir vaga extra nem impedir a próxima guarnição de entrar.
   const estaEmServico24 = (m: MilitarRT, dia: number) =>
-    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
-    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA;
+    inicioServico.get(dia)?.has(m.rowOrd) ||
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA;
 
   // No último dia do mês, só temos 16h físicas disponíveis (08h–00h);
   // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
-  const horasMaximasNoDia = (dia: number) => (dia === dias ? 16 : 24);
+  const horasMaximasNoDia = (dia: number) => (dia === dias ? 18 : 24);
 
-  // Lança o plantão 24h respeitando o teto ORD do mês.
-  // - destinoHe = true → força HE (usado pela etapa de tapar furo).
-  // - destinoHe = false → escolhe automaticamente:
-  //     * se cabe 24h ORD sem estourar a carga mensal → ORD (234 + 1).
-  //     * se NÃO cabe nada de ORD → HE puro (HE16 + HE8).
-  //     * se cabe parcialmente (ex.: faltam 6h pra fechar 177) → ORD parcial + HE
-  //       cobrindo o restante das 24h físicas.
-  // Mantém sempre 24h físicos cobertos no par de dias D/D+1 (16h no último dia do mês).
+  const siglaOrdPorHoras = (h: number): string | null => {
+    if (h >= 18) return "234";
+    if (h >= 12) return "23";
+    if (h >= 6) return "2";
+    return null;
+  };
+
+  // Lança uma jornada completa: primeiro consome carga ordinária mensal (ORD+CM)
+  // exatamente até o teto do ME; tudo que passar disso vira HE na própria jornada.
   const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
     const ultimoDia = dia === dias;
-    const horasFisicas = ultimoDia ? 18 : 24; // 234 sozinho = 18h no último dia
+    const horasDia = 18;
+    const horasMadrugada = ultimoDia ? 0 : 6;
+    const horasFisicas = horasDia + horasMadrugada;
+    const setHe = (d: number, h: number) => {
+      if (h <= 0) return;
+      he.get(d)!.set(m.rowOrd, `HE${h}`);
+      m.cargaH += h;
+    };
+    const setCm = (d: number, h: number) => {
+      if (h <= 0) return;
+      expm.get(d)!.set(m.rowOrd, `CM${h}`);
+      m.cargaH += h;
+    };
 
     // Caminho HE explícito (etapa de furo)
     if (destinoHe) {
-      if (ultimoDia) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-      } else {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-      }
+      setHe(dia, ultimoDia ? horasDia : 16);
+      if (!ultimoDia) setHe(dia + 1, 8);
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
     }
 
     // Decisão ORD vs HE pela carga mensal
     const tetoOrd = cargaMaxOrd(m);
-    const usadoOrd = horasOrdAcumuladas(m);
+    const usadoOrd = horasOrdinariasAcumuladas(m);
     const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
+    const ordUsar = Math.min(espacoOrd, horasFisicas);
 
-    // Cabe o plantão inteiro como ORD
-    if (espacoOrd >= horasFisicas) {
-      if (ultimoDia) {
-        ord.get(dia)!.set(m.rowOrd, "234");
-        m.cargaH += 18;
-      } else {
-        ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
-        if (!ord.get(dia + 1)!.has(m.rowOrd)) {
-          ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
-        }
-        m.cargaH += 24;
-      }
+    if (ordUsar <= 0) {
+      setHe(dia, ultimoDia ? horasDia : 16);
+      if (!ultimoDia) setHe(dia + 1, 8);
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
     }
 
-    // Não cabe nada de ORD → plantão 100% HE
-    if (espacoOrd <= 0) {
-      if (ultimoDia) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-      } else {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-      }
-      m.ultimoServico = dia;
-      return;
+    const ordDiaAlvo = Math.min(ordUsar, horasDia);
+    const ordDiaTurno = Math.floor(ordDiaAlvo / 6) * 6;
+    const ordDiaSigla = siglaOrdPorHoras(ordDiaTurno);
+    if (ordDiaSigla) {
+      ord.get(dia)!.set(m.rowOrd, ordDiaSigla);
+      m.cargaH += ordDiaTurno;
     }
+    setCm(dia, ordDiaAlvo - ordDiaTurno);
+    setHe(dia, horasDia - ordDiaAlvo);
 
-    // Cabe parcial: parte ORD (até preencher tetoOrd), restante vira HE.
-    // ORD parcial em D usando os turnos diurnos: 234=18h, 23=12h, 2=6h.
-    // HE cobre o que faltar pra fechar 24h físicos (HE da madrugada em D+1).
-    let ordD = 0;
-    let siglaOrdD: string | null = null;
     if (!ultimoDia) {
-      if (espacoOrd >= 18) { siglaOrdD = "234"; ordD = 18; }
-      else if (espacoOrd >= 12) { siglaOrdD = "23"; ordD = 12; }
-      else if (espacoOrd >= 6) { siglaOrdD = "2"; ordD = 6; }
-      // Se espacoOrd < 6, ORD parcial não cabe num turno completo → cai pra 100% HE
-      if (!siglaOrdD) {
-        he.get(dia)!.set(m.rowOrd, SIGLA_HE_DIA);
-        he.get(dia + 1)!.set(m.rowOrd, SIGLA_HE_MADRUGADA);
-        m.cargaH += 24;
-        m.ultimoServico = dia;
-        return;
+      const ordMadAlvo = Math.min(Math.max(0, ordUsar - horasDia), horasMadrugada);
+      if (ordMadAlvo >= 6) {
+        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+        m.cargaH += 6;
+      } else {
+        setCm(dia + 1, ordMadAlvo);
       }
-      ord.get(dia)!.set(m.rowOrd, siglaOrdD);
-      m.cargaH += ordD;
-      // HE cobre o restante das 24h físicas. NUNCA acumula em cima de HE pré-existente
-      // do mesmo militar/dia (evita "234+HE6" duplicando o plantão quando a etapa 4
-      // já havia lançado HE pra esse militar nesse dia).
-      const heD = 18 - ordD;            // restante em D (até 02h)
-      const heMad = 6;                  // madrugada do dia seguinte
-      if (heD > 0 && !he.get(dia)!.has(m.rowOrd)) {
-        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
-        m.cargaH += heD;
-      }
-      if (heMad > 0 && !ord.get(dia + 1)!.has(m.rowOrd) && !he.get(dia + 1)!.has(m.rowOrd)) {
-        he.get(dia + 1)!.set(m.rowOrd, `HE${heMad}`);
-        m.cargaH += heMad;
-      }
-    } else {
-      // Último dia do mês: 18h físicas no máximo (sem D+1 dentro do mês)
-      if (espacoOrd >= 18) { siglaOrdD = "234"; ordD = 18; }
-      else if (espacoOrd >= 12) { siglaOrdD = "23"; ordD = 12; }
-      else if (espacoOrd >= 6) { siglaOrdD = "2"; ordD = 6; }
-      if (!siglaOrdD) {
-        he.get(dia)!.set(m.rowOrd, "HE16");
-        m.cargaH += 16;
-        m.ultimoServico = dia;
-        return;
-      }
-      ord.get(dia)!.set(m.rowOrd, siglaOrdD);
-      m.cargaH += ordD;
-      const heD = 18 - ordD;
-      if (heD > 0) {
-        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
-        m.cargaH += heD;
-      }
+      setHe(dia + 1, horasMadrugada - ordMadAlvo);
     }
+    marcaInicioServico(m, dia);
     m.ultimoServico = dia;
   };
 
@@ -1003,9 +999,9 @@ function escalar(
       }
       // se proibido fragmentar, desiste deste candidato
       if (lim?.evitarFragmentar) return false;
-      // fragmenta no próprio dia respeitando espaço físico (16h úteis)
+      // fragmenta no próprio dia respeitando espaço físico
       const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
-      const h = Math.min(restante, espacoFisico, 16);
+      const h = Math.min(restante, espacoFisico, horasMaximasNoDia(dia));
       if (h <= 0) return false;
       // arredonda pra blocos típicos (8, 12, 16, 6) — preferindo o maior que couber
       let bloco = h;
@@ -1014,13 +1010,14 @@ function escalar(
       }
       he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
       m.cargaH += bloco;
+      marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
       return true;
     };
-    const covAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCov).length;
-    const cgAtuais = () => militares.filter((m) => (estaEmServico24(m, dia) || slotHe.has(m.rowOrd)) && m.isCg).length;
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
 
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
@@ -1048,7 +1045,7 @@ function escalar(
 
   // (cargaBase, ORD_HORAS, horasOrdSigla, horasOrdAcumuladas e cargaMaxOrd já
   //  declarados antes da etapa 3 — necessários no momento da escolha do plantão.)
-  const horasOrdMes = horasOrdAcumuladas;
+  const horasOrdMes = horasOrdinariasAcumuladas;
 
   // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
   const diasAfastadoMap = new Map<number, number>();
@@ -1084,42 +1081,6 @@ function escalar(
   const acertosHe: string[] = [];
   const cmAvulso: string[] = [];
 
-  // Helper: extrai horas de uma sigla EXP/CM/TELE (formato LETRAS+NÚMERO)
-  const horasExpSigla = (s: string): number => {
-    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
-    return mt ? Number(mt[1]) : 0;
-  };
-  const horasExpDia = (m: MilitarRT, d: number): number => {
-    const s = expm.get(d)?.get(m.rowOrd);
-    return s ? horasExpSigla(s) : 0;
-  };
-  const horasHeSigla = (s: string): number => {
-    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
-    return mt ? Number(mt[1]) : 0;
-  };
-  const horasHeDia = (m: MilitarRT, d: number): number => {
-    const s = he.get(d)?.get(m.rowOrd);
-    return s ? horasHeSigla(s) : 0;
-  };
-  /**
-   * Horas físicas já ocupadas no dia para o militar (ORD + EXP + HE).
-   * Um dia tem no máximo 24h físicas (16h no último dia do mês p/ lançamento que não estoura).
-   * Usado para impedir combinações impossíveis tipo `23 + CM9` (12+9=21 num dia que só comporta 16h úteis).
-   */
-  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
-    let total = 0;
-    const sOrd = ord.get(d)?.get(m.rowOrd);
-    if (sOrd) {
-      // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
-      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
-      // "234" = 18h físicas (08h-02h); "1" = 6h físicas (02h-08h da madrugada).
-      // Demais combinações somam pelas horas reais.
-      total += horasOrdSigla(sOrd);
-    }
-    total += horasExpDia(m, d);
-    total += horasHeDia(m, d);
-    return total;
-  };
   /**
    * Espaço útil restante no dia para receber CM/EXP/HE complementar.
    * - Limite operacional: 16h úteis por dia (regra de exemplo: ORD 23 + CM4 fecha 16h).
@@ -1338,10 +1299,8 @@ function escalar(
     const minCov = ref?.minCov ?? par.minCovPorDia;
     const minCg = ref?.minCg ?? par.minCgPorDia;
 
-    // Conta militares cobertos no dia (ORD 24h OU HE)
-    const cobertos = militares.filter(
-      (m) => estaEmServico24(m, dia) || he.get(dia)?.has(m.rowOrd),
-    );
+    // Conta somente jornadas iniciadas no dia; madrugada/HE8 do plantão anterior não abre vaga nova.
+    const cobertos = militares.filter((m) => estaEmServico24(m, dia));
     const cgs = cobertos.filter((m) => m.isCg).length;
     const covs = cobertos.filter((m) => m.isCov).length;
 
@@ -1363,13 +1322,9 @@ function escalar(
   for (const m of militares) {
     if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") continue;
     for (let d = 1; d < dias; d++) {
-      const hojeAtivo =
-        ord.get(d)?.get(m.rowOrd) === "234" || he.get(d)?.has(m.rowOrd);
+      const hojeAtivo = estaEmServico24(m, d);
       if (!hojeAtivo) continue;
-      const amanhaAtivo =
-        ord.get(d + 1)?.get(m.rowOrd) === "234" ||
-        (he.get(d + 1)?.has(m.rowOrd) && he.get(d + 1)?.get(m.rowOrd) !== "HE8");
-      // HE8 no dia seguinte é a madrugada do plantão (legítimo, não conta)
+      const amanhaAtivo = estaEmServico24(m, d + 1);
       if (amanhaAtivo) {
         conflitosDescanso.push(`${m.nome} (dias ${d}→${d + 1})`);
       }
