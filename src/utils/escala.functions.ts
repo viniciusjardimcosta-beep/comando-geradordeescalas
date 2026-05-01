@@ -1263,6 +1263,59 @@ function escalar(
     });
   }
 
+  /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
+  const furos: string[] = [];
+  const conflitosDescanso: string[] = [];
+  for (let dia = 1; dia <= dias; dia++) {
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
+
+    // Conta militares cobertos no dia (ORD 24h OU HE)
+    const cobertos = militares.filter(
+      (m) => estaEmServico24(m, dia) || he.get(dia)?.has(m.rowOrd),
+    );
+    const cgs = cobertos.filter((m) => m.isCg).length;
+    const covs = cobertos.filter((m) => m.isCov).length;
+
+    if (cobertos.length < totalAlvo) {
+      furos.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
+    }
+    if (cgs < minCg) furos.push(`dia ${dia}: ${cgs}/${minCg} CG`);
+    if (covs < minCov) furos.push(`dia ${dia}: ${covs}/${minCov} COV`);
+  }
+  if (furos.length) {
+    alertas.push({
+      tipo: "error",
+      msg: `Furos de guarnição (sem efetivo disponível): ${furos.slice(0, 20).join("; ")}${furos.length > 20 ? "..." : ""}.`,
+    });
+  }
+
+  // Revalidação de descanso: militar não pode ter ORD/HE em 2 dias consecutivos
+  // (folga mínima 12h após plantão de 24h).
+  for (const m of militares) {
+    if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") continue;
+    for (let d = 1; d < dias; d++) {
+      const hojeAtivo =
+        ord.get(d)?.get(m.rowOrd) === "234" || he.get(d)?.has(m.rowOrd);
+      if (!hojeAtivo) continue;
+      const amanhaAtivo =
+        ord.get(d + 1)?.get(m.rowOrd) === "234" ||
+        (he.get(d + 1)?.has(m.rowOrd) && he.get(d + 1)?.get(m.rowOrd) !== "HE8");
+      // HE8 no dia seguinte é a madrugada do plantão (legítimo, não conta)
+      if (amanhaAtivo) {
+        conflitosDescanso.push(`${m.nome} (dias ${d}→${d + 1})`);
+      }
+    }
+  }
+  if (conflitosDescanso.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Possíveis violações de descanso (12h): ${conflitosDescanso.slice(0, 15).join(", ")}${conflitosDescanso.length > 15 ? "..." : ""}.`,
+    });
+  }
+
   return { ord, exp: expm, he };
 }
 
