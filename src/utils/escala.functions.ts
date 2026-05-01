@@ -1272,8 +1272,8 @@ function escalar(
   }
   if (acertosHe.length) {
     alertas.push({
-      tipo: "info",
-      msg: `Excedente da carga mínima lançado como HE nos plantões reais: ${acertosHe.join(", ")}.`,
+      tipo: "warn",
+      msg: `Atenção — carga ORD acima da prevista (provável lançamento manual): ${acertosHe.join(", ")}.`,
     });
   }
   if (acertosExpAdm.length) {
