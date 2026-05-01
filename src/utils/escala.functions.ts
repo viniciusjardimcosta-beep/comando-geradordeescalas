@@ -1001,10 +1001,9 @@ function escalar(
     if (sOrd) {
       // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
       if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
-      // serviço 24h iniciado neste dia → 24h
-      if (sOrd === "234" || sOrd === "2341" || sOrd === "234 1") total += 24;
-      else if (sOrd === "1") total += 0; // madrugada de plantão do dia anterior, não bloqueia
-      else total += horasOrdSigla(sOrd);
+      // "234" = 18h físicas (08h-02h); "1" = 6h físicas (02h-08h da madrugada).
+      // Demais combinações somam pelas horas reais.
+      total += horasOrdSigla(sOrd);
     }
     total += horasExpDia(m, d);
     total += horasHeDia(m, d);
