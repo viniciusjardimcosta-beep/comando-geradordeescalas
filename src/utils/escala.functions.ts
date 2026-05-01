@@ -1168,42 +1168,32 @@ function escalar(
       const totalFaltam = faltam;
       const dia = ultimoServico24(m);
 
-      // 1) Se há serviço 24h restante: troca "234"+"1" por (ORD parcial + CM) preservando
-      //    a cobertura física de 24h do plantão. Se o CM no dia de entrada estourar 16h,
-      //    o restante vira CM no dia seguinte (madrugada 00h-08h) para não deixar a guarnição
-      //    abaixo do mínimo na virada.
-      if (dia !== null && faltam <= 24) {
-        const cmTotal = Math.min(faltam, 24);
-        const horasOrdManter = 24 - cmTotal;
-        let novaSigla = "";
-        let horasOrdReais = 0;
-        if (horasOrdManter >= 18) { novaSigla = "234"; horasOrdReais = 18; }
-        else if (horasOrdManter >= 12) { novaSigla = "23"; horasOrdReais = 12; }
-        else if (horasOrdManter >= 6) { novaSigla = "2"; horasOrdReais = 6; }
-        // CM no dia de entrada: respeita limite físico (16h - ORD do dia)
-        const cmDiaEntrada = Math.min(cmTotal, 16 - horasOrdReais);
-        // Restante vira CM no dia seguinte (madrugada), mantendo cobertura 24h do serviço
-        const cmDiaSeguinte = cmTotal - cmDiaEntrada;
-        if (cmDiaEntrada > 0 || cmDiaSeguinte > 0) {
-          ord.get(dia)!.delete(m.rowOrd);
-          if (dia < dias) ord.get(dia + 1)!.delete(m.rowOrd);
-          if (novaSigla) ord.get(dia)!.set(m.rowOrd, novaSigla);
-          if (cmDiaEntrada > 0) {
-            expm.get(dia)!.set(m.rowOrd, `CM${cmDiaEntrada}`);
-            faltam -= cmDiaEntrada;
-          }
-          if (cmDiaSeguinte > 0 && dia < dias) {
-            // Acumula com EXP existente do dia seguinte se houver
-            const sExist = expm.get(dia + 1)?.get(m.rowOrd);
-            const hExist = sExist ? horasExpSigla(sExist) : 0;
-            const tipoExist = sExist ? (/^(EXP|CM|TELE)/i.exec(sExist)?.[1].toUpperCase() ?? "CM") : "CM";
-            const novoH = Math.min(hExist + cmDiaSeguinte, 16);
-            expm.get(dia + 1)!.set(m.rowOrd, `${tipoExist === "EXP" ? "CM" : tipoExist}${novoH}`);
-            faltam -= (novoH - hExist);
-          } else if (cmDiaSeguinte > 0) {
-            // Último dia do mês: não há D+1 dentro da planilha. Reporta como pendente.
-            acertosCm.push(`${m.nome} (${cmDiaSeguinte}h CM da madrugada caem no mês seguinte)`);
-          }
+      // 1) Se há serviço 24h restante (sigla "234" no dia de entrada): MANTÉM o plantão
+      //    intacto e adiciona CM no MESMO dia para completar a carga horária mensal.
+      //    A jornada física de 24h fica: 234 (18h ORD) + CM<x> (até 6h) + HE<resto>
+      //    para fechar as 24h físicas do plantão (18 + x + (6-x) = 24).
+      //    Não reduzimos o "234" nem invadimos o dia seguinte com CM extra.
+      if (dia !== null && faltam > 0) {
+        // Espaço para CM no dia da entrada: 6h (24h físicas - 18h do "234"),
+        // descontando qualquer EXP/CM já lançado ali.
+        const sExpAtual = expm.get(dia)?.get(m.rowOrd);
+        const hExpAtual = sExpAtual ? horasExpSigla(sExpAtual) : 0;
+        const espacoCm = Math.max(0, 6 - hExpAtual);
+        const cmAdicionar = Math.min(faltam, espacoCm);
+        if (cmAdicionar > 0) {
+          const tipoExist = sExpAtual ? (/^(EXP|CM|TELE)/i.exec(sExpAtual)?.[1].toUpperCase() ?? "CM") : "CM";
+          const tipo = tipoExist === "EXP" ? "CM" : tipoExist;
+          expm.get(dia)!.set(m.rowOrd, `${tipo}${hExpAtual + cmAdicionar}`);
+          faltam -= cmAdicionar;
+        }
+        // Após o CM, completa o restante das 24h físicas com HE no mesmo dia
+        // (mantém o turno fechado fisicamente sem invadir o dia seguinte).
+        const horasFisicasNoDia = 18 + hExpAtual + cmAdicionar; // ORD + EXP/CM já no dia
+        const heFechar = Math.max(0, 24 - horasFisicasNoDia);
+        if (heFechar > 0 && !he.get(dia)?.has(m.rowOrd)) {
+          // HE não conta para a carga mensal ordinária — é só cobertura física.
+          he.get(dia)!.set(m.rowOrd, `HE${heFechar}`);
+          m.cargaH += heFechar;
         }
       }
 
