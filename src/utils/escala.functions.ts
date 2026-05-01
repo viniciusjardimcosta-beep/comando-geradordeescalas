@@ -548,6 +548,43 @@ function escalar(
     return total;
   };
 
+  const horasCompSigla = (s: string): number => {
+    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasCompDia = (m: MilitarRT, d: number): number => {
+    const s = expm.get(d)?.get(m.rowOrd);
+    return s ? horasCompSigla(s) : 0;
+  };
+  const horasCompAcumuladas = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) total += horasCompDia(m, d);
+    return total;
+  };
+  const horasOrdinariasAcumuladas = (m: MilitarRT): number =>
+    horasOrdAcumuladas(m) + horasCompAcumuladas(m);
+
+  const horasHeSigla = (s: string): number => {
+    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasHeDia = (m: MilitarRT, d: number): number => {
+    const s = he.get(d)?.get(m.rowOrd);
+    return s ? horasHeSigla(s) : 0;
+  };
+
+  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
+    let total = 0;
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) {
+      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
+      total += horasOrdSigla(sOrd);
+    }
+    total += horasCompDia(m, d);
+    total += horasHeDia(m, d);
+    return total;
+  };
+
   // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
   // Calculado uma vez por chamada porque os afastamentos da etapa 1 já estão lançados.
   const cargaMaxOrdCache = new Map<number, number>();
