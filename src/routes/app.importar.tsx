@@ -239,6 +239,8 @@ function ImportarPage() {
       setOpenObs(false);
       setFile(null); setSheetNames([]); setAnexoBName(null);
       setObservacoesTexto("");
+      setViradaSel({});
+      setFiltroVirada("");
       if (fileRef.current) fileRef.current.value = "";
       loadHistorico();
     } catch (e) {
