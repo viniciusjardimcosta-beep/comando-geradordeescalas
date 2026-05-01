@@ -1,86 +1,106 @@
-## Carga horária mensal: complemento (CM) e excedente como HE
+## Diagnóstico das 4 escalas reais (Janeiro/Fevereiro/Março/Maio 2026)
 
-Ajustes pontuais em `src/utils/escala.functions.ts` para garantir que **todo militar fecha a carga horária mensal mínima** e que **toda hora ordinária acima do limite vira HE** automaticamente. A planilha já tem as fórmulas para somar/avaliar — o motor só precisa lançar as siglas corretas.
+Análise célula a célula confirmou os padrões reais. O motor atual (`src/utils/escala.functions.ts`) tem desvios em relação à prática do quartel. Este plano corrige tudo num único arquivo, sem mudanças de UI, schema, banco ou `xlsx-surgical.ts`.
 
-### Carga mínima de referência (já existente nas fórmulas da planilha)
+### Padrões REAIS observados
 
-O motor **não** vai recalcular este número (a planilha já faz). Vai usá-lo apenas como alvo interno, derivado por dias do mês e descontando férias/afastamentos do próprio militar:
+| # | Regra | Evidência |
+|---|---|---|
+| 1 | Serviço 24h ORD = sempre 2 células: `234` em D + `1` em D+1. Nunca `2341`. | Todas as 4 escalas, todos os militares operacionais |
+| 2 | Carga mínima mensal: 28d→160, 29d→165, 30d→171, 31d→177 | Janeiro/Maio/Março (31d)=177; Fevereiro (28d)=160 |
+| 3 | Carga reduz proporcional aos dias afastados | Vinicius FER 10d em maio→120; Patrick FER 10d→114 |
+| 4 | **Virada mês anterior (dia 01)**: quem fez 24h ORD em D31 anterior → ORD=`1` + EXP=`CM2` no dia 01. Se foi HE → `HE8` no dia 01. | Janeiro dia 01 vários militares com `1`+CM2 ou HE8 |
+| 5 | **Virada para mês seguinte (último dia)**: serviço 24h iniciado no último dia → só `234` (18h). As 6h de `1` vão para a próxima escala. NÃO lançar CM no último dia para "compensar" virada. | Março: Robson 31/03 só tem `234` |
+| 6 | **CM = fechamento de carga**: lançado na linha **EXP** dos últimos dias do mês para fechar `Carga Horária Mensal`. Pode estar junto com sigla ORD parcial, ou em dia livre. Aceita qualquer dia (não só útil). | Maio Junior dia 30 `CM2` dia 31 `CM1`; Março Diesel `23`+`CM4`+`CM5` |
+| 7 | **HE 24h = SEMPRE par `HE16`+`HE8`** (regra confirmada pelo usuário). HE parciais (<16h) em uma célula só (HE12, HE4, HE7…). | Maio Cláudio Pezzini várias sequências `HE16`/`HE8` |
+| 8 | Afastamentos lançados na linha ORD em TODOS os dias do período | Cristiano Petter LAA o mês inteiro; Glauber TRA 5–9 |
+| 9 | **Variação "escala parcial"**: alguns militares (tipicamente oficiais, ex. Ten Jorge Luis Cortes) NÃO entram em 24h. Recebem apenas turnos parciais `2` (6h), `23` (12h), ocasionalmente `3`. Sequência distribuída em dias úteis. Carga fecha em 177h via parciais + CMx no fim. | Março: Ten Jorge Luis com sequência de `2` e `23` + `CM3` dia 31; Maio: idem, `2`/`23`/`3` |
 
-| Dias no mês | Carga mínima base |
-|---|---|
-| 28 | 160h |
-| 29 | 165h |
-| 30 | 171h |
-| 31 | 177h |
+### Mudanças no código (`src/utils/escala.functions.ts`)
 
-Desconto por afastamento: cada dia de FER/LTS/LGE/LPA/LNJ/CA/DIS/AFM no mês reduz a carga base proporcionalmente (`base × (1 − diasAfastado/diasMes)`, arredondado para inteiro). Isso replica o que a planilha já faz, só para o motor decidir quem precisa de complemento.
-
-### Como o motor decidirá lançar (após a 4ª etapa atual)
-
-Adicionar uma **5ª ETAPA — Acerto de carga horária** logo após a etapa de HE existente, que roda 1× por militar:
-
-```text
-para cada militar ativo (não ADM):
-  cargaMin = base(dias) ajustada por afastamentos
-  cargaMax = 24 × (nº de serviços de 24h escalados a ele no mês)
-  cargaOrd = soma das horas em ORD (cada serviço 24h = 24h)
-
-  se cargaOrd > cargaMin:
-     converter o excedente em HE (ver bloco "Excedente vira HE")
-  se cargaOrd < cargaMin:
-     lançar CM no último serviço do mês (ver bloco "CM no último serviço")
+#### A. Tabela exata de carga base
+```ts
+const cargaBase = (d: number): number =>
+  ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
 ```
 
-### CM no último serviço (preencher faltantes)
+#### B. Garantir quebra `234`+`1` sempre
+Auditar todos os caminhos que escrevem ORD. Banir `2341` em uma célula só. `lancaServico24` já faz certo; corrigir o ramo de "lançamentos diretos da IA" e qualquer outro.
 
-Exemplo do usuário: militar tem 170h de 177h previstas, ainda tem 1 serviço 24h no fim do mês.
+#### C. NOVA 0ª etapa — Virada do mês anterior
+Adicionar nova seção no schema da IA:
+```ts
+interface ViradaAnteriorIA {
+  matricula?: string;
+  nome?: string;
+  tipo: "ord" | "he";   // serviço 24h ordinário ou HE
+}
+```
+Atualizar prompt e tools para que a IA extraia frases como "Sgt X de serviço dia 31 do mês passado" / "Cb Y fez HE no último dia do mês anterior".
 
-- Horas faltantes = `cargaMin − cargaOrd` (ex.: 7h).
-- No **último dia em que o militar está em ORD** (24h):
-  - linha **ORD** mantém o turno parcial: sigla `2` (08–14, 6h) ou outra fração que cubra exatamente as horas que ainda contam como ordinária — para o caso típico de 1–8h faltantes, usar `2` (6h) ou `23` (12h) escolhendo a maior fração que **não ultrapasse** `cargaMin`.
-  - linha **EXP** recebe `CM<faltantes>` (ex.: `CM1` = 7h, `CM2` = 8h…). A tabela `CM1..CM16` já existe em `SIGLAS_COMP_VALIDAS`.
-  - As horas restantes do serviço de 24h (24 − ordinárias − CM) viram HE no mesmo dia + dia seguinte (ex.: `HE9` no dia + `HE8` no D+1), igual ao padrão atual de `HE18+HE6`, mas com tamanho calculado.
+Aplicação no dia 01 do mês corrente:
+- `ord` → `ord[1].set(rowOrd, "1")` + `expm[1].set(rowOrd, "CM2")`. +8h em `cargaH`. Bloqueia ORD nos dias 1 e 2 (cooldown).
+- `he` → `he[1].set(rowOrd, "HE8")`. Bloqueia ORD no dia 1.
 
-Mapeamento de turnos parciais (ORD) já suportados pela planilha:
-- `2` = 08–14 (6h)
-- `3` = 14–20 (6h)
-- `23` = 08–20 (12h)
-- `234` = 08–02 (18h)
-- `2341` (atual) = 24h cheias
+#### D. Suporte a "escala parcial" (Ten Jorge Luis e similares)
 
-O motor escolhe o maior turno cujo total + CM não ultrapasse `cargaMin`, e o resto até completar 24h da presença física vira HE.
+**Novo campo no cadastro de militares**: `tipo_escala` na tabela `militares` — enum `"24h" | "parcial"`. Default `"24h"`.
 
-Se o militar **não tem nenhum serviço 24h restante** e ainda falta carga (ex.: militar afastado quase o mês todo, mas com poucos dias livres no fim), o motor força um lançamento avulso `CM<faltantes>` na linha EXP em um dia útil livre dele. Alerta `info`: "Militar X recebeu CMx avulso para fechar carga (Yh)".
+- Migration que adiciona a coluna com default `'24h'`.
+- Tela `app.militares.tsx` ganha um select Tipo de escala (24h x Parcial).
+- Motor: militares com `tipo_escala = "parcial"` NÃO são candidatos no loop principal de seleção 24h. Em vez disso, ganham uma **6ª etapa** específica:
 
-### Excedente vira HE
+```text
+para cada militar PARCIAL ativo (não-ADM):
+  cargaMin = base ajustada por afastamento
+  distribuir turnos parciais nos dias úteis preferencialmente:
+    - mistura de "23" (12h) e "2" (6h) seguindo padrão observado
+    - aceitar "3" (6h) quando necessário
+    - parar quando ∑horas ≥ cargaMin − 16
+  fechar com CM<resto> no EXP do último dia útil
+```
 
-Se após a etapa 3 + 4 o militar acumula serviços 24h que somam mais que `cargaMax = cargaMin` (ou o teto da planilha — usar `cargaMin` como teto, conforme o usuário: "tudo que extrapolar"):
+Distribuição: pegar os ~22 dias úteis do mês, alternar `23` (segunda) com `2` (resto da semana), ajustando para fechar carga.
 
-- Pegar o **último serviço 24h escalado** dele.
-- Reduzir a sigla ORD para a fração que cabe dentro de `cargaMin` (ex.: `cargaOrd` = 192h, `cargaMin` = 177h → excedente 15h: ORD vira `2` (6h) e os 18h restantes do plantão viram `HE12` no dia + `HE6` no D+1; ou redistribuir conforme tabela de turnos).
-- Lançar HE correspondente nas linhas HE do mesmo militar nos mesmos dias.
+#### E. CM de fechamento — preferir últimos dias do mês (qualquer dia)
 
-Isso significa que **a HE pode aparecer mesmo que o usuário não tenha pedido nenhuma HE explícita** — é a previsão automática, conforme solicitado.
+Reescrever ramo FALTANTE da 5ª etapa atual:
+1. Encontrar o(s) último(s) dias do mês (não só úteis) onde militar tem ORD parcial OU está livre.
+2. Lançar `CM<faltam>` (máx 16) na linha EXP do dia mais ao fim do mês primeiro.
+3. Continuar para penúltimo, antepenúltimo etc. até zerar `faltam`.
 
-### Alertas consolidados no fim
+#### F. HE excedente — sempre par `HE16`+`HE8`
 
-- 1 alerta `info` listando militares que receberam CM para fechar carga: `"Complemento de carga: Sgt X (CM2 dia 28), Cb Y (CM1 dia 30)…"`.
-- 1 alerta `info` listando militares com excedente convertido em HE: `"Excedente convertido em HE: Sgt Z (15h dia 29)…"`.
-- Manter alertas warn da etapa 4 (furos não resolvidos) como já está.
+Reescrever ramo EXCEDENTE da 5ª etapa:
+- Para cada bloco de 24h: encontrar par de dias livres consecutivos (D, D+1) ambos sem ORD/HE/afast → `HE16` em D + `HE8` em D+1.
+- Resto < 16h: lançar em uma célula só `HE${restante}` num dia livre.
+- Último dia do mês: HE máx 16h (a parte restante vai para o próximo mês como virada — alerta `info`).
 
-### Onde mexer (técnico)
+#### G. Cooldown e bloqueio de ORD após virada
+Militares com virada do mês anterior ficam bloqueados para nova ORD nos dias 1 e 2 do mês corrente (12h folga + 24h descanso após o serviço D31+D01).
 
-- `src/utils/escala.functions.ts`:
-  - novo helper `cargaMinimaMes(dias, diasAfastado)` retornando inteiro.
-  - novo helper `lancarParcial(m, dia, horasOrd, horasCm, horasHe)` que escolhe siglas ORD/CM/HE corretas e atualiza `m.cargaH`.
-  - nova **5ª etapa** dentro de `escalar()` após o loop de HE, percorrendo `militares` e ajustando lançamentos no último dia ORD do mês de cada um.
-  - acumular nomes em arrays locais `acertosCm` e `acertosHe` para emitir 2 alertas consolidados no `handler` após `escalar()`.
+### Alertas finais (consolidados, 1 linha cada)
+- Virada do mês anterior aplicada
+- CM lançados (fechamento de carga)
+- HE excedente convertido
+- Militares com HE truncada no último dia (foi para mês seguinte)
+- Afastamentos (já existe)
 
-Sem mudanças em UI, schema, banco ou no `xlsx-surgical.ts`.
+### Arquivos alterados
+
+1. **`src/utils/escala.functions.ts`** — schema `InterpretacaoIA` ganha `viradaAnterior`; prompt+tools atualizados; nova 0ª etapa (virada); banir `2341`; tabela `cargaBase` exata; reescrita FALTANTE (CM no EXP do fim, qualquer dia); reescrita EXCEDENTE (HE16+HE8); nova 6ª etapa para `tipo_escala = "parcial"`; militares parciais filtrados do loop principal.
+
+2. **Migration SQL** — `ALTER TABLE militares ADD COLUMN tipo_escala text NOT NULL DEFAULT '24h' CHECK (tipo_escala IN ('24h','parcial'))`.
+
+3. **`src/routes/app.militares.tsx`** — adicionar `<Select>` "Tipo de escala" (24h | Parcial) no formulário de cadastro/edição. Persistir no insert/update.
+
+4. **`src/routes/app.escalas.tsx`** — na tela de Escalas Ordinárias, militares "parcial" não aparecem nos cards de seleção (eles entram automaticamente como parciais, sem precisar marcar em escala).
+
+Sem mudanças em `xlsx-surgical.ts`, no schema do Supabase além do `ALTER TABLE`, ou em qualquer outra rota.
 
 ### Validação esperada
-
-- Militar com 170h e 1 serviço de 24h restante → ORD `2` (6h) + EXP `CM1` (7h) + HE `HE9`/`HE8` no dia/D+1. Total ordinário = 177h ✅.
-- Militar com 6 serviços (144h) num mês de 31 dias (mín 177h) → recebe CMx avulso ou em algum dia parcial até fechar 177h.
-- Militar com 8 serviços (192h) e mín 177h → último plantão tem ORD reduzida + 15h em HE.
-- Militar de férias 15 dias num mês de 30 (mín base 171h, ajustada para ~85h) → carga mínima recalculada e CM/HE proporcional.
+- **Ten Jorge Luis Cortes** (parcial): março → sequência `2`/`23` em dias úteis, total ~174h ORD parcial + `CM3` no dia 31 = 177h ✅
+- **Junior Boton** (24h): dias com `234`/`1` alternando + `CM2`/`CM1` no fim = 177h ✅
+- **Vinicius FER 10d** (24h, maio): carga = 120h, distribuição de `234`/`1` nos 21 dias restantes ✅
+- **Cristiano Petter LAA** (24h afastado): linha ORD = LAA todo mês, totais 0/0 ✅
+- **Virada janeiro→fevereiro Patrick**: se obs disser "Patrick fez 24h ORD em 31/01" → fevereiro dia 01: ORD=`1` + EXP=`CM2`, ORD bloqueada dias 1–2 ✅
