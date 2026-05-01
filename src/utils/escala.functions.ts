@@ -209,25 +209,33 @@ async function interpretarObservacoes(
   const sys = `Você é um interpretador de observações de escala militar (BM).
 Mês alvo: ${NOMES_MES[mes - 1]}/${ano}.
 
-Converta o texto do usuário em JSON estruturado com 4 seções:
+Converta o texto do usuário em JSON estruturado com 5 seções:
 
 1) afastamentos: períodos em que militar NÃO entra na escala ordinária.
    - motivos comuns → sigla a lançar na célula do dia (linha ORD):
      férias=FER, licença tratamento saúde=LTS, LP=LP, licença gestante=LGE, licença paternidade=LPA,
      licença adoção=LAD, dispensa=DIS, curso=CA, folga=F, RDC=RDC, afastamento médico=AFM,
-     luto=LNJ, atestado curto=FE, licença alun/aluno=LAA, etc.
+     luto=LNJ, atestado curto=FE, licença alun/aluno=LAA, trânsito=TRA, etc.
    - Se o usuário disser só "férias", use "FER". Se falar só "licença" sem detalhar, use "LTS".
 
 2) lancamentos: comandos diretos de sigla em dias específicos, em linhas específicas:
    - linha "HE" (hora extra) → siglas HE1..HE24
    - linha "EXP" (expediente/compensação) → siglas EXP1..EXP12, CM1..CM16, TELE1..TELE8
-   - linha "ORD" (padrão) → siglas numéricas (2341, 1234, 123, 12, 1, 2, 3, 4, etc), C1..C4, OS, CV1..CV12, SSxx
+   - linha "ORD" (padrão) → siglas numéricas (123, 12, 1, 2, 3, 4, 23, 234), C1..C4, OS, CV1..CV12, SSxx
+   - NUNCA usar a sigla "2341" — serviço de 24h é representado por "234" no dia D + "1" no dia D+1 automaticamente.
    - Ex.: "dia 04 lançar HE2 para todos" → lancamentos com sigla=HE2, linha=HE, dias=[4] (sem nome = todos).
    - Ex.: "Sgt X CM3 dia 10" → sigla=CM3, linha=EXP, dias=[10], nome=X.
 
 3) reforcos: alterar a quantidade padrão de militares/COV/CG em dias específicos.
 
 4) excecoes: regras pontuais (nao_escalar, somente_cg, somente_cov, obrigatorio).
+
+5) viradaAnterior: militares que estavam de SERVIÇO no ÚLTIMO DIA do mês ANTERIOR (esse serviço termina às 08h do dia 01 do mês corrente).
+   - tipo "ord": fez serviço 24h ordinário em D31 (ou D28/D30) anterior. No dia 01 do mês atual recebe automaticamente
+     ORD=1 (madrugada 02h-08h) + EXP=CM2 (00h-02h fechando 8h da virada). Bloqueia ORD nos dias 1 e 2.
+   - tipo "he": fez HE 24h em D31 anterior. No dia 01 atual recebe HE=HE8.
+   - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
+     "Sd Z entrou de HE no fim do mês passado".
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
@@ -237,7 +245,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
     type: "function",
     function: {
       name: "interpretar_observacoes",
-      description: "Estrutura observações em afastamentos, lançamentos, reforços e exceções.",
+      description: "Estrutura observações em afastamentos, lançamentos, reforços, exceções e virada do mês anterior.",
       parameters: {
         type: "object",
         properties: {
@@ -300,8 +308,20 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
               required: ["dias", "acao"],
             },
           },
+          viradaAnterior: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                tipo: { type: "string", enum: ["ord", "he"] },
+              },
+              required: ["tipo"],
+            },
+          },
         },
-        required: ["afastamentos", "lancamentos", "reforcos", "excecoes"],
+        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior"],
       },
     },
   }];
@@ -341,6 +361,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
       lancamentos: Array.isArray(parsed.lancamentos) ? parsed.lancamentos : [],
       reforcos: Array.isArray(parsed.reforcos) ? parsed.reforcos : [],
       excecoes: Array.isArray(parsed.excecoes) ? parsed.excecoes : [],
+      viradaAnterior: Array.isArray(parsed.viradaAnterior) ? parsed.viradaAnterior : [],
     };
   } catch (e) {
     console.error("interpretarObservacoes", e);
