@@ -346,8 +346,23 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
               required: ["tipo"],
             },
           },
+          limitesHe: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                postoOuPapel: { type: "string", enum: ["sgt", "sd", "cb", "ten", "all"] },
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                maxHoras: { type: "integer" },
+                equalizar: { type: "boolean" },
+                evitarFragmentar: { type: "boolean" },
+              },
+              required: ["maxHoras"],
+            },
+          },
         },
-        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior"],
+        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior", "limitesHe"],
       },
     },
   }];
@@ -388,6 +403,7 @@ Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
       reforcos: Array.isArray(parsed.reforcos) ? parsed.reforcos : [],
       excecoes: Array.isArray(parsed.excecoes) ? parsed.excecoes : [],
       viradaAnterior: Array.isArray(parsed.viradaAnterior) ? parsed.viradaAnterior : [],
+      limitesHe: Array.isArray(parsed.limitesHe) ? parsed.limitesHe : [],
     };
   } catch (e) {
     console.error("interpretarObservacoes", e);
