@@ -1020,21 +1020,14 @@ function escalar(
     if (cargaOrd === cargaMin) continue;
 
     if (cargaOrd > cargaMin) {
-      // EXCEDENTE → manter serviços 24h intactos; distribuir excedente como HE
-      // em dias livres do militar (respeitando 16h máx no último dia do mês).
-      let restante = cargaOrd - cargaMin;
-      const inicio = cargaOrd - cargaMin; // total para reportar
-      for (let d = 1; d <= dias && restante > 0; d++) {
-        if (!diaLivreParaLancamento(m, d)) continue;
-        const max = horasMaximasNoDia(d);
-        const h = Math.min(restante, max);
-        if (h <= 0) continue;
-        he.get(d)!.set(m.rowOrd, `HE${h}`);
-        restante -= h;
-      }
-      const lancado = inicio - restante;
-      if (lancado > 0) acertosHe.push(`${m.nome} (${lancado}h excedente)`);
-      // se sobrou (sem dias livres), não emite warn — é só previsão
+      // EXCEDENTE → NÃO converter em HE automática. Plantões 24h são fato consumado;
+      // o excesso de horas em relação à carga mínima é compensado em folga (24x72),
+      // não vira HE fantasma na planilha. HE só é lançada por:
+      //   1) comando explícito do usuário (ia.lancamentos)
+      //   2) furo de guarnição na etapa 4 (HE para tapar dia abaixo do alvo)
+      //   3) virada do mês anterior (HE8 quando marcado)
+      const excedente = cargaOrd - cargaMin;
+      acertosHe.push(`${m.nome} (+${excedente}h acima do alvo — compensado em folga)`);
     } else {
       // FALTANTE → CM puro até bater cargaMin. ZERO HE.
       let faltam = cargaMin - cargaOrd;
