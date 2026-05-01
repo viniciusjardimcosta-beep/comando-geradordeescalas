@@ -724,7 +724,9 @@ function escalar(
       .filter((m) => {
         if (!m.ativo) return false;
         if (m.isAdm) return false;
+        if (m.tipoEscala === "parcial") return false;
         if (indisp.has(m.rowOrd)) return false;
+        if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
         if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
         if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
         if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
