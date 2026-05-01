@@ -525,6 +525,44 @@ function escalar(
   //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
   const bloqueioPosVirada = new Map<number, Set<number>>();
   for (let d = 1; d <= dias; d++) bloqueioPosVirada.set(d, new Set());
+
+  /* ---- Carga horária mensal ---- */
+  // Carga base por dias do mês (mesma fórmula da planilha)
+  const cargaBase = (d: number): number =>
+    ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
+
+  const ORD_HORAS: Record<string, number> = {
+    "1": 6, "2": 6, "3": 6, "4": 6,
+    "12": 12, "13": 12, "14": 12, "23": 12, "24": 12, "34": 12,
+    "123": 18, "124": 18, "134": 18, "234": 18,
+    "1234": 24, "2341": 24,
+  };
+  const horasOrdSigla = (s: string): number => ORD_HORAS[s] ?? 0;
+
+  const horasOrdAcumuladas = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && !SIGLAS_AFASTAMENTO.has(s)) total += horasOrdSigla(s);
+    }
+    return total;
+  };
+
+  // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
+  // Calculado uma vez por chamada porque os afastamentos da etapa 1 já estão lançados.
+  const cargaMaxOrdCache = new Map<number, number>();
+  const cargaMaxOrd = (m: MilitarRT): number => {
+    const cached = cargaMaxOrdCache.get(m.rowOrd);
+    if (cached !== undefined) return cached;
+    let af = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && SIGLAS_AFASTAMENTO.has(s)) af++;
+    }
+    const teto = Math.round(cargaBase(dias) * (1 - af / dias));
+    cargaMaxOrdCache.set(m.rowOrd, teto);
+    return teto;
+  };
   const viradasAplicadas: string[] = [];
   for (const v of ia.viradaAnterior ?? []) {
     const m = findMilitar(v.matricula, v.nome);
