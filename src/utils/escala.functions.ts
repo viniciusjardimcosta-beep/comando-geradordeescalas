@@ -198,7 +198,7 @@ async function interpretarObservacoes(
   ano: number,
 ): Promise<InterpretacaoIA> {
   const apiKey = process.env.LOVABLE_API_KEY;
-  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [] };
+  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [] };
   if (!apiKey || !texto.trim()) return vazia;
 
   const efetivoCompacto = efetivo
