@@ -854,23 +854,36 @@ function escalar(
     });
 
     const usadosHe = new Set<number>();
+    /**
+     * Tenta lançar HE para cobrir 1 vaga do dia. Estratégia:
+     * 1) Se cabe HE 24h (HE16+HE8) e o militar não viola descanso → preferido (mantém turno fechado).
+     * 2) Senão fragmenta: lança HE de tamanho viável (8h, 12h, 16h, 6h) no próprio dia,
+     *    respeitando espaço físico (16h úteis), teto mensal de HE e flag evitarFragmentar.
+     * Retorna true se conseguiu lançar (vaga preenchida), false se nada coube.
+     */
     const escalaHeCheio = (m: MilitarRT): boolean => {
-      // HE 24h cabe? Se não cabe inteiro mas cabe parcial e o militar permite fragmentar, lança HE-restante.
       const restante = limiteRestanteHe(m);
       const lim = limiteHePorMilitar.get(m.rowOrd);
-      if (restante >= 24) {
+      // tenta HE 24h fechado primeiro
+      if (restante >= 24 && (dia >= dias || !he.get(dia + 1)?.has(m.rowOrd))) {
         lancaServico24(m, dia, true);
         usadosHe.add(m.rowOrd);
         faltam--;
         return true;
       }
-      // Não cabe 24h. Se evitarFragmentar = true, pula esse candidato.
+      // se proibido fragmentar, desiste deste candidato
       if (lim?.evitarFragmentar) return false;
-      // Lança HE parcial num único dia (sem partir em D+1 que poderia estourar o teto).
-      const h = Math.min(restante, horasMaximasNoDia(dia));
+      // fragmenta no próprio dia respeitando espaço físico (16h úteis)
+      const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
+      const h = Math.min(restante, espacoFisico, 16);
       if (h <= 0) return false;
-      he.get(dia)!.set(m.rowOrd, `HE${h}`);
-      m.cargaH += h;
+      // arredonda pra blocos típicos (8, 12, 16, 6) — preferindo o maior que couber
+      let bloco = h;
+      for (const cand of [16, 12, 8, 6]) {
+        if (cand <= h) { bloco = cand; break; }
+      }
+      he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
+      m.cargaH += bloco;
       m.ultimoServico = dia;
       usadosHe.add(m.rowOrd);
       faltam--;
@@ -882,12 +895,12 @@ function escalar(
     while (faltam > 0 && cgAtuais() < minCg) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
-      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd); // marca pra não tentar de novo
     }
     while (faltam > 0 && covAtuais() < minCov) {
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
-      if (!escalaHeCheio(m)) { usadosHe.add(m.rowOrd); }
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd);
     }
     for (const m of candidatos) {
       if (faltam <= 0) break;
