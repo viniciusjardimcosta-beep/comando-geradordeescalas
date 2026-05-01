@@ -741,8 +741,6 @@ function escalar(
 
   const SIGLA_ORD_DIA = "234";
   const SIGLA_ORD_MADRUGADA = "1";
-  const SIGLA_HE_DIA = "HE16";       // regra: HE 24h sempre em par HE16+HE8
-  const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
   const inicioServico = new Map<number, Set<number>>();
@@ -1301,10 +1299,8 @@ function escalar(
     const minCov = ref?.minCov ?? par.minCovPorDia;
     const minCg = ref?.minCg ?? par.minCgPorDia;
 
-    // Conta militares cobertos no dia (ORD 24h OU HE)
-    const cobertos = militares.filter(
-      (m) => estaEmServico24(m, dia) || he.get(dia)?.has(m.rowOrd),
-    );
+    // Conta somente jornadas iniciadas no dia; madrugada/HE8 do plantão anterior não abre vaga nova.
+    const cobertos = militares.filter((m) => estaEmServico24(m, dia));
     const cgs = cobertos.filter((m) => m.isCg).length;
     const covs = cobertos.filter((m) => m.isCov).length;
 
@@ -1326,13 +1322,9 @@ function escalar(
   for (const m of militares) {
     if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") continue;
     for (let d = 1; d < dias; d++) {
-      const hojeAtivo =
-        ord.get(d)?.get(m.rowOrd) === "234" || he.get(d)?.has(m.rowOrd);
+      const hojeAtivo = estaEmServico24(m, d);
       if (!hojeAtivo) continue;
-      const amanhaAtivo =
-        ord.get(d + 1)?.get(m.rowOrd) === "234" ||
-        (he.get(d + 1)?.has(m.rowOrd) && he.get(d + 1)?.get(m.rowOrd) !== "HE8");
-      // HE8 no dia seguinte é a madrugada do plantão (legítimo, não conta)
+      const amanhaAtivo = estaEmServico24(m, d + 1);
       if (amanhaAtivo) {
         conflitosDescanso.push(`${m.nome} (dias ${d}→${d + 1})`);
       }
