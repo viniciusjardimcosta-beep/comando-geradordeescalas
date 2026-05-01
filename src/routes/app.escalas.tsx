@@ -224,6 +224,20 @@ function EscalasOrdinariasPage() {
           </p>
         </div>
       )}
+
+      {!loading && parciais.length > 0 && (
+        <div className="panel p-4">
+          <div className="text-sm font-semibold mb-2">Escala parcial ({parciais.length})</div>
+          <div className="flex flex-wrap gap-1">
+            {parciais.map((m) => (
+              <Badge key={m.id} variant="outline" className="text-xs">{m.nome}</Badge>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Estes militares só recebem turnos parciais (2/23/3) em dias úteis — não entram no ciclo 24x72.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
