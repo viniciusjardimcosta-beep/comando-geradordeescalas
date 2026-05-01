@@ -706,9 +706,14 @@ function escalar(
   const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
+  // Cobertura física do dia D: militar conta como "em serviço no dia D" se
+  // entrou no plantão das 18h (sigla "234" em D) OU está saindo da madrugada
+  // 00h-06h em D (sigla "1" em D, vinda de "234" em D-1). Ambos os casos
+  // fisicamente cobrem a guarnição do dia D — então ambos devem evitar que
+  // a etapa 4 lance HE redundante "para tapar furo".
   const estaEmServico24 = (m: MilitarRT, dia: number) =>
     ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA ||
-    (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA);
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_MADRUGADA;
 
   // No último dia do mês, só temos 16h físicas disponíveis (08h–00h);
   // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
@@ -794,16 +799,16 @@ function escalar(
       }
       ord.get(dia)!.set(m.rowOrd, siglaOrdD);
       m.cargaH += ordD;
-      // HE cobre o restante das 24h físicas
+      // HE cobre o restante das 24h físicas. NUNCA acumula em cima de HE pré-existente
+      // do mesmo militar/dia (evita "234+HE6" duplicando o plantão quando a etapa 4
+      // já havia lançado HE pra esse militar nesse dia).
       const heD = 18 - ordD;            // restante em D (até 02h)
       const heMad = 6;                  // madrugada do dia seguinte
-      if (heD > 0) {
-        const cur = he.get(dia)?.get(m.rowOrd);
-        const ja = cur ? (parseInt(cur.replace(/\D/g, ""), 10) || 0) : 0;
-        he.get(dia)!.set(m.rowOrd, `HE${ja + heD}`);
+      if (heD > 0 && !he.get(dia)!.has(m.rowOrd)) {
+        he.get(dia)!.set(m.rowOrd, `HE${heD}`);
         m.cargaH += heD;
       }
-      if (!ord.get(dia + 1)!.has(m.rowOrd)) {
+      if (heMad > 0 && !ord.get(dia + 1)!.has(m.rowOrd) && !he.get(dia + 1)!.has(m.rowOrd)) {
         he.get(dia + 1)!.set(m.rowOrd, `HE${heMad}`);
         m.cargaH += heMad;
       }

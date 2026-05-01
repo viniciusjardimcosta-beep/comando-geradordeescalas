@@ -1,88 +1,106 @@
+## Diagnóstico (a partir da planilha enviada)
 
-# Corrigir lançamento de HE: tudo acima da carga mensal vira HE
-
-## Problema atual
-
-O motor está fazendo duas coisas erradas:
-
-1. **Escalas ordinárias (24x72)**: o motor escolhe militares pelo grupo da vez sem verificar se o militar já fechou as 177h do mês. Se ele já tem 177h ORD acumuladas e entra de novo no plantão, esse plantão é lançado como **ORD (234 + 1)** — que era o que o usuário viu como "turnos aleatórios depois de fechar a carga".
-2. **Quebra de escala (cobrir furo de outra guarnição)**: também cai como ORD se o militar ainda não fechou as 177h, porque a etapa de "tapar furo com HE" só age quando faltam militares no dia. Quando o substituto chega a furar a própria carga, vira ORD ao invés de HE.
-
-A 5ª etapa (acerto de carga mensal) tenta remediar somando HE em cima do plantão que já existe na linha ORD — gera o efeito visual de "HE colada em dias aleatórios pra informar quantas HE foram feitas". Não é o que se quer.
-
-## Regra correta (palavras do usuário)
-
-> Tudo que for lançado depois de ultrapassar a carga horária mensal prevista para o militar deve ser lançado como HE. Ex.: mês de 177h, militar fechou 177 com turnos+CM → a hora 178 já é HE1, 179 é HE2, e assim por diante.
-
-Carga base por dias do mês (já existe em `cargaBase()`):
+Contagem de militares em serviço por dia em `Anexo B - Escala`:
 
 ```text
-28 dias → 160h
-29 dias → 165h
-30 dias → 171h
-31 dias → 177h
+dia  1: 4 ORD entrando + 4 ORD saindo (madrugada) + 4 HE = 12 entradas
+dia  2: 4+4 ORD + 7 HE = 15 entradas
+dia  3: 4+4 ORD + 8 HE = 16 entradas
+dia  5: 4+4 ORD + 4 HE
+dia  6: 4+4 ORD + 5 HE
+...e por aí vai com sobra de HE em quase todo o mês
 ```
 
-Para militares afastados parte do mês, a carga é proporcional: `cargaBase * (1 - diasAfastado/dias)`.
+A guarnição mínima configurada é **4 militares por dia**. Os 8 ORD/dia são corretos (4 entrando às 18h + 4 saindo da madrugada anterior = mesma planilha mostra ambos). O excesso vem das **HE adicionais** colocadas em cima de plantões já completos.
 
-## Mudanças no motor (`src/utils/escala.functions.ts`)
+## Causas no motor (`src/utils/escala.functions.ts`)
 
-### 1. Calcular o teto de ORD por militar uma vez, no início
+### 1. `estaEmServico24` ignora a madrugada como cobertura do dia (linha 709)
 
-Criar `cargaMaxOrd(m)` que devolve a carga prevista do mês descontando os afastamentos já aplicados na 1ª etapa. Esse valor é o teto absoluto de horas que o militar pode acumular na linha ORD.
+```ts
+const estaEmServico24 = (m, dia) =>
+  ord.get(dia)?.get(m.rowOrd) === "234" ||
+  (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "1");
+```
 
-### 2. Plantão 24h: decidir ORD ou HE no momento da escolha (etapa 3 do motor, linhas 707-802)
+A função conta o militar como "em serviço no dia D" se ele tem **234 em D** OU **1 em D+1** (entrada futura). Mas **não conta** os militares que estão saindo de plantão no dia D (têm `1` em D, vindos de `234` em D-1). Ou seja: os 4 militares que estão fisicamente cobrindo a guarnição das 00h às 06h do dia D não entram na contagem.
 
-Reescrever `lancaServico24(m, dia, destinoHe)` e o laço da 3ª etapa:
+Resultado: a etapa 4 (tapar furo com HE) acha que o dia D tem só 4 militares quando, na verdade, há 4 entrando + 4 saindo. Como o usuário pediu "4 por dia", o motor erradamente acrescenta HE pra "completar". **Isso é a fonte principal das HE em excesso.**
 
-- Antes de chamar `lancaServico24(m, dia)`, calcular se a carga ORD atual do militar + 24h ≤ `cargaMaxOrd(m)`.
-- Se **cabe**: lança normal como ORD (`234` no dia D + `1` no dia D+1).
-- Se **estoura**: lança o plantão inteiro como HE (`HE16` em D + `HE8` em D+1), respeitando o teto de HE da 6ª seção (`limiteRestanteHe(m)`). Se o teto de HE não permite o bloco completo, fragmenta usando a lógica atual (`escalaHeCheio`) ou desiste do candidato e passa pro próximo.
-- Caso especial: se cabem só 6h ORD antes de estourar (ex.: militar com 171h, mês de 177), lança `2` (6h ORD) em D + `HE8` na madrugada. Mantém a cobertura física de 24h da guarnição com a parte excedente sendo HE.
+### 2. Etapa 4 não respeita "HE só pra tapar furo real" (linhas 929-1037)
 
-Isso elimina o cenário "militar é escalado normalmente como ORD e depois ganha um HE16/HE8 colado pra equilibrar".
+A regra do usuário: **HE só existe quando faltou ORD pra atingir os 4/dia**. Hoje a etapa 4 dispara sempre que `escalados24 < totalAlvo`, sem perguntar se essa lacuna seria coberta pela rotação ORD do dia seguinte ou da madrugada vinda do dia anterior.
 
-### 3. Quebra de escala (cobrir furo) — etapa 4 (linhas 807-912)
+### 3. `lancaServico24` emenda HE em dias onde já há ORD (linhas 798-808)
 
-A etapa atual já lança HE para tapar furo. Manter o comportamento, mas garantir que **nunca** vire ORD: a função que tapa furo só pode usar `he`, nunca `ord`. Hoje já é assim — só precisa garantir que o substituto sempre passe por aqui mesmo quando ele ainda tem espaço de carga (porque ele já está fora do grupo da vez). Adicionar comentário explicativo.
+No caminho híbrido (ORD parcial + HE), o código faz:
 
-### 4. Etapa 5 (acerto de carga mensal, linhas 1084-1128)
+```ts
+const cur = he.get(dia)?.get(m.rowOrd);
+const ja = cur ? (parseInt(cur.replace(/\D/g, ""), 10) || 0) : 0;
+he.get(dia)!.set(m.rowOrd, `HE${ja + heD}`);
+```
 
-Esta etapa fica **muito mais simples**:
+Isso **soma** HE em cima de qualquer HE pré-existente no mesmo militar/dia. Combinado com a etapa 4 disparando indevidamente, gera lançamentos do tipo `234 + HE6` no dia D **e** `1 + HE8` em D+1 — duplicando 24h físicas em um plantão que já estava completo.
 
-- O caso "carga ORD > cargaMin" praticamente desaparece, porque a etapa 3 já não deixa estourar. Se ainda assim sobrar excedente (por causa de exceções `obrigatorio` ou afastamentos vindos depois), a lógica atual de converter em HE no plantão real continua valendo como fallback.
-- O caso "carga ORD < cargaMin" (faltante) continua igual: lança CM puro até bater a carga, sem mexer em HE.
+## Correções
 
-### 5. Etapa de equalização/teto de HE (`limitesHe`)
+### Correção 1: contar a saída da madrugada como cobertura (etapas 3 e 4)
 
-Continua funcionando: o teto de HE imposto pelo usuário (ex.: "máximo 24h HE para sgts") agora é avaliado **no momento da escolha do plantão**, não só no fim. Se o militar atingiu o teto de HE e a carga ORD também já está cheia, ele simplesmente não é candidato — o motor escolhe outro.
+Reescrever `estaEmServico24` para refletir a cobertura física real do dia:
 
-### 6. Alertas
+```ts
+const estaEmServico24 = (m, dia) =>
+  ord.get(dia)?.get(m.rowOrd) === "234" ||      // entra no dia D
+  ord.get(dia)?.get(m.rowOrd) === "1";          // sai de plantão no dia D (madrugada)
+```
 
-- Substituir o alerta atual `Excedente da carga mínima lançado como HE nos plantões reais` por:
-  - `info`: `Plantão lançado como HE para X (carga mensal de Y/Y h fechada — horas excedentes viraram HE).`
-- Manter alerta de furo se nenhum militar elegível couber nem em ORD nem em HE.
+A condição `ord.get(dia+1)?.get === "1"` que olhava pra frente vira redundante e pode ser removida.
 
-## O que NÃO muda
+Efeito: a etapa 4 só dispara quando faltam militares **de fato** para fechar 4/dia.
 
-- Plano de férias e outros afastamentos (já vêm da etapa 1, intactos).
-- Escala ordinária 24x72, rotação por grupo, regra 24x72, folga 12h.
-- Lançamentos manuais via observações (HE/EXP/ORD diretos).
-- Virada do mês anterior (CM2 + ORD 1, ou HE8).
-- Proteção de fórmulas e validação final de descanso.
-- Geração do XLSX (a etapa 7 só renderiza o que o motor decidiu).
+### Correção 2: etapa 4 só age se há furo físico real
 
-## Riscos / pontos de atenção
+Manter a etapa 4, mas com o `escalados24` corrigido (acima). Adicionar guarda explícita:
 
-- **Cobertura física da guarnição**: a regra de quebrar plantão em "ORD parcial + HE" preserva 24h físicos no dia. Casos onde o teto ORD permite só 0h do plantão (militar já estourou) são lançados 100% HE (HE16+HE8) — guarnição segue completa.
-- **Último dia do mês**: continua valendo a regra `234` = 18h e a madrugada `1` cai no próximo mês. A nova lógica respeita isso.
-- **Teto de HE configurado pelo usuário**: pode levar a furo de guarnição se TODOS os elegíveis já estouraram ORD e bateram o teto de HE. O alerta `error` de furo CG/COV continua sendo emitido.
+```ts
+const escalados24 = militares.filter(m => estaEmServico24(m, dia)).length;
+const faltam = totalAlvo - escalados24;
+if (faltam <= 0) continue;   // já satisfeito pela rotação ORD — sem HE
+```
 
-## Validação
+Já existe esse `continue`, mas com a correção 1 ele passa a funcionar. Garantir também que CG/COV mínimos só forcem HE se realmente faltar (já é o caso, só precisa de `estaEmServico24` correto).
 
-Depois da mudança, o usuário deve repetir a geração com a mesma planilha de teste e verificar:
+### Correção 3: `lancaServico24` nunca somar HE em cima de HE existente
 
-1. Nenhum militar deve aparecer com soma ORD > 177h (em mês de 31 dias).
-2. Plantões a partir do limite devem aparecer como `HE16`+`HE8` no par de dias, sem ORD `234`+`1` no mesmo par.
-3. Quebras de escala (substitutos) sempre na linha HE.
-4. Sem mais "HE solta em dia aleatório" colada num plantão ORD que já existe.
+No bloco híbrido (linhas 798-808):
+
+```ts
+if (heD > 0 && !he.get(dia)!.has(m.rowOrd)) {
+  he.get(dia)!.set(m.rowOrd, `HE${heD}`);
+  m.cargaH += heD;
+}
+if (heMad > 0 && !he.get(dia + 1)!.has(m.rowOrd) && !ord.get(dia + 1)!.has(m.rowOrd)) {
+  he.get(dia + 1)!.set(m.rowOrd, `HE${heMad}`);
+  m.cargaH += heMad;
+}
+```
+
+Se já existe HE no slot, o motor **não escala** esse militar pra plantão híbrido — escolhe outro candidato. Isso impede lançar `234+HE6` em alguém que já recebeu HE da etapa de furo.
+
+### Correção 4: ordem das etapas
+
+Hoje: etapa 3 (ORD) → etapa 4 (HE). Está correto. Garantir que a etapa 4 nunca volte ao mesmo dia depois que a etapa 3 já fechou os 4/dia, e que a etapa 5 (acerto de carga) também só lance CM/HE em **dias livres** do militar (já é o caso, função `diaLivreParaLancamento`).
+
+## Validação esperada
+
+Após as correções, na mesma planilha:
+
+1. Cada dia operacional terá **exatamente 4 militares físicos** cobrindo (4 entradas de `234` + 4 saídas `1` da madrugada anterior, mas eles são os mesmos militares contados uma vez no físico).
+2. **Zero HE** nos dias em que a rotação ORD já preenche os 4/dia. HE só aparece em dias com afastamento massivo ou férias que reduzem o efetivo abaixo de 4.
+3. Soma `HorasTrab − CargaMensal = HE` da planilha bate exatamente com a soma de células HE.
+4. Nenhum militar com `234+HE6` no mesmo dia ou `1+HE8` em D+1 do mesmo plantão.
+
+## Arquivo modificado
+
+- `src/utils/escala.functions.ts` — três pontos: `estaEmServico24` (linha 709), bloco híbrido de `lancaServico24` (linhas 798-808), e checagem da etapa 4. Demais etapas (1, 2, 5, 6) e geração XLSX (etapa 7) ficam intactas.
