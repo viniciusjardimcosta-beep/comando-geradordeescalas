@@ -635,7 +635,9 @@ function escalar(
     const elegivel = (m: MilitarRT, papel: "CG" | "COV" | "BM") => {
       if (!m.ativo) return false;
       if (m.isAdm) return false; // ADM nunca entra na escala operacional
+      if (m.tipoEscala === "parcial") return false; // parcial não entra em ciclo 24h
       if (indisp.has(m.rowOrd)) return false;
+      if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
       if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
       if (jaOcupado(m)) return false;
       if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
