@@ -1180,50 +1180,13 @@ function escalar(
     if (cargaOrd === cargaMin) continue;
 
     if (cargaOrd > cargaMin) {
-      // EXCEDENTE → lançar como HE nos dias em que o militar EFETIVAMENTE
-      // trabalhou plantão 24h (dias com sigla "234" na linha ORD). NUNCA em
-      // dias livres — isso evitaria a "HE fantasma" no dia 01/02. A planilha
-      // precisa do HE para que a fórmula identifique a previsão de hora extra.
-      // Respeita o teto de HE/mês definido em ia.limitesHe.
-      let excedente = cargaOrd - cargaMin;
-      const restanteTeto = limiteRestanteHe(m);
-      const aLancar = Math.min(excedente, restanteTeto);
-      if (aLancar > 0) {
-        // dias de plantão 24h reais do militar
-        const diasPlantao: number[] = [];
-        for (let d = 1; d <= dias; d++) {
-          if (ord.get(d)?.get(m.rowOrd) === "234") diasPlantao.push(d);
-        }
-        let restante = aLancar;
-        // Estratégia: distribuir o excedente em blocos vinculados ao plantão real.
-        // Primeira passada: lança até HE16 no dia de entrada do plantão e HE8 na madrugada
-        // do dia seguinte (espelha o padrão HE 24h = HE16+HE8). Segunda passada: completa
-        // resíduos pequenos no próprio dia de plantão sem ultrapassar o teto físico.
-        for (const d of diasPlantao) {
-          if (restante <= 0) break;
-          const hAtual = horasHeDia(m, d);
-          const espacoHe = Math.min(16 - hAtual, restante);
-          if (espacoHe > 0) {
-            he.get(d)!.set(m.rowOrd, `HE${hAtual + espacoHe}`);
-            restante -= espacoHe;
-          }
-          if (restante > 0 && d < dias) {
-            const hProx = horasHeDia(m, d + 1);
-            const espacoProx = Math.min(8 - hProx, restante);
-            if (espacoProx > 0) {
-              he.get(d + 1)!.set(m.rowOrd, `HE${hProx + espacoProx}`);
-              restante -= espacoProx;
-            }
-          }
-        }
-        const lancouHe = aLancar - restante;
-        if (lancouHe > 0) acertosHe.push(`${m.nome} (+${lancouHe}h HE — excedente da carga mensal)`);
-        if (restante > 0) acertosHe.push(`${m.nome} (faltam ${restante}h excedentes sem espaço HE)`);
-      }
-      if (excedente > aLancar) {
-        const semTeto = excedente - aLancar;
-        acertosHe.push(`${m.nome} (+${semTeto}h acima do alvo — bloqueado por teto de HE)`);
-      }
+      // Defensivo: a etapa 3 (lancaServico24) agora trava o crescimento de ORD
+      // no teto da carga mensal, lançando HE automaticamente quando o plantão
+      // estouraria. Se mesmo assim sobrou excedente (ex.: lançamentos manuais
+      // de ORD via observações ou exceção `obrigatorio`), apenas registra alerta
+      // — NÃO converte em HE colado em dia aleatório, pra não criar a "HE fantasma".
+      const excedente = cargaOrd - cargaMin;
+      acertosHe.push(`${m.nome} (+${excedente}h ORD acima da carga mensal — verifique lançamentos manuais)`);
     } else {
       // FALTANTE → CM puro até bater cargaMin. ZERO HE.
       let faltam = cargaMin - cargaOrd;
