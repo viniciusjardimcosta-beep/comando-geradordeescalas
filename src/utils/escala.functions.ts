@@ -538,8 +538,8 @@ function escalar(
 
   const SIGLA_ORD_DIA = "234";
   const SIGLA_ORD_MADRUGADA = "1";
-  const SIGLA_HE_DIA = "HE18";
-  const SIGLA_HE_MADRUGADA = "HE6";
+  const SIGLA_HE_DIA = "HE16";       // regra: HE 24h sempre em par HE16+HE8
+  const SIGLA_HE_MADRUGADA = "HE8";
   const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
 
   const estaEmServico24 = (m: MilitarRT, dia: number) =>
