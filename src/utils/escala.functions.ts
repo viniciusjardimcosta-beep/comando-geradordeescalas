@@ -784,12 +784,10 @@ function escalar(
       m.cargaH += h;
     };
 
-    // Caminho HE explícito (etapa de furo) — não há ORD, partição 16+8
+    // Caminho HE explícito (etapa de furo) — não há ORD, partição 16+8 (último dia: 16 só)
     if (destinoHe) {
-      setHe(dia, ultimoDia ? 16 : 16);
+      setHe(dia, 16);
       if (!ultimoDia) setHe(dia + 1, 8);
-      else setHe(dia, 18 - 16 + 16); // no último dia só 16h físicas (08–00); ajusta
-      // correção: no último dia físico é só 16h
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
