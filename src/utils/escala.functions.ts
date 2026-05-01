@@ -556,6 +556,8 @@ function escalar(
     const s = expm.get(d)?.get(m.rowOrd);
     return s ? horasCompSigla(s) : 0;
   };
+  const horasExpSigla = horasCompSigla;
+  const horasExpDia = horasCompDia;
   const horasCompAcumuladas = (m: MilitarRT): number => {
     let total = 0;
     for (let d = 1; d <= dias; d++) total += horasCompDia(m, d);
@@ -1121,42 +1123,6 @@ function escalar(
   const acertosHe: string[] = [];
   const cmAvulso: string[] = [];
 
-  // Helper: extrai horas de uma sigla EXP/CM/TELE (formato LETRAS+NÚMERO)
-  const horasExpSigla = (s: string): number => {
-    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
-    return mt ? Number(mt[1]) : 0;
-  };
-  const horasExpDia = (m: MilitarRT, d: number): number => {
-    const s = expm.get(d)?.get(m.rowOrd);
-    return s ? horasExpSigla(s) : 0;
-  };
-  const horasHeSigla = (s: string): number => {
-    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
-    return mt ? Number(mt[1]) : 0;
-  };
-  const horasHeDia = (m: MilitarRT, d: number): number => {
-    const s = he.get(d)?.get(m.rowOrd);
-    return s ? horasHeSigla(s) : 0;
-  };
-  /**
-   * Horas físicas já ocupadas no dia para o militar (ORD + EXP + HE).
-   * Um dia tem no máximo 24h físicas (16h no último dia do mês p/ lançamento que não estoura).
-   * Usado para impedir combinações impossíveis tipo `23 + CM9` (12+9=21 num dia que só comporta 16h úteis).
-   */
-  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
-    let total = 0;
-    const sOrd = ord.get(d)?.get(m.rowOrd);
-    if (sOrd) {
-      // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
-      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
-      // "234" = 18h físicas (08h-02h); "1" = 6h físicas (02h-08h da madrugada).
-      // Demais combinações somam pelas horas reais.
-      total += horasOrdSigla(sOrd);
-    }
-    total += horasExpDia(m, d);
-    total += horasHeDia(m, d);
-    return total;
-  };
   /**
    * Espaço útil restante no dia para receber CM/EXP/HE complementar.
    * - Limite operacional: 16h úteis por dia (regra de exemplo: ORD 23 + CM4 fecha 16h).
