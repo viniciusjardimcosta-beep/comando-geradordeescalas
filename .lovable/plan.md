@@ -1,88 +1,96 @@
-Vou corrigir o motor com uma regra mais fiel ao preenchimento das escalas de exemplo, sem depender só da IA interpretar texto livre.
+Vou corrigir o motor para tratar esse caso como regra estrutural da escala, não como interpretação da IA.
+
+## Problema confirmado
+
+Na escala gerada, quando o sistema transforma um plantão de 24h para algo como:
+
+```text
+Dia 28: ORD 23 + CM4
+```
+
+ele limita corretamente o dia 28 a 16h, mas não cria a continuação no dia 29:
+
+```text
+Dia 29: CM8
+```
+
+Com isso, o militar deixa de cobrir a madrugada de 00h às 08h, e o dia 29 fica com menos militares do que o mínimo exigido. Além disso, a última escala segue sem HE porque o lançamento de excedente mensal está amarrado de forma incorreta à contagem de carga e aos plantões reais.
 
 ## O que vou ajustar
 
-### 1) Corrigir o caso do Sd Willian: limite físico no mesmo dia
-Hoje o motor consegue deixar algo como:
+### 1) Criar uma regra de “serviço físico 24h dividido”
+Quando o sistema precisar converter parte de um plantão ordinário em CM para fechar carga horária, ele deve preservar a cobertura física de 24h do serviço.
+
+Exemplo correto:
 
 ```text
-ORD: 23  = 12h
-EXP: CM9 = 9h
-Total no mesmo dia = 21h
+Dia 28: ORD 23 + CM4  = 16h de 08h a 00h
+Dia 29: EXP/CM8       = 8h de 00h a 08h
 ```
 
-Isso está errado porque, para lançamento no mesmo dia de entrada, o limite operacional útil é 16h. Nesse exemplo, o correto é:
+Ou seja: se o plantão original era 24h, mas no dia de entrada só coube `CM4`, o restante da madrugada precisa ser lançado no dia seguinte como `CM8`, desde que exista dia seguinte dentro da planilha.
+
+### 2) Separar “limite físico do dia de entrada” de “cobertura da madrugada”
+A regra anterior tratou o limite de 16h como se o serviço acabasse ali. Vou ajustar para o motor entender:
+
+- dia de entrada comporta no máximo 16h úteis até meia-noite;
+- a madrugada de 00h às 08h pertence visualmente ao dia seguinte;
+- se o militar estava cobrindo serviço 24h, essa madrugada precisa aparecer no dia seguinte (`1` ou `CM8`/`HE8`, conforme o tipo do lançamento);
+- não pode simplesmente cortar as 8h finais, pois isso reduz a guarnição mínima.
+
+### 3) Corrigir o acerto de carga mensal com CM
+A parte que hoje transforma o último `234 + 1` em `23 + CM4` será alterada para trabalhar por blocos:
+
+- manter parte ordinária no dia de entrada (`234`, `23` ou `2` conforme o necessário);
+- lançar CM no dia de entrada somente até completar 16h no mesmo dia;
+- lançar o restante obrigatório da madrugada no dia seguinte como CM, quando o plantão original exigia cobertura de 24h;
+- atualizar corretamente a carga computada para não achar que ainda faltam horas nem remover cobertura.
+
+Exemplo para 12h faltantes:
 
 ```text
-Dia 28: ORD 23 + CM4 = 16h
-Dia 29: CM5 ou outra complementação restante, se ainda precisar fechar carga
+Antes: 234 + 1
+Depois: dia D = 23 + CM4; dia D+1 = CM8
+Total físico preservado: 24h
 ```
 
-Vou criar uma função central para calcular o espaço real disponível no dia antes de lançar CM/EXP/HE complementar:
+### 4) Fazer a HE voltar a aparecer corretamente
+Vou revisar a etapa de excedente mensal para garantir que:
 
-- se já tem `23` no dia, só cabe mais `CM4` naquele dia;
-- se já tem `2`, cabe até `CM10`;
-- se já tem `234`, não cabe CM no mesmo dia;
-- se o restante não couber, o motor passa automaticamente para o próximo dia livre;
-- no último dia do mês, não empurra horas para fora da planilha atual sem regra explícita.
+- o excedente acima da carga mínima seja lançado como `HE`;
+- HE de serviço 24h seja quebrada como `HE16` no dia de entrada + `HE8` no dia seguinte;
+- HE não seja lançada em dia livre aleatório;
+- limites por posto, como “sargentos no máximo 24h e equalizado”, continuem valendo;
+- se o teto impedir o lançamento, o sistema gere alerta claro informando que a HE foi bloqueada por limite definido.
 
-Também vou adicionar uma validação final: se alguma célula/bloco ficar com combinação impossível como `23 + CM9`, o motor corrige antes de gravar ou emite alerta detalhado.
-
-### 2) Restaurar HE de excedente mensal, mas sem criar “HE fantasma”
-A alteração anterior removeu a HE do excedente para evitar lançamentos absurdos no dia 01. Isso resolveu uma coisa, mas quebrou outra: a planilha precisa receber `HE` quando o militar ultrapassa a carga horária mensal prevista, para a fórmula identificar a previsão de HE.
-
-Vou refazer essa parte assim:
-
-- calcular a carga mensal prevista do militar;
-- calcular o excedente real;
-- lançar esse excedente na linha `HE`, mas vinculado a dias em que o militar realmente trabalhou/teve plantão, não em dias livres aleatórios como dia 01;
-- respeitar a quebra temporal correta:
-  - até `HE16` no dia de entrada do serviço;
-  - até `HE8` na madrugada do dia seguinte, quando aplicável;
-  - se precisar quebrar em `HE3`, `HE4`, etc., pode quebrar, mas só quando necessário;
-- não lançar HE em dia de folga pré/pós-plantão só para “fechar matemática”.
-
-Ou seja: a HE volta a aparecer na planilha, mas como classificação do excedente real, não como escala extra inventada.
-
-### 3) Fortalecer limite e equalização de HE dos sargentos
-Para uma diretriz como:
+### 5) Recontar guarnição mínima considerando a madrugada do dia seguinte
+A validação final será fortalecida para detectar o caso que você apontou:
 
 ```text
-limitar as HE dos sargentos em no máximo 24h, equalizado entre todos
+Dia 28: 2 militares 234+1
+Dia 28: 2 militares 23+CM4 sem CM8 no dia 29
 ```
 
-O motor vai entender de forma determinística:
+O sistema deve entender que, na madrugada do dia 29, esses dois últimos militares também precisam estar cobertos. Se não estiverem, deve completar com `CM8`/`HE8` conforme o caso, ou alertar caso não haja possibilidade.
 
-- aplicar o teto por sargento: ninguém passa de 24h, salvo se não houver alternativa e isso for reportado como alerta;
-- distribuir primeiro para quem tem menos HE acumulada;
-- tentar aproximar todos os sargentos do mesmo total antes de repetir alguém;
-- quando o teto impedir fechar a guarnição mínima, gerar alerta claro dizendo que faltou efetivo dentro do limite definido.
+### 6) Ajustar a sanidade final para não apagar complemento necessário
+A validação final atual só corta excesso acima de 24h, mas não garante que a continuação de madrugada exista. Vou adicionar uma validação inversa:
 
-### 4) Equalizar HE dos soldados sem fragmentar demais
-Para soldados, vou separar a lógica:
+- se um serviço foi reduzido para `23 + CM4`, exigir continuação `CM8` no dia seguinte;
+- se uma HE foi `HE16`, exigir `HE8` no dia seguinte quando for serviço 24h;
+- se estiver no último dia do mês, não inventar dia seguinte dentro da planilha atual; esse caso pertence à virada do mês seguinte.
 
-- priorizar soldados com menor total de HE no mês;
-- preferir blocos maiores e operacionais, como `HE16 + HE8` quando for serviço 24h de HE;
-- só usar quebras pequenas (`HE3`, `HE4`, `HE5`, etc.) para ajuste fino, quando for realmente necessário para fechar carga/limite;
-- evitar concentrar HE sempre nos mesmos soldados.
-
-### 5) Melhorar o prompt da IA e, principalmente, as travas do motor
-A IA continuará interpretando as observações, mas as regras críticas não ficarão “na cabeça da IA”. O motor vai impor:
-
-- teto de HE por posto/pessoa;
-- equalização por grupo;
-- limite físico por dia;
-- quebra correta entre dia atual e dia posterior;
-- regra de excedente mensal lançado como HE;
-- bloqueios de folga pré/pós-plantão.
-
-Assim, mesmo se a IA interpretar de forma imperfeita, o preenchimento final não deve gerar combinações impossíveis.
-
-### 6) Conferir a planilha enviada
-Depois da aprovação, vou analisar a planilha anexada e usar o caso do Sd Willian Kramer da Silva no dia 28 como caso de teste direto. A correção será validada para garantir que esse padrão não volte a acontecer.
-
-## Arquivo principal afetado
+## Arquivo afetado
 
 - `src/utils/escala.functions.ts`
 
-Não pretendo mexer nas permissões do banco nesta rodada, porque a isolação por usuário já aparece aplicada nas políticas atuais: cada usuário vê apenas seus próprios dados operacionais; o admin mantém acesso apenas à gestão de perfis/papéis.
+## Resultado esperado
+
+Depois da correção, o caso do Sd Willian Kramer da Silva no dia 28 deve ficar no padrão correto:
+
+```text
+Dia 28: 23 + CM4
+Dia 29: CM8
+```
+
+E a escala não deve mais deixar a madrugada do dia seguinte abaixo do mínimo de 4 militares quando o serviço original era de 24h. Também vou corrigir a lógica para a previsão de HE aparecer novamente quando houver excedente mensal real.
