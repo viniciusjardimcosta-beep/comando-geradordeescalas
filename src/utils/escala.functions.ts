@@ -826,6 +826,7 @@ function escalar(
     if (sOrd) return false; // qualquer ORD bloqueia (serviço, afastamento, parcial)
     if (he.get(d)?.has(m.rowOrd)) return false;
     if (naoEscalar.get(d)?.has(m.rowOrd)) return false;
+    if (bloqueioPosVirada.get(d)?.has(m.rowOrd)) return false;
     return true;
   };
 
