@@ -975,6 +975,45 @@ function escalar(
     const s = expm.get(d)?.get(m.rowOrd);
     return s ? horasExpSigla(s) : 0;
   };
+  const horasHeSigla = (s: string): number => {
+    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasHeDia = (m: MilitarRT, d: number): number => {
+    const s = he.get(d)?.get(m.rowOrd);
+    return s ? horasHeSigla(s) : 0;
+  };
+  /**
+   * Horas físicas já ocupadas no dia para o militar (ORD + EXP + HE).
+   * Um dia tem no máximo 24h físicas (16h no último dia do mês p/ lançamento que não estoura).
+   * Usado para impedir combinações impossíveis tipo `23 + CM9` (12+9=21 num dia que só comporta 16h úteis).
+   */
+  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
+    let total = 0;
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) {
+      // afastamento: militar indisponível, ocupa o dia inteiro virtualmente
+      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
+      // serviço 24h iniciado neste dia → 24h
+      if (sOrd === "234" || sOrd === "2341" || sOrd === "234 1") total += 24;
+      else if (sOrd === "1") total += 0; // madrugada de plantão do dia anterior, não bloqueia
+      else total += horasOrdSigla(sOrd);
+    }
+    total += horasExpDia(m, d);
+    total += horasHeDia(m, d);
+    return total;
+  };
+  /**
+   * Espaço útil restante no dia para receber CM/EXP/HE complementar.
+   * - Limite operacional: 16h úteis por dia (regra de exemplo: ORD 23 + CM4 fecha 16h).
+   * - No último dia do mês, mantém o mesmo teto.
+   * - Se o militar já tem plantão 24h no dia, retorna 0.
+   */
+  const espacoLivreNoDia = (m: MilitarRT, d: number): number => {
+    const ocup = horasOcupadasNoDia(m, d);
+    if (ocup >= 16) return 0;
+    return 16 - ocup;
+  };
 
   const acertosExpAdm: string[] = [];
 
