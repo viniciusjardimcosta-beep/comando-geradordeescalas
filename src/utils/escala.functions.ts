@@ -792,8 +792,11 @@ function escalar(
 
     // Caminho HE explícito (etapa de furo) — não há ORD, partição 16+8 (último dia: 16 só)
     if (destinoHe) {
-      setHe(dia, 16);
-      if (!ultimoDia) setHe(dia + 1, 8);
+      const restanteHe = limiteRestanteHe(m);
+      const heDia = Math.min(16, restanteHe);
+      const heMad = ultimoDia ? 0 : Math.min(8, Math.max(0, restanteHe - heDia));
+      setHe(dia, heDia);
+      if (!ultimoDia) setHe(dia + 1, heMad);
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
@@ -812,7 +815,11 @@ function escalar(
     const ordUsar = Math.min(espacoOrd, horasFisicas);
 
     if (ordUsar <= 0) {
-      setHe(dia, horasDia);
+      // Sem espaço ORD → tudo HE, mas respeitando o teto mensal de HE
+      const restanteHe = limiteRestanteHe(m);
+      const heDia = Math.min(horasDia, restanteHe);
+      const heMad = ultimoDia ? 0 : Math.min(horasMadrugada, Math.max(0, restanteHe - heDia));
+      setHe(dia, heDia);
       if (!ultimoDia) setHe(dia + 1, horasMadrugada);
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
