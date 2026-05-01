@@ -1173,7 +1173,7 @@ function escalar(
   if (acertosHe.length) {
     alertas.push({
       tipo: "info",
-      msg: `Excedente acima da carga mínima (compensado em folga, sem HE automática): ${acertosHe.join(", ")}.`,
+      msg: `Excedente da carga mínima lançado como HE nos plantões reais: ${acertosHe.join(", ")}.`,
     });
   }
   if (acertosExpAdm.length) {
