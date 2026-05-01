@@ -1094,7 +1094,7 @@ function escalar(
   if (acertosHe.length) {
     alertas.push({
       tipo: "info",
-      msg: `Excedente convertido em HE: ${acertosHe.join(", ")}.`,
+      msg: `Excedente acima da carga mínima (compensado em folga, sem HE automática): ${acertosHe.join(", ")}.`,
     });
   }
   if (acertosExpAdm.length) {
