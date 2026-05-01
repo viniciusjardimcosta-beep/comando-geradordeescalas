@@ -255,15 +255,21 @@ Converta o texto do usuário em JSON estruturado com 6 seções:
    - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
      "Sd Z entrou de HE no fim do mês passado".
 
-6) limitesHe: tetos de HE no mês e regras de equalização. SEMPRE preencher se o usuário mencionar limite, máximo, igualar, equalizar, distribuir ou tetos por posto.
-   - "limitar HE dos sargentos a 24h cada, equalizado" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
-   - "no máximo 24 HE para os sgts e equalizar" → MESMA estrutura acima
+6) limitesHe: tetos de HE no mês e regras de equalização. **OBRIGATÓRIO** preencher SEMPRE que o usuário mencionar QUALQUER uma destas palavras:
+   limite, máximo, máx, teto, no max, até X horas, igualar, equalizar, distribuir igual, dividir igual,
+   distribuição igualitária, equilibrar, mesma quantidade, todos com a mesma carga, distribuídas igualmente.
+   - "limitar HE dos sargentos a 24h cada, igualmente distribuídas" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "limitar as HE dos sargentos em 24 cada um igualmente distribuidas" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "no máximo 24 HE para os sgts e equalizar" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "equalizar HE dos soldados" / "distribuir HE dos sd igualmente" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true }
    - "equalizar HE dos soldados sem fragmentar muito" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true, evitarFragmentar: true }
    - "Sgt X no máximo 12h de HE no mês" → { nome: "X", maxHoras: 12 }
    - postoOuPapel aceita: "sgt", "sd", "cb", "ten", "all". Use "all" para todos.
+   - Se o usuário pedir várias regras (ex.: "sgts limitados a 24 e soldados equalizados"), gere UMA entrada para CADA regra.
    - equalizar=true → motor distribui HE preferindo quem tem MENOS HE no mês.
    - evitarFragmentar=true → motor prefere lançar HE em blocos maiores (HE16/HE8) e evita HE3/HE4 isolados.
-   - Sempre que houver "limite máximo" + "equalizado/igualitário", marcar equalizar=true.
+   - Sempre que houver "limite máximo" + "equalizado/igualitário/distribuído igual", marcar equalizar=true.
+   - NUNCA deixe limitesHe vazio se o usuário pediu qualquer forma de equalização ou limite.
 
 Identifique militares por matrícula quando possível; senão por nome.
 Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
