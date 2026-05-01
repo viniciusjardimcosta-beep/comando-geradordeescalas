@@ -232,7 +232,7 @@ export function applyEdits(sheetXml: string, edits: CellEdit[], skipped?: Skippe
   return xml;
 }
 
-function upsertRow(xml: string, rowNum: number, edits: CellEdit[]): string {
+function upsertRow(xml: string, rowNum: number, edits: CellEdit[], skipped?: SkippedFormulaRefs): string {
   const rowRe = new RegExp(
     `<row\\b([^>]*)\\br="${rowNum}"([^>]*)(?:/>|>([\\s\\S]*?)</row>)`,
     "",
@@ -253,15 +253,17 @@ function upsertRow(xml: string, rowNum: number, edits: CellEdit[]): string {
   // Mapear células existentes
   const existing = new Map<
     string,
-    { full: string; styleAttr: string }
+    { full: string; styleAttr: string; hasFormula: boolean }
   >();
   for (const cm of inner.matchAll(/<c\b[^>]*\/>|<c\b[^>]*>[\s\S]*?<\/c>/g)) {
     const refMatch = /\br="([^"]+)"/.exec(cm[0]);
     if (!refMatch) continue;
     const styleMatch = /\bs="([^"]+)"/.exec(cm[0]);
+    const hasFormula = /<f\b/.test(cm[0]);
     existing.set(refMatch[1], {
       full: cm[0],
       styleAttr: styleMatch ? ` s="${styleMatch[1]}"` : "",
+      hasFormula,
     });
   }
 
@@ -273,6 +275,11 @@ function upsertRow(xml: string, rowNum: number, edits: CellEdit[]): string {
   for (const [ref, e] of editByRef.entries()) {
     const ex = existing.get(ref);
     if (ex) {
+      // PROTEÇÃO DE FÓRMULAS: nunca sobrescrever célula com fórmula a menos que pedido explicitamente
+      if (ex.hasFormula && !e.overwriteFormula) {
+        if (skipped) skipped.push(ref);
+        continue;
+      }
       const cellXml = buildCell(ref, e.value, ex.styleAttr);
       newInner = newInner.replace(ex.full, cellXml);
     } else {
