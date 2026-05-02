@@ -838,14 +838,22 @@ function escalar(
 
     if (!ultimoDia) {
       const ordMadAlvo = Math.min(Math.max(0, ordUsar - horasDia), horasMadrugada);
-      // Só usa sigla "1" (=6h) se o plantão entrou como 234 cheio; senão vira CM
+      // Só usa sigla "1" (=6h) se o plantão entrou como 234 cheio E sobrou ORD ≥6 para a madrugada
       if (cabeOrdCheio && ordMadAlvo >= 6) {
         ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
         m.cargaH += 6;
-        setHe(dia + 1, horasMadrugada - 6);
+        // horasMadrugada é 6 quando cabeOrdCheio → nada de HE extra
+        const heMadExtra = horasMadrugada - 6;
+        if (heMadExtra > 0) setHe(dia + 1, heMadExtra);
       } else {
+        // Madrugada precisa fechar SEMPRE o bloco físico (horasMadrugada h),
+        // independente de quanto ORD residual sobrou — o resto vira HE.
         setCm(dia + 1, ordMadAlvo);
-        setHe(dia + 1, horasMadrugada - ordMadAlvo);
+        const heMadFechar = Math.max(0, horasMadrugada - ordMadAlvo);
+        if (heMadFechar > 0) {
+          const restanteHe = limiteRestanteHe(m);
+          setHe(dia + 1, Math.min(heMadFechar, restanteHe));
+        }
       }
     }
     marcaInicioServico(m, dia);
