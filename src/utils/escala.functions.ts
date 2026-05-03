@@ -1295,7 +1295,7 @@ function escalar(
     }
 
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
-    const cargaMin = Math.floor(cargaBase(dias) * (1 - diasAf / dias));
+    const cargaMin = cargaMensalProporcional(diasAf);
     if (cargaMin <= 0) continue;
     const cargaOrd = horasOrdMes(m);
 
