@@ -790,13 +790,33 @@ function escalar(
       m.cargaH += h;
     };
 
-    // Caminho HE explícito (etapa de furo) — não há ORD, partição 16+8 (último dia: 16 só)
+    // Caminho cobertura de furo — partição 16h dia + 8h madrugada (16h só, no último dia).
+    // IMPORTANTE: mesmo sendo cobertura, primeiro consome o espaço ORD ainda disponível
+    // no mês como CM (complemento), e SÓ o que sobrar vira HE. Isso evita inflar HE
+    // quando o militar ainda tinha carga ordinária a fechar (ex.: 16h cobertura, 5h ORD
+    // pendentes → CM5 + HE11 em vez de HE16 + CM5 inacessível em outro dia).
     if (destinoHe) {
-      const restanteHe = limiteRestanteHe(m);
-      const heDia = Math.min(16, restanteHe);
-      const heMad = ultimoDia ? 0 : Math.min(8, Math.max(0, restanteHe - heDia));
+      const horasDia = 16;
+      const horasMadrugada = ultimoDia ? 0 : 8;
+      let espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+      let restanteHe = limiteRestanteHe(m);
+
+      // Bloco do dia
+      const cmDia = Math.min(horasDia, espacoOrd);
+      const heDia = Math.min(horasDia - cmDia, restanteHe);
+      setCm(dia, cmDia);
       setHe(dia, heDia);
-      if (!ultimoDia) setHe(dia + 1, heMad);
+      espacoOrd -= cmDia;
+      restanteHe -= heDia;
+
+      // Bloco da madrugada
+      if (!ultimoDia) {
+        const cmMad = Math.min(horasMadrugada, espacoOrd);
+        const heMad = Math.min(horasMadrugada - cmMad, restanteHe);
+        setCm(dia + 1, cmMad);
+        setHe(dia + 1, heMad);
+      }
+
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
