@@ -377,6 +377,11 @@ function buildCell(ref: string, value: string, styleAttr: string): string {
     // célula vazia preservando estilo
     return `<c r="${ref}"${styleAttr}/>`;
   }
+  // Valores numéricos puros: gravar como célula numérica nativa (t="n")
+  // para casar com listas de validação que armazenam números (ex.: 234, 1).
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return `<c r="${ref}"${styleAttr} t="n"><v>${value}</v></c>`;
+  }
   return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t xml:space="preserve">${encodeXmlText(value)}</t></is></c>`;
 }
 
