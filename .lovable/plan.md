@@ -1,28 +1,32 @@
 ## Problema
 
-O site fica carregando infinitamente (preview e publicado). A causa está nos logs de rede:
+A aba **Anexo B - Escala** fica em vermelho após a geração e cada célula preenchida pelo sistema mostra o aviso *"Inválido: a entrada precisa estar dentro de um intervalo especificado"*.
 
-```
-GET /rest/v1/profiles → 403
-{"code":"42501","message":"permission denied for function has_role"}
-```
+## Causa
 
-Na última correção de segurança, executei `REVOKE EXECUTE ... FROM authenticated` nas funções `public.has_role(uuid, app_role)` e `public.get_user_status(uuid)`. Isso quebrou o app inteiro porque essas funções são chamadas pelas **políticas RLS** das tabelas `profiles`, `user_roles`, `militares`, `escalas_geradas`, etc. Quando o PostgREST executa um SELECT como `authenticated`, o planner avalia o `USING (...)` da policy e precisa ter permissão de EXECUTE na função — mesmo sendo SECURITY DEFINER.
+As células do Anexo B têm validação de dados (lista suspensa) com itens cadastrados como **número** (ex.: `234`, `1`). Hoje o gerador escreve **toda célula como texto** (`inlineStr`), então o `"234"` (string) não bate com o `234` (número) da lista → Excel marca como inválido.
 
-Resultado: TODA leitura de tabela com RLS retorna 403 → `AuthProvider` nunca carrega `profile`/`isAdmin` → app fica preso na tela de loading.
+Siglas alfabéticas (`FER`, `HE8`, `CM2`, `1+CM2`...) não disparam o aviso porque a lista as tem como texto.
 
 ## Correção
 
-Migration única revertendo o REVOKE:
+Alterar **apenas** a função `buildCell` em `src/utils/xlsx-surgical.ts`: detectar valores estritamente numéricos e gravá-los como célula numérica nativa (`t="n"`), mantendo `inlineStr` para o resto.
 
-```sql
-GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated, anon;
-GRANT EXECUTE ON FUNCTION public.get_user_status(uuid) TO authenticated, anon;
+```ts
+function buildCell(ref, value, styleAttr) {
+  if (value === "" || value == null) return `<c r="${ref}"${styleAttr}/>`;
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    return `<c r="${ref}"${styleAttr} t="n"><v>${value}</v></c>`;
+  }
+  return `<c r="${ref}"${styleAttr} t="inlineStr"><is><t xml:space="preserve">${encodeXmlText(value)}</t></is></c>`;
+}
 ```
 
-Isso restaura o funcionamento. O alerta original do scanner ("SECURITY DEFINER function executable by authenticated") era falso-positivo no nosso caso: essas funções são desenhadas para serem usadas dentro de policies RLS e precisam ser executáveis pelo role autenticado. Vou registrar isso na `security-memory` para o scanner não reclamar de novo.
+## Impacto
 
-## Passos
+- Siglas numéricas (`234`, `1`) passam a casar com a lista de validação → aba deixa de ficar vermelha.
+- Texto, fórmulas, estilos, lógica de geração: nada mais muda.
 
-1. Criar migration que faz o GRANT EXECUTE de volta para `authenticated` e `anon`.
-2. Atualizar a security-memory marcando essas duas funções como intencionalmente executáveis (são helpers de RLS).
+## Arquivo alterado
+
+- `src/utils/xlsx-surgical.ts` — somente `buildCell`.
