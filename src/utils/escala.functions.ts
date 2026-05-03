@@ -827,6 +827,28 @@ function escalar(
     const usadoOrd = horasOrdinariasAcumuladas(m);
     const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
 
+    // Saldo ORD < 6h (menos que um turno): NÃO abrir turno ORD.
+    // Lança o saldo restante como CM no dia e completa o serviço (16h dia + 8h madrugada) com HE.
+    if (espacoOrd > 0 && espacoOrd < 6) {
+      const horasDia = 16;
+      const horasMadrugada = ultimoDia ? 0 : 8;
+      let restanteHe = limiteRestanteHe(m);
+
+      setCm(dia, espacoOrd);
+      const heDia = Math.min(horasDia - espacoOrd, restanteHe);
+      setHe(dia, heDia);
+      restanteHe -= heDia;
+
+      if (!ultimoDia) {
+        const heMad = Math.min(horasMadrugada, restanteHe);
+        setHe(dia + 1, heMad);
+      }
+
+      marcaInicioServico(m, dia);
+      m.ultimoServico = dia;
+      return;
+    }
+
     // Se cabe um 234 cheio (≥18h ORD disponíveis e não é último dia), usa partição 18+6
     const cabeOrdCheio = !ultimoDia && espacoOrd >= 18;
     const horasDia = cabeOrdCheio ? 18 : 16;
