@@ -593,6 +593,17 @@ function escalar(
     return total;
   };
 
+  // Carga mensal proporcional ao número de dias afastados, arredondada para o
+  // múltiplo de 6h (turno) mais próximo. Operacionalmente a carga só pode ser
+  // fechada com blocos de turno (6h), então usar floor cego (ex.: 119,9 → 119)
+  // gera saldo residual de 5h e força CM indevido. Arredondar para 120 mantém
+  // a lógica "enquanto cabe turno ordinário, lança ordinário; só vira CM+HE
+  // quando o saldo final ficar abaixo de 6h".
+  const cargaMensalProporcional = (af: number): number => {
+    const bruto = cargaBase(dias) * (1 - af / dias);
+    return Math.round(bruto / 6) * 6;
+  };
+
   // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
   // Calculado uma vez por chamada porque os afastamentos da etapa 1 já estão lançados.
   const cargaMaxOrdCache = new Map<number, number>();
@@ -604,7 +615,7 @@ function escalar(
       const s = ord.get(d)?.get(m.rowOrd);
       if (s && SIGLAS_AFASTAMENTO.has(s)) af++;
     }
-    const teto = Math.floor(cargaBase(dias) * (1 - af / dias));
+    const teto = cargaMensalProporcional(af);
     cargaMaxOrdCache.set(m.rowOrd, teto);
     return teto;
   };
@@ -1246,7 +1257,7 @@ function escalar(
     // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
     if (m.isAdm) {
       const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
-      const alvoAdm = Math.floor(cargaBase(dias) * (1 - diasAfAdm / dias));
+      const alvoAdm = cargaMensalProporcional(diasAfAdm);
       if (alvoAdm <= 0) continue;
       let totalExp = 0;
       for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
@@ -1284,7 +1295,7 @@ function escalar(
     }
 
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
-    const cargaMin = Math.floor(cargaBase(dias) * (1 - diasAf / dias));
+    const cargaMin = cargaMensalProporcional(diasAf);
     if (cargaMin <= 0) continue;
     const cargaOrd = horasOrdMes(m);
 
