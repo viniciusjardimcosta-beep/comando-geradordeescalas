@@ -604,7 +604,7 @@ function escalar(
       const s = ord.get(d)?.get(m.rowOrd);
       if (s && SIGLAS_AFASTAMENTO.has(s)) af++;
     }
-    const teto = Math.round(cargaBase(dias) * (1 - af / dias));
+    const teto = Math.floor(cargaBase(dias) * (1 - af / dias));
     cargaMaxOrdCache.set(m.rowOrd, teto);
     return teto;
   };
@@ -1246,7 +1246,7 @@ function escalar(
     // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
     if (m.isAdm) {
       const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
-      const alvoAdm = Math.round(cargaBase(dias) * (1 - diasAfAdm / dias));
+      const alvoAdm = Math.floor(cargaBase(dias) * (1 - diasAfAdm / dias));
       if (alvoAdm <= 0) continue;
       let totalExp = 0;
       for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
@@ -1284,7 +1284,7 @@ function escalar(
     }
 
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
-    const cargaMin = Math.round(cargaBase(dias) * (1 - diasAf / dias));
+    const cargaMin = Math.floor(cargaBase(dias) * (1 - diasAf / dias));
     if (cargaMin <= 0) continue;
     const cargaOrd = horasOrdMes(m);
 
