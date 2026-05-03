@@ -1257,42 +1257,14 @@ function escalar(
       const excedente = cargaOrd - cargaMin;
       acertosHe.push(`${m.nome} (+${excedente}h ORD acima da carga mensal — verifique lançamentos manuais)`);
     } else {
-      // FALTANTE → CM puro até bater cargaMin. ZERO HE.
+      // FALTANTE → CM puro em dias úteis livres até bater cargaMin. ZERO HE.
+      // O plantão 234 (D) + 1 (D+1) já fecha 24h físicas — não tocamos no dia do plantão
+      // para não criar jornadas de 30h nem inflar a carga mensal (AK em vermelho).
       let faltam = cargaMin - cargaOrd;
       const totalFaltam = faltam;
-      const dia = ultimoServico24(m);
 
-      // 1) Se há serviço 24h restante (sigla "234" no dia de entrada): MANTÉM o plantão
-      //    intacto e adiciona CM no MESMO dia para completar a carga horária mensal.
-      //    A jornada física de 24h fica: 234 (18h ORD) + CM<x> (até 6h) + HE<resto>
-      //    para fechar as 24h físicas do plantão (18 + x + (6-x) = 24).
-      //    Não reduzimos o "234" nem invadimos o dia seguinte com CM extra.
-      if (dia !== null && faltam > 0) {
-        // Espaço para CM no dia da entrada: 6h (24h físicas - 18h do "234"),
-        // descontando qualquer EXP/CM já lançado ali.
-        const sExpAtual = expm.get(dia)?.get(m.rowOrd);
-        const hExpAtual = sExpAtual ? horasExpSigla(sExpAtual) : 0;
-        const espacoCm = Math.max(0, 6 - hExpAtual);
-        const cmAdicionar = Math.min(faltam, espacoCm);
-        if (cmAdicionar > 0) {
-          const tipoExist = sExpAtual ? (/^(EXP|CM|TELE)/i.exec(sExpAtual)?.[1].toUpperCase() ?? "CM") : "CM";
-          const tipo = tipoExist === "EXP" ? "CM" : tipoExist;
-          expm.get(dia)!.set(m.rowOrd, `${tipo}${hExpAtual + cmAdicionar}`);
-          faltam -= cmAdicionar;
-        }
-        // Após o CM, completa o restante das 24h físicas com HE no mesmo dia
-        // (mantém o turno fechado fisicamente sem invadir o dia seguinte).
-        const horasFisicasNoDia = 18 + hExpAtual + cmAdicionar; // ORD + EXP/CM já no dia
-        const heFechar = Math.max(0, 24 - horasFisicasNoDia);
-        if (heFechar > 0 && !he.get(dia)?.has(m.rowOrd)) {
-          // HE não conta para a carga mensal ordinária — é só cobertura física.
-          he.get(dia)!.set(m.rowOrd, `HE${heFechar}`);
-          m.cargaH += heFechar;
-        }
-      }
-
-      // 2) Resto (ou tudo, se não tinha serviço 24h) → CM avulso em dias úteis livres,
-      //    respeitando o limite físico do dia (espacoLivreNoDia).
+      // Lança CM avulso em dias úteis livres, respeitando o limite físico do dia
+      // (espacoLivreNoDia já desconta plantões e afastamentos).
       while (faltam > 0) {
         let lancou = false;
         for (let d = 1; d <= dias; d++) {
