@@ -1257,7 +1257,7 @@ function escalar(
     // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
     if (m.isAdm) {
       const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
-      const alvoAdm = Math.floor(cargaBase(dias) * (1 - diasAfAdm / dias));
+      const alvoAdm = cargaMensalProporcional(diasAfAdm);
       if (alvoAdm <= 0) continue;
       let totalExp = 0;
       for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
