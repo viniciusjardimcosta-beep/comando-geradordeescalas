@@ -1,43 +1,59 @@
-Peço desculpas — você tem razão em reclamar. Eu mexi no ponto do lançamento, mas deixei passar a causa que faz o sistema achar que ainda existe mais carga ordinária do que realmente existe.
+Você está certo: conferindo a última escala gerada, o AUGUSTO já fechou exatamente as 120h de carga ordinária antes daquele lançamento.
 
-O problema que encontrei agora é este:
+Na linha dele aparecem 5 plantões ordinários completos:
 
 ```text
-ANTONIO TOLFO FLORES tem férias de 20 a 28 em maio/2026 = 9 dias afastado.
-Carga base de maio/2026 = 177h.
-177 * (1 - 9/31) = 125,6129h.
-
-O sistema usa Math.round(...) => 126h.
-Mas a planilha/carga mensal esperada trabalha com 125h.
+Dia 03: 234 + dia 04: 1 = 24h
+Dia 06: 234 + dia 07: 1 = 24h
+Dia 10: 234 + dia 11: 1 = 24h
+Dia 13: 234 + dia 14: 1 = 24h
+Dia 25: 234 + dia 26: 1 = 24h
+Total ordinário = 120h
 ```
 
-Por isso, no dia 18 o sistema calcula saldo ordinário como 6h e lança turno ordinário (`2`), quando o saldo correto é 5h. A regra que eu coloquei (`saldo < 6 => CM + HE`) não dispara porque o sistema está calculando o saldo errado como exatamente 6.
+Como ele teve férias de 15 a 24 em maio, a carga mensal dele é 120h. Então, depois disso, não tinha mais nada a completar com CM. O serviço/cobertura posterior deveria ser todo HE.
 
 Plano de correção pontual:
 
-1. Em `src/utils/escala.functions.ts`, criar uma única função para calcular a carga mensal proporcional usando arredondamento para baixo (`Math.floor`) em vez de arredondamento comum (`Math.round`).
+1. Ajustar somente a função de cálculo da carga mensal proporcional em `src/utils/escala.functions.ts`.
 
-2. Trocar somente os três pontos que calculam a carga mensal proporcional:
-   - teto ordinário usado durante o lançamento da jornada;
-   - carga mínima do acerto final;
-   - carga alvo de militares ADM.
-
-3. Manter intacta a regra já implementada do fluxo lógico:
-   ```text
-   enquanto saldo ordinário >= 6h: pode lançar turno ordinário;
-   quando saldo ordinário > 0 e < 6h: lança CM com o saldo exato;
-   o restante do serviço vira HE.
-   ```
-
-Resultado esperado para o caso citado:
+2. O cálculo atual usa proporção pela carga base fracionada do mês:
 
 ```text
-Antes do dia 18: saldo ordinário correto = 5h
-Dia 18 linha ORD: vazio, não lança "2"
-Dia 18 linha EXP/COM: CM5
-Dia 18 linha HE: HE11
-Dia 19 linha HE: HE8, se for continuação da madrugada do serviço
-Carga ordinária mensal fecha no limite e não passa para vermelho.
+177 * (1 - 10/31) = 119,90...
+Math.floor(...) = 119
 ```
 
-Não vou mexer em rotação, grupos, IA, tela, banco nem no restante do preenchimento — apenas nesse cálculo da carga mensal que está causando o erro.
+Isso faz o motor achar que existe diferença residual/ajuste e abre espaço para CM indevido.
+
+3. Trocar esse cálculo para contar os dias úteis de escala como blocos de 24h proporcionalmente aos dias disponíveis, arredondando para múltiplo de turno de 6h, para refletir a lógica operacional:
+
+```text
+31 dias - 10 férias = 21 dias disponíveis
+177 * 21 / 31 = 119,90...
+arredonda para múltiplo de 6h mais próximo = 120h
+```
+
+4. Aplicar essa mesma função nos três pontos que usam carga mensal proporcional:
+   - teto ordinário usado durante o lançamento;
+   - carga alvo de ADM;
+   - acerto final de carga mensal.
+
+5. Manter a regra de preenchimento exatamente como você explicou:
+
+```text
+Enquanto ainda cabe turno ordinário de 6h, lança ordinário.
+Se faltar menos de 6h para completar a carga, lança esse resto como CM e completa o serviço como HE.
+Se a carga mensal já está fechada, não lança CM; lança tudo como HE.
+```
+
+Resultado esperado para o Augusto:
+
+```text
+Carga mensal: 120h
+Turnos ordinários lançados: 5 x 24h = 120h
+CM: nenhum
+Tudo depois disso: HE
+```
+
+Não vou mexer em tela, banco, aprovação, IA, rotação geral ou outros cadastros — somente nesse cálculo de carga proporcional que está causando o CM indevido.
