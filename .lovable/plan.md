@@ -1,59 +1,39 @@
-Você está certo: conferindo a última escala gerada, o AUGUSTO já fechou exatamente as 120h de carga ordinária antes daquele lançamento.
+## Problema
 
-Na linha dele aparecem 5 plantões ordinários completos:
+A função `cargaMensalProporcional` em `src/utils/escala.functions.ts` (linha 602) está arredondando o teto mensal para o múltiplo de 6 mais próximo:
 
-```text
-Dia 03: 234 + dia 04: 1 = 24h
-Dia 06: 234 + dia 07: 1 = 24h
-Dia 10: 234 + dia 11: 1 = 24h
-Dia 13: 234 + dia 14: 1 = 24h
-Dia 25: 234 + dia 26: 1 = 24h
-Total ordinário = 120h
+```ts
+return Math.round(bruto / 6) * 6;
 ```
 
-Como ele teve férias de 15 a 24 em maio, a carga mensal dele é 120h. Então, depois disso, não tinha mais nada a completar com CM. O serviço/cobertura posterior deveria ser todo HE.
+Isso inflaciona o teto (ex.: 177h vira 180h, 119h vira 120h) e quebra a classificação ORD vs HE descrita na regra do usuário, gerando os erros vermelhos de carga horária na escala atual.
 
-Plano de correção pontual:
+## Correção
 
-1. Ajustar somente a função de cálculo da carga mensal proporcional em `src/utils/escala.functions.ts`.
+Alterar a função para retornar o piso da carga proporcional, sem arredondar para múltiplos de 6:
 
-2. O cálculo atual usa proporção pela carga base fracionada do mês:
-
-```text
-177 * (1 - 10/31) = 119,90...
-Math.floor(...) = 119
+```ts
+const cargaMensalProporcional = (af: number): number => {
+  const bruto = cargaBase(dias) * (1 - af / dias);
+  return Math.floor(bruto);
+};
 ```
 
-Isso faz o motor achar que existe diferença residual/ajuste e abre espaço para CM indevido.
+Isso é suficiente porque a lógica de `lancaServico24` (linhas 836–910) já implementa exatamente a regra solicitada:
 
-3. Trocar esse cálculo para contar os dias úteis de escala como blocos de 24h proporcionalmente aos dias disponíveis, arredondando para múltiplo de turno de 6h, para refletir a lógica operacional:
+1. Calcula `espacoOrd = tetoOrd - usadoOrd`.
+2. Se `espacoOrd >= 18`, lança turno cheio `234` (ORD).
+3. Se `0 < espacoOrd < 6`, lança o saldo como **CM** no dia e completa o resto da jornada física como **HE** — fechando exatamente a carga ordinária antes de qualquer HE.
+4. Se `espacoOrd <= 0`, tudo vira **HE**, respeitando o teto mensal de HE.
 
-```text
-31 dias - 10 férias = 21 dias disponíveis
-177 * 21 / 31 = 119,90...
-arredonda para múltiplo de 6h mais próximo = 120h
-```
+A 4ª etapa (linhas 1260–1316) também usa `cargaMensalProporcional` para fechar CM administrativo e ajustar `cargaMin`. Com `Math.floor`, o alvo volta ao valor real da planilha (177h, 119h etc.), eliminando o CM/HE indevido que aparecia quando o alvo era 180h.
 
-4. Aplicar essa mesma função nos três pontos que usam carga mensal proporcional:
-   - teto ordinário usado durante o lançamento;
-   - carga alvo de ADM;
-   - acerto final de carga mensal.
+## Arquivos alterados
 
-5. Manter a regra de preenchimento exatamente como você explicou:
+- `src/utils/escala.functions.ts` — apenas as linhas 596–605 (comentário + corpo de `cargaMensalProporcional`).
 
-```text
-Enquanto ainda cabe turno ordinário de 6h, lança ordinário.
-Se faltar menos de 6h para completar a carga, lança esse resto como CM e completa o serviço como HE.
-Se a carga mensal já está fechada, não lança CM; lança tudo como HE.
-```
+## Resultado esperado
 
-Resultado esperado para o Augusto:
-
-```text
-Carga mensal: 120h
-Turnos ordinários lançados: 5 x 24h = 120h
-CM: nenhum
-Tudo depois disso: HE
-```
-
-Não vou mexer em tela, banco, aprovação, IA, rotação geral ou outros cadastros — somente nesse cálculo de carga proporcional que está causando o CM indevido.
+- Sd Augusto (carga 120h, 5 plantões = 120h): teto = 120, ORD = 120 exatos, sem CM, qualquer extra vira HE.
+- Militares com carga 177h: teto = 177 (não 180), eliminando o erro vermelho de "carga acima do limite".
+- Demais militares mantêm a lógica de fechar ORD com turnos + CM residual antes de iniciar HE.
