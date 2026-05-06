@@ -594,13 +594,11 @@ function escalar(
   };
 
   // Carga mensal proporcional ao número de dias afastados.
-  // Usa Math.floor para NUNCA ultrapassar a carga real do mês (ex.: maio=177h
-  // permanece 177, não 180). A lógica de lancaServico24 já fecha a ORD com
-  // turnos cheios + CM residual antes de iniciar HE — não precisa arredondar
-  // o teto para múltiplos de 6.
+  // Usa Math.round para casar com o cálculo manual da planilha (ex.: 119.9 -> 120),
+  // evitando split indevido em CM5+HE1 quando o turno cheio de 6h fecharia exato.
   const cargaMensalProporcional = (af: number): number => {
     const bruto = cargaBase(dias) * (1 - af / dias);
-    return Math.floor(bruto);
+    return Math.round(bruto);
   };
 
   // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
