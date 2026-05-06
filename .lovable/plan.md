@@ -1,39 +1,75 @@
-## Problema
+# Refatoração do motor de escala — fluxo sequencial rígido
 
-A função `cargaMensalProporcional` em `src/utils/escala.functions.ts` (linha 602) está arredondando o teto mensal para o múltiplo de 6 mais próximo:
+## Objetivo
 
-```ts
-return Math.round(bruto / 6) * 6;
-```
+Reproduzir o comportamento do escalante humano: primeiro montar a escala 24x72 base sem interferência, depois corrigir buracos. A escala ordinária NUNCA pode ser alterada por correções posteriores.
 
-Isso inflaciona o teto (ex.: 177h vira 180h, 119h vira 120h) e quebra a classificação ORD vs HE descrita na regra do usuário, gerando os erros vermelhos de carga horária na escala atual.
+## Fluxo alvo (substitui as etapas atuais 1–7 em `escalar()` de `src/utils/escala.functions.ts`)
 
-## Correção
+### ETAPA 1 — Indisponibilidades
+- Aplicar férias (plano anual), afastamentos da IA (FER, LTS, LAA, F, RDC etc.) e virada do mês anterior.
+- Esses dias bloqueiam o militar para qualquer lançamento ordinário.
+- NÃO substituir ninguém aqui.
 
-Alterar a função para retornar o piso da carga proporcional, sem arredondar para múltiplos de 6:
+### ETAPA 2 — Escala ordinária 24x72 completa
+- Para cada grupo (A, B, C, D = `escalas_ordinarias.ordem`), gerar a sequência de plantões 24h respeitando o ciclo 24×72 (1 dia de serviço + 3 de folga).
+- Lançar `234` no dia D + `1` no dia D+1 para todo militar do grupo da vez, **mesmo se houver indisponibilidade no dia** (nesse caso só pula o militar individual indisponível, sem repor).
+- Preencher TODOS os dias do mês.
+- **Não** olhar para mínimos de CG/COV nesta etapa. **Não** chamar nenhum candidato fora do grupo da vez.
+- Carga ordinária acumulada do mês continua sendo respeitada por militar (teto = `cargaMensalProporcional`).
 
-```ts
-const cargaMensalProporcional = (af: number): number => {
-  const bruto = cargaBase(dias) * (1 - af / dias);
-  return Math.floor(bruto);
-};
-```
+### ETAPA 3 — Retorno de afastamento
+- Quando o afastamento termina, o militar volta automaticamente ao ciclo do seu grupo original a partir do próximo plantão programado daquele grupo.
+- Sem rotacionar grupos, sem ajustar ciclo.
 
-Isso é suficiente porque a lógica de `lancaServico24` (linhas 836–910) já implementa exatamente a regra solicitada:
+### ETAPA 4 — Diagnóstico (sem escrever)
+- Para cada dia, contar:
+  - total de militares em serviço 24h iniciado naquele dia,
+  - presença de CG (≥ `minCg`),
+  - presença de COV (≥ `minCov`).
+- Montar lista `furos[]` com (dia, faltam, falta_cg, falta_cov).
 
-1. Calcula `espacoOrd = tetoOrd - usadoOrd`.
-2. Se `espacoOrd >= 18`, lança turno cheio `234` (ORD).
-3. Se `0 < espacoOrd < 6`, lança o saldo como **CM** no dia e completa o resto da jornada física como **HE** — fechando exatamente a carga ordinária antes de qualquer HE.
-4. Se `espacoOrd <= 0`, tudo vira **HE**, respeitando o teto mensal de HE.
+### ETAPA 5 — Correção dos buracos (sem mexer em ORD)
+- Para cada furo, escolher militares **de outros grupos** elegíveis:
+  - ativo, não-ADM, não-parcial,
+  - sem ORD/HE/afastamento no dia e no dia anterior/seguinte (folga 12h),
+  - dentro do teto mensal de HE,
+  - sem violar `evitarFragmentar` quando aplicável.
+- Estes militares são lançados **somente como HE**, nunca como ORD.
 
-A 4ª etapa (linhas 1260–1316) também usa `cargaMensalProporcional` para fechar CM administrativo e ajustar `cargaMin`. Com `Math.floor`, o alvo volta ao valor real da planilha (177h, 119h etc.), eliminando o CM/HE indevido que aparecia quando o alvo era 180h.
+### ETAPA 6 — Hora extra
+- Lançar HE16+HE8 (jornada cheia 24h) por padrão; fragmentar (HE6/HE8/HE12/HE16) só quando não couber HE cheio.
+- Respeitar 12h de descanso e teto mensal de HE.
 
-## Arquivos alterados
+### ETAPA 7 — Acerto de carga (mantida)
+- Apenas para fechar carga ordinária com **CM** (complementação) em dias úteis livres, respeitando o teto físico de 16h/dia.
+- Nunca cria HE nesta etapa. Nunca toca em ORD já lançada.
 
-- `src/utils/escala.functions.ts` — apenas as linhas 596–605 (comentário + corpo de `cargaMensalProporcional`).
+### ETAPA 8 — Sanidade final + alertas (mantida)
+- Garantir ≤24h físicas/dia, gerar alertas de furos remanescentes, conflitos de descanso e carga divergente.
 
-## Resultado esperado
+## Mudanças concretas no código
 
-- Sd Augusto (carga 120h, 5 plantões = 120h): teto = 120, ORD = 120 exatos, sem CM, qualquer extra vira HE.
-- Militares com carga 177h: teto = 177 (não 180), eliminando o erro vermelho de "carga acima do limite".
-- Demais militares mantêm a lógica de fechar ORD com turnos + CM residual antes de iniciar HE.
+Arquivo: `src/utils/escala.functions.ts`, função `escalar()`.
+
+1. **Reescrever a etapa 3 atual** (loop `for (let dia = 1; dia <= dias; dia++)` que mistura ORD + HE no mesmo dia) em duas etapas separadas:
+   - Etapa 2 nova: loop por grupo + ciclo 24×72, lançando só ORD do grupo da vez.
+   - Etapa 4/5 nova: depois que todo ORD está pronto, varrer dias e tapar furos com HE.
+2. **Remover** o fallback que hoje, ainda dentro do loop diário, chama `escolher("BM") ?? escolher("CG") ?? escolher("COV")` para completar `totalAlvo` com ORD de outro grupo. Isso vira HE na etapa 5.
+3. **Manter** `lancaServico24` como está — já implementa a regra "fecha ORD até o teto, depois HE no mesmo serviço". Continua sendo usada **somente** pela etapa 2 (para o grupo da vez) e pela etapa 5 com `destinoHe = true`.
+4. **Manter** etapa 7 (acerto de carga via CM) e etapa 8 (sanidade) sem mudança.
+5. **Corrigir** `cargaMensalProporcional` para `Math.round(bruto)` em vez de `Math.floor(bruto)`. Motivo concreto: na última escala gerada, Sd Augusto (10 dias de férias em maio) recebeu alvo 119h (`floor(119,9)`) em vez de 120h, o que causou `CM5+HE1` no dia 26 em vez de fechar com `1` ordinário. Com `round` o alvo vira 120h e os 5 plantões fecham exatos.
+
+## Fora do escopo
+
+- Banco, UI, autenticação, importação XLSX (`xlsx-surgical.ts`).
+- Renomeação de funções públicas.
+
+## Validação
+
+Após implementar:
+1. Reimportar a planilha de Panambi (maio/2026) e confirmar:
+   - Augusto: 5 plantões 234+1, sem CM5/HE1 no dia 26, total 120h ORD.
+   - Nenhum militar recebendo ORD fora do seu grupo de rotação (A/B/C/D).
+   - Furos de guarnição lançados como HE em militares de outros grupos.
+2. Conferir alertas: não deve aparecer mais "ORD acima da carga mensal" para militares com afastamento.
