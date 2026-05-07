@@ -25,7 +25,7 @@ const ParametrosSchema = z.object({
 });
 
 const InputSchema = z.object({
-  fileBase64: z.string().min(100),
+  fileBase64: z.string().min(100).max(11_000_000), // ~8 MB after base64
   fileName: z.string().min(1).max(255),
   mes: z.number().int().min(1).max(12),
   ano: z.number().int().min(2024).max(2100),
@@ -1553,6 +1553,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
 
     /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
+    if (bin.byteLength > 8_000_000) throw new Error("Arquivo muito grande (máximo 8 MB).");
     let bundle;
     try {
       bundle = loadXlsx(bin);
