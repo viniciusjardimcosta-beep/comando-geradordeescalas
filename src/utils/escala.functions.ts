@@ -1169,7 +1169,7 @@ function escalar(
         usadosHe.add(m.rowOrd);
         faltam--;
         const lim = limiteHePorMilitar.get(m.rowOrd);
-        const teto = lim?.maxHoras ?? Infinity;
+        const teto = lim?.max ?? Infinity;
         if (Number.isFinite(teto)) {
           alertas.push({
             tipo: "info",
