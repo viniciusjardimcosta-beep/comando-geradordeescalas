@@ -1115,6 +1115,88 @@ function escalar(
       escalaHeCheio(m);
     }
 
+    // ===== EXCEÇÃO: efetivo mínimo tem PRIORIDADE ABSOLUTA sobre teto de HE =====
+    // Se ainda faltam militares (ou CG/COV) após esgotar candidatos respeitando o
+    // limite mensal de HE, fazemos uma 2ª passada IGNORANDO o teto de HE.
+    // Prioridade: 1) efetivo mínimo  2) CG  3) COV  4) distribuição  5) limites HE.
+    // Cada lançamento como exceção é registrado em `alertas` (tipo info).
+    const precisaForcar = () =>
+      faltam > 0 || cgAtuais() < minCg || covAtuais() < minCov;
+
+    if (precisaForcar()) {
+      const candidatosForcados = militares
+        .filter((m) => {
+          if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") return false;
+          if (indisp.has(m.rowOrd)) return false;
+          if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
+          if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (slotOrd.has(m.rowOrd)) return false;
+          if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234") return false;
+          if (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234") return false;
+          if (slotHe.has(m.rowOrd)) return false;
+          if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (usadosHe.has(m.rowOrd)) return false;
+          // ÚNICA diferença: NÃO checa limiteRestanteHe — efetivo mínimo > teto HE.
+          return true;
+        })
+        .sort((a, b) => {
+          // prioriza quem tem MAIOR teto restante (menos exceção) e menor carga
+          const ra = limiteRestanteHe(a);
+          const rb = limiteRestanteHe(b);
+          if (ra !== rb) return rb - ra;
+          return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+        });
+
+      const forcar = (m: MilitarRT) => {
+        // lança HE24 ignorando teto, registra exceção
+        const heAntes = horasHeMes(m);
+        // emula escalaHeCheio mas sem limites
+        if (dia >= dias || !he.get(dia + 1)?.has(m.rowOrd)) {
+          lancaServico24(m, dia, true);
+        } else {
+          // sem espaço pra 24h — fragmenta no dia
+          const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
+          const h = Math.min(espacoFisico, horasMaximasNoDia(dia));
+          if (h <= 0) return false;
+          let bloco = h;
+          for (const cand of [16, 12, 8, 6]) { if (cand <= h) { bloco = cand; break; } }
+          he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
+          m.cargaH += bloco;
+          marcaInicioServico(m, dia);
+          m.ultimoServico = dia;
+        }
+        usadosHe.add(m.rowOrd);
+        faltam--;
+        const lim = limiteHePorMilitar.get(m.rowOrd);
+        const teto = lim?.maxHoras ?? Infinity;
+        if (Number.isFinite(teto)) {
+          alertas.push({
+            tipo: "info",
+            msg: `Dia ${dia}: ${m.nome} escalado como EXCEÇÃO ao limite de HE (já tinha ${heAntes}h, teto ${teto}h) para garantir efetivo mínimo de ${totalAlvo} militares.`,
+          });
+        }
+        return true;
+      };
+
+      // 1º CG, 2º COV, 3º preencher total
+      while (precisaForcar() && cgAtuais() < minCg) {
+        const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
+        if (!m) break;
+        if (!forcar(m)) usadosHe.add(m.rowOrd);
+      }
+      while (precisaForcar() && covAtuais() < minCov) {
+        const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
+        if (!m) break;
+        if (!forcar(m)) usadosHe.add(m.rowOrd);
+      }
+      for (const m of candidatosForcados) {
+        if (faltam <= 0) break;
+        if (usadosHe.has(m.rowOrd)) continue;
+        forcar(m);
+      }
+    }
+
     // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
     // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
     // fora para que o alerta seja acionável (ex: "todos os CG atingiram o teto
