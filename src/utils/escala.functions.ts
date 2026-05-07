@@ -25,7 +25,7 @@ const ParametrosSchema = z.object({
 });
 
 const InputSchema = z.object({
-  fileBase64: z.string().min(100),
+  fileBase64: z.string().min(100).max(11_000_000), // ~8 MB after base64
   fileName: z.string().min(1).max(255),
   mes: z.number().int().min(1).max(12),
   ano: z.number().int().min(2024).max(2100),
