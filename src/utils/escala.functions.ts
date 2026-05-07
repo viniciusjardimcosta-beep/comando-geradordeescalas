@@ -954,22 +954,22 @@ function escalar(
     // depois o resto por menor carga.
     // Em ciclo 24x72 com 4 grupos, grupo do dia D = ((D-1) mod 4) + 1
     const grupoDoDia = ((dia - 1) % 4) + 1;
+    // REGRA RÍGIDA: na escala ORDINÁRIA só entram militares do grupo da vez
+    // (ou sem grupo definido — usam rotação por menor carga). Cross-group é
+    // proibido aqui — qualquer furo restante será tapado SOMENTE como HE na
+    // etapa seguinte. Isto reproduz o comportamento do escalante humano:
+    // monta a 24x72 base sem interferência, só depois corrige falhas.
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
-      // 1) Preferir militares do grupo da vez
       const noGrupo = militares
         .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
         .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
       if (noGrupo[0]) return noGrupo[0];
-      // 2) Fallback: militares SEM grupo definido (entram na rotação por menor carga)
+      // Militares sem grupo definido (config legada): entram por menor carga
       const semGrupo = militares
         .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
         .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
-      if (semGrupo[0]) return semGrupo[0];
-      // 3) Último recurso: qualquer militar elegível de outro grupo (menor carga)
-      const outros = militares
-        .filter((m) => elegivel(m, papel))
-        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
-      return outros[0] ?? null;
+      return semGrupo[0] ?? null;
+      // NÃO há fallback cross-group em ORD: furo vira HE na etapa 4.
     };
 
     // obrigatórios primeiro
