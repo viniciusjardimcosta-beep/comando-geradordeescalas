@@ -1553,6 +1553,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
 
     /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
+    if (bin.byteLength > 8_000_000) throw new Error("Arquivo muito grande (máximo 8 MB).");
     let bundle;
     try {
       bundle = loadXlsx(bin);
