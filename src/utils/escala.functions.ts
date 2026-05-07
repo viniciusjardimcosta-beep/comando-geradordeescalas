@@ -1493,15 +1493,36 @@ export const gerarEscala = createServerFn({ method: "POST" })
     anexoSheet = getSheetXml(bundle, "anexo b");
     efetivoSheet = getSheetXml(bundle, "efetivo");
 
-    /* 3) Ler Efetivo — B=id func, C=nome, D=posto */
+    /* 3) Ler Efetivo — B=id func, C=nome, D=posto.
+       MAPEAMENTO RÍGIDO: cada militar é uma linha consecutiva da aba Efetivo,
+       e ocupa 3 linhas FIXAS na aba Anexo B (ORD, EXP, HE). NÃO pular linhas
+       automaticamente. Primeira linha vazia encerra a leitura; qualquer linha
+       com dados após ela é erro fatal de mapeamento. */
     const efetivoRows: { idFunc: string; nome: string; postoGrad: string }[] = [];
     const efRows = iterRows(efetivoSheet.xml);
     const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
+    let leituraEncerrada = false;
     for (let r = 2; r <= maxEfRow; r++) {
       const idFunc = readCell(bundle, efetivoSheet.xml, makeRef(r, 2));
       const nomeStr = readCell(bundle, efetivoSheet.xml, makeRef(r, 3));
       const posto = readCell(bundle, efetivoSheet.xml, makeRef(r, 4));
-      if (!nomeStr.trim()) continue;
+      const vazia = !nomeStr.trim() && !idFunc.trim();
+      if (vazia) {
+        leituraEncerrada = true;
+        continue;
+      }
+      if (leituraEncerrada) {
+        throw new Error(
+          `Erro de mapeamento de militar detectado. Linha ${r} da aba Efetivo possui dados após uma linha vazia. ` +
+          `Cada militar deve ocupar exatamente 3 linhas consecutivas (ORD/EFE, EXP/COM, HE) sem buracos. ` +
+          `Corrija a planilha removendo a linha vazia ou os dados órfãos.`
+        );
+      }
+      if (!nomeStr.trim()) {
+        throw new Error(
+          `Erro de mapeamento de militar detectado. Linha ${r} da aba Efetivo tem matrícula mas nome vazio.`
+        );
+      }
       efetivoRows.push({
         idFunc: normMatricula(idFunc),
         nome: nomeStr,
