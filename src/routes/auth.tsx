@@ -36,9 +36,11 @@ function AuthPage() {
   // Recuperação
   const [resetEmail, setResetEmail] = useState("");
 
-  if (!authLoading && session) {
-    navigate({ to: "/" });
-  }
+  useEffect(() => {
+    if (!authLoading && session) {
+      navigate({ to: "/" });
+    }
+  }, [authLoading, session, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
