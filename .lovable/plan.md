@@ -1,75 +1,78 @@
-# Refatoração do motor de escala — fluxo sequencial rígido
+## Problema
 
-## Objetivo
+Na última escala, militares **ADM** apareceram com expediente (EXP) em sábados, domingos e/ou feriados. Pela regra do quartel, ADM cumpre EXP **apenas em dias úteis** (seg-qui = EXP9, sex = EXP6). Para militares operacionais, CM/EXP em fim de semana é legítimo (faz parte do plantão) — eles ficam fora desta correção.
 
-Reproduzir o comportamento do escalante humano: primeiro montar a escala 24x72 base sem interferência, depois corrigir buracos. A escala ordinária NUNCA pode ser alterada por correções posteriores.
+## Diagnóstico
 
-## Fluxo alvo (substitui as etapas atuais 1–7 em `escalar()` de `src/utils/escala.functions.ts`)
+Em `src/utils/escala.functions.ts` os 3 pontos que escrevem EXP para ADM já chamam `isDiaExpediente(...)` (linhas 1347, 1362, 1813), então o lançamento direto não deveria cair em fds. Mesmo assim apareceu, o que aponta para uma destas três causas residuais:
 
-### ETAPA 1 — Indisponibilidades
-- Aplicar férias (plano anual), afastamentos da IA (FER, LTS, LAA, F, RDC etc.) e virada do mês anterior.
-- Esses dias bloqueiam o militar para qualquer lançamento ordinário.
-- NÃO substituir ninguém aqui.
+1. **Lançamento via observações livres da IA** (linha 716) — se a IA interpretar "lançar EXP9 dia 30" e 30 cair num sábado, o lançamento entra sem filtro.
+2. **Feriado fora da lista nacional** (`feriadosBrasil`, linhas 170-187) — feriados estaduais/municipais (ex.: 23/05 SP, dia do servidor estadual etc.) não estão na lista, então `isDiaExpediente` os trata como dia útil e o ADM ganha EXP.
+3. **Conteúdo residual da planilha** — alguma célula da linha EXP do bloco ADM não foi limpa (merge / fórmula) e sobreviveu na saída.
 
-### ETAPA 2 — Escala ordinária 24x72 completa
-- Para cada grupo (A, B, C, D = `escalas_ordinarias.ordem`), gerar a sequência de plantões 24h respeitando o ciclo 24×72 (1 dia de serviço + 3 de folga).
-- Lançar `234` no dia D + `1` no dia D+1 para todo militar do grupo da vez, **mesmo se houver indisponibilidade no dia** (nesse caso só pula o militar individual indisponível, sem repor).
-- Preencher TODOS os dias do mês.
-- **Não** olhar para mínimos de CG/COV nesta etapa. **Não** chamar nenhum candidato fora do grupo da vez.
-- Carga ordinária acumulada do mês continua sendo respeitada por militar (teto = `cargaMensalProporcional`).
+## Solução
 
-### ETAPA 3 — Retorno de afastamento
-- Quando o afastamento termina, o militar volta automaticamente ao ciclo do seu grupo original a partir do próximo plantão programado daquele grupo.
-- Sem rotacionar grupos, sem ajustar ciclo.
+Defesa em profundidade: depois de toda a lógica de geração, e **antes** de serializar o xlsx, varrer todos os militares com `isAdm=true` e **apagar qualquer entrada de `expm` em dia que não seja `isDiaExpediente`**. Como a regra do quartel é absoluta para ADM, esse saneamento é seguro e cobre as três causas acima de uma vez.
 
-### ETAPA 4 — Diagnóstico (sem escrever)
-- Para cada dia, contar:
-  - total de militares em serviço 24h iniciado naquele dia,
-  - presença de CG (≥ `minCg`),
-  - presença de COV (≥ `minCov`).
-- Montar lista `furos[]` com (dia, faltam, falta_cg, falta_cov).
+Adicionalmente:
 
-### ETAPA 5 — Correção dos buracos (sem mexer em ORD)
-- Para cada furo, escolher militares **de outros grupos** elegíveis:
-  - ativo, não-ADM, não-parcial,
-  - sem ORD/HE/afastamento no dia e no dia anterior/seguinte (folga 12h),
-  - dentro do teto mensal de HE,
-  - sem violar `evitarFragmentar` quando aplicável.
-- Estes militares são lançados **somente como HE**, nunca como ORD.
+- Registrar um alerta `info` listando exatamente quais células ADM foram saneadas (militar + dia + sigla removida), para o usuário ter rastreabilidade.
+- Acrescentar saneamento simétrico na linha **HE** dos ADM em fds/feriado (mesma justificativa: ADM não trabalha fora do horário comercial; HE em sábado é incoerente).
+- Garantir que, mesmo quando vier do passo de "lançamento direto" da IA (linha 681+), siglas EXP/HE em ADM em fim de semana sejam descartadas com um `warn` no momento do parse — assim o usuário descobre que sua observação está em conflito com a regra fixa.
 
-### ETAPA 6 — Hora extra
-- Lançar HE16+HE8 (jornada cheia 24h) por padrão; fragmentar (HE6/HE8/HE12/HE16) só quando não couber HE cheio.
-- Respeitar 12h de descanso e teto mensal de HE.
+## Código
 
-### ETAPA 7 — Acerto de carga (mantida)
-- Apenas para fechar carga ordinária com **CM** (complementação) em dias úteis livres, respeitando o teto físico de 16h/dia.
-- Nunca cria HE nesta etapa. Nunca toca em ORD já lançada.
+Arquivo único alterado: `src/utils/escala.functions.ts`.
 
-### ETAPA 8 — Sanidade final + alertas (mantida)
-- Garantir ≤24h físicas/dia, gerar alertas de furos remanescentes, conflitos de descanso e carga divergente.
+1. **Saneamento final ADM** — novo bloco logo após a "6ª ETAPA — Sanidade final" (linha ~1488), antes da "7ª ETAPA":
 
-## Mudanças concretas no código
+```ts
+/* 6.5ª ETAPA — ADM nunca tem EXP/HE em sábado, domingo ou feriado.
+   Defesa em profundidade contra lançamentos manuais da IA, feriados
+   estaduais ausentes da lista nacional e resíduos do XML original. */
+const saneadosAdm: string[] = [];
+for (const m of militares) {
+  if (!m.isAdm) continue;
+  for (let d = 1; d <= dias; d++) {
+    if (isDiaExpediente(ano, mes, d)) continue;
+    const sExp = expm.get(d)?.get(m.rowOrd);
+    if (sExp) {
+      expm.get(d)!.delete(m.rowOrd);
+      saneadosAdm.push(`${m.nome} dia ${d}: EXP ${sExp} removido`);
+    }
+    const sHe = he.get(d)?.get(m.rowOrd);
+    if (sHe) {
+      he.get(d)!.delete(m.rowOrd);
+      saneadosAdm.push(`${m.nome} dia ${d}: HE ${sHe} removido`);
+    }
+  }
+}
+if (saneadosAdm.length) {
+  alertas.push({
+    tipo: "info",
+    msg: `ADM saneado (sem EXP/HE em fds/feriado): ${saneadosAdm.join("; ")}.`,
+  });
+}
+```
 
-Arquivo: `src/utils/escala.functions.ts`, função `escalar()`.
+2. **Bloqueio na origem (lançamentos da IA)** — dentro do loop em `~704-718`, quando o destino for militar ADM em dia não-expediente para linha EXP/HE, descartar com `warn`:
 
-1. **Reescrever a etapa 3 atual** (loop `for (let dia = 1; dia <= dias; dia++)` que mistura ORD + HE no mesmo dia) em duas etapas separadas:
-   - Etapa 2 nova: loop por grupo + ciclo 24×72, lançando só ORD do grupo da vez.
-   - Etapa 4/5 nova: depois que todo ORD está pronto, varrer dias e tapar furos com HE.
-2. **Remover** o fallback que hoje, ainda dentro do loop diário, chama `escolher("BM") ?? escolher("CG") ?? escolher("COV")` para completar `totalAlvo` com ORD de outro grupo. Isso vira HE na etapa 5.
-3. **Manter** `lancaServico24` como está — já implementa a regra "fecha ORD até o teto, depois HE no mesmo serviço". Continua sendo usada **somente** pela etapa 2 (para o grupo da vez) e pela etapa 5 com `destinoHe = true`.
-4. **Manter** etapa 7 (acerto de carga via CM) e etapa 8 (sanidade) sem mudança.
-5. **Corrigir** `cargaMensalProporcional` para `Math.round(bruto)` em vez de `Math.floor(bruto)`. Motivo concreto: na última escala gerada, Sd Augusto (10 dias de férias em maio) recebeu alvo 119h (`floor(119,9)`) em vez de 120h, o que causou `CM5+HE1` no dia 26 em vez de fechar com `1` ordinário. Com `round` o alvo vira 120h e os 5 plantões fecham exatos.
+```ts
+for (const m of alvos) {
+  if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Lançamento ${sigla} ignorado para ${m.nome} dia ${d}: ADM não trabalha em fds/feriado.`,
+    });
+    continue;
+  }
+  // ...resto do código original
+}
+```
 
-## Fora do escopo
+3. **Sem mudanças** nas 3 rotinas de criação de EXP ADM já existentes (1347, 1362, 1813) — elas já filtram corretamente; o saneamento final apenas garante o invariante.
 
-- Banco, UI, autenticação, importação XLSX (`xlsx-surgical.ts`).
-- Renomeação de funções públicas.
+## Fora de escopo
 
-## Validação
-
-Após implementar:
-1. Reimportar a planilha de Panambi (maio/2026) e confirmar:
-   - Augusto: 5 plantões 234+1, sem CM5/HE1 no dia 26, total 120h ORD.
-   - Nenhum militar recebendo ORD fora do seu grupo de rotação (A/B/C/D).
-   - Furos de guarnição lançados como HE em militares de outros grupos.
-2. Conferir alertas: não deve aparecer mais "ORD acima da carga mensal" para militares com afastamento.
+- Cadastro de feriados estaduais/municipais (pode virar um próximo pedido — hoje a defesa é a remoção pós-fato).
+- Alterações em CM/EXP de militares operacionais 24h em fds — segundo confirmação do usuário, são legítimos.
