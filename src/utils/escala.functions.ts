@@ -704,6 +704,13 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
+        if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ${sigla} ignorado para ${m.nome} dia ${d}: ADM não trabalha em fds/feriado.`,
+          });
+          continue;
+        }
         if (linha === "ORD" && (sigla === "2341" || sigla === "1234")) {
           // Serviço 24h SEMPRE em duas células: 234 em D + 1 em D+1
           ord.get(d)!.set(m.rowOrd, "234");
