@@ -704,6 +704,13 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
+        if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ${sigla} ignorado para ${m.nome} dia ${d}: ADM não trabalha em fds/feriado.`,
+          });
+          continue;
+        }
         if (linha === "ORD" && (sigla === "2341" || sigla === "1234")) {
           // Serviço 24h SEMPRE em duas células: 234 em D + 1 em D+1
           ord.get(d)!.set(m.rowOrd, "234");
@@ -1484,6 +1491,33 @@ function escalar(
     alertas.push({
       tipo: "warn",
       msg: `Combinações que passariam de 24h no mesmo dia foram ajustadas automaticamente: ${correcoes.join("; ")}.`,
+    });
+  }
+
+  /* 6.5ª ETAPA — ADM nunca tem EXP/HE em sábado, domingo ou feriado.
+     Defesa em profundidade contra lançamentos manuais da IA, feriados
+     estaduais ausentes da lista nacional e resíduos do XML original. */
+  const saneadosAdm: string[] = [];
+  for (const m of militares) {
+    if (!m.isAdm) continue;
+    for (let d = 1; d <= dias; d++) {
+      if (isDiaExpediente(ano, mes, d)) continue;
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp) {
+        expm.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: EXP ${sExp} removido`);
+      }
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe) {
+        he.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: HE ${sHe} removido`);
+      }
+    }
+  }
+  if (saneadosAdm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `ADM saneado (sem EXP/HE em fds/feriado): ${saneadosAdm.join("; ")}.`,
     });
   }
 
