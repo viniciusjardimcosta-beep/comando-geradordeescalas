@@ -1494,6 +1494,33 @@ function escalar(
     });
   }
 
+  /* 6.5ª ETAPA — ADM nunca tem EXP/HE em sábado, domingo ou feriado.
+     Defesa em profundidade contra lançamentos manuais da IA, feriados
+     estaduais ausentes da lista nacional e resíduos do XML original. */
+  const saneadosAdm: string[] = [];
+  for (const m of militares) {
+    if (!m.isAdm) continue;
+    for (let d = 1; d <= dias; d++) {
+      if (isDiaExpediente(ano, mes, d)) continue;
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp) {
+        expm.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: EXP ${sExp} removido`);
+      }
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe) {
+        he.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: HE ${sHe} removido`);
+      }
+    }
+  }
+  if (saneadosAdm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `ADM saneado (sem EXP/HE em fds/feriado): ${saneadosAdm.join("; ")}.`,
+    });
+  }
+
   /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
   const furos: string[] = [];
   const conflitosDescanso: string[] = [];
