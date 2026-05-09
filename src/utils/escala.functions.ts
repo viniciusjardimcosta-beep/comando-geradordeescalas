@@ -1212,6 +1212,13 @@ function escalar(
         forcar(m);
       }
     }
+    } // fim if (par.modo === "auto") — ordinário puro pula HE-filling
+
+    // Helpers para o diagnóstico (independente de modo).
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
+    const faltam = Math.max(0, totalAlvo - escalados24);
 
     // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
     // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
@@ -1219,7 +1226,7 @@ function escalar(
     // de 24h de HE configurado nas observações").
     const cgFalta = Math.max(0, minCg - cgAtuais());
     const covFalta = Math.max(0, minCov - covAtuais());
-    const efetivoFalta = Math.max(0, faltam);
+    const efetivoFalta = faltam;
     if (efetivoFalta > 0 || cgFalta > 0 || covFalta > 0) {
       // recontagem de motivos sobre o universo operacional (não-ADM, não-parcial, ativo)
       const universo = militares.filter(
