@@ -1280,10 +1280,15 @@ function escalar(
       if (motivos.jaTemHe > 0) detalhes.push(`${motivos.jaTemHe} já com HE no dia/véspera`);
       if (motivos.ordNoDia > 0) detalhes.push(`${motivos.ordNoDia} já em ORD no dia`);
 
+      // Formato dos rótulos:
+      //  - falta CG / falta COV / falta CG e COV (sem número — função específica)
+      //  - falta N militar(es) quando só falta efetivo genérico
       const partes: string[] = [];
-      if (cgFalta > 0) partes.push(`${cgFalta} CG`);
-      if (covFalta > 0) partes.push(`${covFalta} COV`);
-      if (efetivoFalta > 0 && partes.length === 0) partes.push(`${efetivoFalta} militar(es)`);
+      if (cgFalta > 0) partes.push("CG");
+      if (covFalta > 0) partes.push("COV");
+      if (partes.length === 0 && efetivoFalta > 0) {
+        partes.push(`${efetivoFalta} militar${efetivoFalta > 1 ? "es" : ""}`);
+      }
 
       const motivoTxt = detalhes.length > 0
         ? ` Motivo: ${detalhes.join("; ")}.`
