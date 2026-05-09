@@ -22,6 +22,13 @@ const ParametrosSchema = z.object({
   minCovPorDia: z.number().int().min(0).max(10).default(1),
   minCgPorDia: z.number().int().min(0).max(10).default(1),
   observacoesTexto: z.string().max(10000).default(""),
+  /**
+   * Modo de geração:
+   *  - "auto": gera 24x72, tapa furos com HE, completa carga (CM/EXP) e entrega escala final.
+   *  - "ordinario_puro": gera apenas a ordinária 24x72 respeitando indisponibilidades.
+   *    NÃO tapa furos, NÃO lança HE, NÃO completa carga. Apenas registra alertas dos problemas.
+   */
+  modo: z.enum(["auto", "ordinario_puro"]).default("auto"),
 });
 
 const InputSchema = z.object({
