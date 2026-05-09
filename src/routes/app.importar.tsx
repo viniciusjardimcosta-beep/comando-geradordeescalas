@@ -100,6 +100,7 @@ function ImportarPage() {
   const [militaresPorDia, setMilitaresPorDia] = useState(4);
   const [minCovPorDia, setMinCovPorDia] = useState(1);
   const [minCgPorDia, setMinCgPorDia] = useState(1);
+  const [modo, setModo] = useState<"auto" | "ordinario_puro">("auto");
   const [observacoesTexto, setObservacoesTexto] = useState("");
 
   // Virada do mês anterior
