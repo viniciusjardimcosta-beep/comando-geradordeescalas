@@ -1038,6 +1038,8 @@ function escalar(
     if (faltam <= 0) continue;
 
     const indisp = naoEscalar.get(dia)!;
+    // MODO ORDINÁRIO PURO: pula tapamento de furos com HE; segue direto pro diagnóstico.
+    if (par.modo === "auto") {
     // Candidatos para HE: lançamento é previsão de necessidade de HE.
     // BLOQUEIOS DE FOLGA: HE só vale se o militar estiver realmente livre — sem
     // ORD adjacente (folga 12h pré-plantão D+1 e pós-plantão D-1).
