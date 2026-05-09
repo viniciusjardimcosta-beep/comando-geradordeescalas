@@ -220,7 +220,7 @@ function ImportarPage() {
           fileBase64: base64,
           fileName: file.name,
           mes, ano,
-          parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto },
+          parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto, modo },
           viradaAnterior,
         },
         headers: { Authorization: `Bearer ${session.access_token}` },
