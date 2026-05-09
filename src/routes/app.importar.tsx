@@ -100,6 +100,7 @@ function ImportarPage() {
   const [militaresPorDia, setMilitaresPorDia] = useState(4);
   const [minCovPorDia, setMinCovPorDia] = useState(1);
   const [minCgPorDia, setMinCgPorDia] = useState(1);
+  const [modo, setModo] = useState<"auto" | "ordinario_puro">("auto");
   const [observacoesTexto, setObservacoesTexto] = useState("");
 
   // Virada do mês anterior
@@ -219,7 +220,7 @@ function ImportarPage() {
           fileBase64: base64,
           fileName: file.name,
           mes, ano,
-          parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto },
+          parametros: { militaresPorDia, minCovPorDia, minCgPorDia, observacoesTexto, modo },
           viradaAnterior,
         },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -402,6 +403,34 @@ function ImportarPage() {
               reforços de COV/CG em dias específicos ou exceções por militar. A IA vai interpretar e aplicar.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Modo de geração */}
+          <div className="space-y-2 rounded-md border border-border bg-input/30 p-3">
+            <Label className="text-sm font-semibold">Modo de geração</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setModo("auto")}
+                className={`rounded-md border p-3 text-left text-sm transition ${modo === "auto" ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}
+              >
+                <div className="font-semibold">Automático (com correção)</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Gera 24x72, tapa furos com HE, completa carga (CM/EXP) e entrega escala final.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModo("ordinario_puro")}
+                className={`rounded-md border p-3 text-left text-sm transition ${modo === "ordinario_puro" ? "border-primary bg-primary/10" : "border-border hover:bg-muted/40"}`}
+              >
+                <div className="font-semibold">Ordinário puro (sem HE)</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Apenas 24x72 respeitando indisponibilidades. Não tapa furos, não lança HE,
+                  não completa guarnições. Problemas são apenas registrados como alertas.
+                </p>
+              </button>
+            </div>
+          </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">

@@ -22,6 +22,13 @@ const ParametrosSchema = z.object({
   minCovPorDia: z.number().int().min(0).max(10).default(1),
   minCgPorDia: z.number().int().min(0).max(10).default(1),
   observacoesTexto: z.string().max(10000).default(""),
+  /**
+   * Modo de geração:
+   *  - "auto": gera 24x72, tapa furos com HE, completa carga (CM/EXP) e entrega escala final.
+   *  - "ordinario_puro": gera apenas a ordinária 24x72 respeitando indisponibilidades.
+   *    NÃO tapa furos, NÃO lança HE, NÃO completa carga. Apenas registra alertas dos problemas.
+   */
+  modo: z.enum(["auto", "ordinario_puro"]).default("auto"),
 });
 
 const InputSchema = z.object({
@@ -1031,6 +1038,8 @@ function escalar(
     if (faltam <= 0) continue;
 
     const indisp = naoEscalar.get(dia)!;
+    // MODO ORDINÁRIO PURO: pula tapamento de furos com HE; segue direto pro diagnóstico.
+    if (par.modo === "auto") {
     // Candidatos para HE: lançamento é previsão de necessidade de HE.
     // BLOQUEIOS DE FOLGA: HE só vale se o militar estiver realmente livre — sem
     // ORD adjacente (folga 12h pré-plantão D+1 e pós-plantão D-1).
@@ -1203,6 +1212,13 @@ function escalar(
         forcar(m);
       }
     }
+    } // fim if (par.modo === "auto") — ordinário puro pula HE-filling
+
+    // Helpers para o diagnóstico (independente de modo).
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const escalados24Final = militares.filter((m) => estaEmServico24(m, dia)).length;
+    const faltamFinal = Math.max(0, totalAlvo - escalados24Final);
 
     // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
     // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
@@ -1210,7 +1226,7 @@ function escalar(
     // de 24h de HE configurado nas observações").
     const cgFalta = Math.max(0, minCg - cgAtuais());
     const covFalta = Math.max(0, minCov - covAtuais());
-    const efetivoFalta = Math.max(0, faltam);
+    const efetivoFalta = faltamFinal;
     if (efetivoFalta > 0 || cgFalta > 0 || covFalta > 0) {
       // recontagem de motivos sobre o universo operacional (não-ADM, não-parcial, ativo)
       const universo = militares.filter(
@@ -1339,6 +1355,22 @@ function escalar(
 
   for (const m of militares) {
     if (!m.ativo) continue;
+
+    // MODO ORDINÁRIO PURO: NÃO completa carga (sem CM, EXP novo ou HE).
+    // Apenas registra alerta se a carga ORD ficou abaixo/acima da mínima mensal.
+    if (par.modo === "ordinario_puro") {
+      if (m.isAdm) continue;
+      const diasAfPure = diasAfastadoMap.get(m.rowOrd) ?? 0;
+      const cargaMinPure = cargaMensalProporcional(diasAfPure);
+      if (cargaMinPure <= 0) continue;
+      const cargaOrdPure = horasOrdMes(m);
+      if (cargaOrdPure < cargaMinPure) {
+        acertosCm.push(`${m.nome} (faltam ${cargaMinPure - cargaOrdPure}h — modo ordinário puro: sem complemento)`);
+      } else if (cargaOrdPure > cargaMinPure) {
+        acertosHe.push(`${m.nome} (+${cargaOrdPure - cargaMinPure}h ORD acima da carga — verificar)`);
+      }
+      continue;
+    }
 
     // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
     if (m.isAdm) {
