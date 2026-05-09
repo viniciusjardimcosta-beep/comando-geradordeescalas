@@ -1226,7 +1226,7 @@ function escalar(
     // de 24h de HE configurado nas observações").
     const cgFalta = Math.max(0, minCg - cgAtuais());
     const covFalta = Math.max(0, minCov - covAtuais());
-    const efetivoFalta = faltam;
+    const efetivoFalta = faltamFinal;
     if (efetivoFalta > 0 || cgFalta > 0 || covFalta > 0) {
       // recontagem de motivos sobre o universo operacional (não-ADM, não-parcial, ativo)
       const universo = militares.filter(
