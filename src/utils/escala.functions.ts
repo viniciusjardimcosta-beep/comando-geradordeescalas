@@ -1614,10 +1614,22 @@ export const gerarEscala = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => InputSchema.parse(input))
   .handler(async ({ data, context }) => {
    try {
-    const { supabase, userId } = context;
-    const alertas: Alerta[] = [];
+     const { supabase, userId } = context;
 
-    /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
+     /* 0) Guard de autorização: somente usuários aprovados podem gerar escala */
+     const { data: profileStatus, error: profileErr } = await supabase
+       .from("profiles")
+       .select("status")
+       .eq("id", userId)
+       .maybeSingle();
+     if (profileErr) throw new Error("Não foi possível validar o perfil do usuário.");
+     if (!profileStatus || profileStatus.status !== "aprovado") {
+       throw new Response("Forbidden: usuário não aprovado", { status: 403 });
+     }
+
+     const alertas: Alerta[] = [];
+
+     /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
     if (bin.byteLength > 8_000_000) throw new Error("Arquivo muito grande (máximo 8 MB).");
     let bundle;
