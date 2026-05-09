@@ -1217,8 +1217,8 @@ function escalar(
     // Helpers para o diagnóstico (independente de modo).
     const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
     const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
-    const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
-    const faltam = Math.max(0, totalAlvo - escalados24);
+    const escalados24Final = militares.filter((m) => estaEmServico24(m, dia)).length;
+    const faltamFinal = Math.max(0, totalAlvo - escalados24Final);
 
     // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
     // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
