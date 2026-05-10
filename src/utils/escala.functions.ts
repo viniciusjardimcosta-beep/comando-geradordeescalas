@@ -711,6 +711,15 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
+        // ADM nunca recebe lançamento ORD (escala operacional 24x72) — em nenhum dia.
+        if (m.isAdm && linha === "ORD") {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ORD ${sigla} ignorado para ${m.nome} dia ${d}: militar ADM não entra em escala operacional.`,
+          });
+          continue;
+        }
+        // ADM em sábado/domingo/feriado: nada de EXP nem HE.
         if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
           alertas.push({
             tipo: "warn",
