@@ -1547,16 +1547,23 @@ function escalar(
   for (const m of militares) {
     if (!m.isAdm) continue;
     for (let d = 1; d <= dias; d++) {
+      // ADM nunca pode ter ORD — em nenhum dia (operacional é proibido para ADM).
+      const sOrd = ord.get(d)?.get(m.rowOrd);
+      if (sOrd) {
+        ord.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: ORD ${sOrd} removido (ADM não opera)`);
+      }
+      // EXP/HE só em dia útil; em fds/feriado, limpa.
       if (isDiaExpediente(ano, mes, d)) continue;
       const sExp = expm.get(d)?.get(m.rowOrd);
       if (sExp) {
         expm.get(d)!.delete(m.rowOrd);
-        saneadosAdm.push(`${m.nome} dia ${d}: EXP ${sExp} removido`);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): EXP ${sExp} removido (fds/feriado)`);
       }
       const sHe = he.get(d)?.get(m.rowOrd);
       if (sHe) {
         he.get(d)!.delete(m.rowOrd);
-        saneadosAdm.push(`${m.nome} dia ${d}: HE ${sHe} removido`);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): HE ${sHe} removido (fds/feriado)`);
       }
     }
   }
