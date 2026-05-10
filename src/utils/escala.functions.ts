@@ -711,6 +711,15 @@ function escalar(
     for (const d of l.dias) {
       if (d < 1 || d > dias) continue;
       for (const m of alvos) {
+        // ADM nunca recebe lançamento ORD (escala operacional 24x72) — em nenhum dia.
+        if (m.isAdm && linha === "ORD") {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ORD ${sigla} ignorado para ${m.nome} dia ${d}: militar ADM não entra em escala operacional.`,
+          });
+          continue;
+        }
+        // ADM em sábado/domingo/feriado: nada de EXP nem HE.
         if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
           alertas.push({
             tipo: "warn",
@@ -1538,16 +1547,23 @@ function escalar(
   for (const m of militares) {
     if (!m.isAdm) continue;
     for (let d = 1; d <= dias; d++) {
+      // ADM nunca pode ter ORD — em nenhum dia (operacional é proibido para ADM).
+      const sOrd = ord.get(d)?.get(m.rowOrd);
+      if (sOrd) {
+        ord.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: ORD ${sOrd} removido (ADM não opera)`);
+      }
+      // EXP/HE só em dia útil; em fds/feriado, limpa.
       if (isDiaExpediente(ano, mes, d)) continue;
       const sExp = expm.get(d)?.get(m.rowOrd);
       if (sExp) {
         expm.get(d)!.delete(m.rowOrd);
-        saneadosAdm.push(`${m.nome} dia ${d}: EXP ${sExp} removido`);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): EXP ${sExp} removido (fds/feriado)`);
       }
       const sHe = he.get(d)?.get(m.rowOrd);
       if (sHe) {
         he.get(d)!.delete(m.rowOrd);
-        saneadosAdm.push(`${m.nome} dia ${d}: HE ${sHe} removido`);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): HE ${sHe} removido (fds/feriado)`);
       }
     }
   }
