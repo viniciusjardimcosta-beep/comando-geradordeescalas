@@ -1676,11 +1676,13 @@ export const gerarEscala = createServerFn({ method: "POST" })
     efetivoSheet = getSheetXml(bundle, "efetivo");
 
     /* 3) Ler Efetivo — B=id func, C=nome, D=posto.
-       MAPEAMENTO RÍGIDO: cada militar é uma linha consecutiva da aba Efetivo,
-       e ocupa 3 linhas FIXAS na aba Anexo B (ORD, EXP, HE). NÃO pular linhas
-       automaticamente. Primeira linha vazia encerra a leitura; qualquer linha
-       com dados após ela é erro fatal de mapeamento. */
-    const efetivoRows: { idFunc: string; nome: string; postoGrad: string }[] = [];
+       Cada militar ocupa 3 linhas na aba Anexo B (ORD, EXP, HE). O bloco do
+       militar NÃO é necessariamente sequencial: usuários frequentemente
+       removem blocos de militares desligados/transferidos da aba Anexo B
+       enquanto mantêm o registro na aba Efetivo. Por isso, descobrimos a
+       linha real de cada militar lendo as fórmulas `=...Efetivo!C{n}...` da
+       coluna B do Anexo B (mapa efetivoRow → linhaAnexoB). */
+    const efetivoRows: { r: number; idFunc: string; nome: string; postoGrad: string }[] = [];
     const efRows = iterRows(efetivoSheet.xml);
     const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
     let leituraEncerrada = false;
