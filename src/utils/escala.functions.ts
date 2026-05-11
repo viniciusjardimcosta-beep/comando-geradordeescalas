@@ -1803,10 +1803,36 @@ export const gerarEscala = createServerFn({ method: "POST" })
       }
     }
 
-    /* 5) Runtime dos militares — linhas R12, R15, R18... */
+    /* 5) Runtime dos militares — rowOrd descoberto via fórmula no Anexo B.
+       Se o template não tiver bloco para o militar, ele é marcado inativo
+       e gera alerta. Fallback sequencial só se NENHUM mapeamento foi achado
+       (template totalmente sem fórmulas, planilha "limpa"). */
     const naoCadastrados: string[] = [];
+    const semBlocoNoAnexo: string[] = [];
+    const usarFallbackSequencial = efetivoToAnexoRow.size === 0;
+    const rowOrdUsadas = new Set<number>();
     const militares: MilitarRT[] = efetivoRows.map((ef, i) => {
-      const rowOrd = 12 + i * 3;
+      let rowOrd: number;
+      let temBloco = true;
+      if (usarFallbackSequencial) {
+        rowOrd = 12 + i * 3;
+      } else {
+        const mapped = efetivoToAnexoRow.get(ef.r);
+        if (mapped) {
+          rowOrd = mapped;
+        } else {
+          rowOrd = 100000 + i;
+          temBloco = false;
+          semBlocoNoAnexo.push(`${ef.nome}${ef.idFunc ? ` (${ef.idFunc})` : ""}`);
+        }
+      }
+      if (rowOrdUsadas.has(rowOrd)) {
+        rowOrd = 100000 + i;
+        temBloco = false;
+        semBlocoNoAnexo.push(`${ef.nome} (linha duplicada no Anexo B)`);
+      }
+      rowOrdUsadas.add(rowOrd);
+
       const cad = cadPorMat.get(ef.idFunc) ?? cadPorNome.get(normNome(ef.nome));
       const isCov = !!cad?.isCov;
       const isCg = !!cad?.isCg;
@@ -1822,8 +1848,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         posto: ef.postoGrad ?? "",
         postoCat: classificarPosto(ef.postoGrad ?? ""),
         isCov, isCg, isAdm,
-        // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
-        ativo: !!cad,
+        ativo: !!cad && temBloco,
         cargaH: 0,
         ultimoServico: 0,
         afastDias: new Set(),
@@ -1831,8 +1856,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
         tipoEscala: cad?.tipoEscala ?? "24h",
       };
-      // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
-      if (cad) {
+      if (cad && temBloco) {
         const periodos = feriasPorMilitar.get(cad.id) ?? [];
         for (const p of periodos) {
           const ini = new Date(p.inicio);
@@ -1853,6 +1877,12 @@ export const gerarEscala = createServerFn({ method: "POST" })
       alertas.push({
         tipo: "info",
         msg: `${naoCadastrados.length} militar(es) da planilha não estão cadastrados e foram ignorados: ${naoCadastrados.join(", ")}.`,
+      });
+    }
+    if (semBlocoNoAnexo.length) {
+      alertas.push({
+        tipo: "warn",
+        msg: `${semBlocoNoAnexo.length} militar(es) cadastrado(s) não possuem bloco na aba "Anexo B - Escala" e não foram escalados: ${semBlocoNoAnexo.join(", ")}. Adicione as 3 linhas (ORD/EFE, EXP/COM, HE) com fórmula =Efetivo!C{linha} no template.`,
       });
     }
 
