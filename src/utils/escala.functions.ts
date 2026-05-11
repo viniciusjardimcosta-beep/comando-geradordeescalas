@@ -1708,12 +1708,28 @@ export const gerarEscala = createServerFn({ method: "POST" })
         );
       }
       efetivoRows.push({
+        r,
         idFunc: normMatricula(idFunc),
         nome: nomeStr,
         postoGrad: posto,
       });
     }
     if (efetivoRows.length === 0) throw new Error("Aba Efetivo está vazia.");
+
+    /* 3.1) Mapear efetivoRow → linha do bloco no Anexo B, lendo as fórmulas
+       `=...Efetivo!C{n}...` ou `=...Efetivo!B{n}...` da coluna B/C/D do Anexo B.
+       Permite que o template tenha buracos (militares removidos manualmente). */
+    const efetivoToAnexoRow = new Map<number, number>();
+    {
+      const rowsAnexo = sheetXmlRows(anexoSheet.xml);
+      for (const { r, inner } of rowsAnexo) {
+        const m = inner.match(/Efetivo!\$?[A-Z]\$?(\d+)/);
+        if (m) {
+          const efRow = Number(m[1]);
+          if (!efetivoToAnexoRow.has(efRow)) efetivoToAnexoRow.set(efRow, r);
+        }
+      }
+    }
 
     /* 4) Militares cadastrados do usuário (com flags multi-papel) */
     const { data: cadastrados, error: errCad } = await supabase
