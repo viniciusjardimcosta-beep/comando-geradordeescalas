@@ -1,40 +1,46 @@
-## Problema
+## Diagnóstico
 
-A última migração de "correção de segurança" revogou `EXECUTE` das funções `public.has_role(uuid, app_role)` e `public.get_user_status(uuid)` para os roles `anon` e `authenticated`.
+O Sd **Antonio Tolfo Flores** (matrícula `3715248`) está cadastrado **duas vezes** no banco:
 
-Essas funções são `SECURITY DEFINER` e são usadas **dentro das próprias policies RLS** (em `profiles`, `user_roles`, e outras tabelas). Sem `EXECUTE`, qualquer `SELECT` do usuário logado falha com:
+| ID | Escalas associadas | Férias |
+|---|---|---|
+| `6fee2152…` | Escala 1 (abr), Escala 2 (mai), **Escala 2 (jun)** | 20–28/mai e 20–28/jun |
+| `dfb98c95…` | Escala 2 (mai) apenas | — |
 
-```
-403 — permission denied for function has_role
-```
+Como há dois registros com a **mesma matrícula**, o gerador (que casa militares ↔ aba Efetivo da planilha pelo ID Func) provavelmente:
+- Encontra duas linhas candidatas e descarta uma como duplicata, **OU**
+- Casa o militar com a linha errada e o lançamento vai pra um slot que depois é sobrescrito/ignorado, **OU**
+- Em alguma etapa de dedupe interna ele é removido inteiramente.
 
-Resultado prático: após o login, o `AuthProvider` não consegue ler `profiles` nem `user_roles`, então `loading` nunca termina de forma útil e nenhuma tela do `/app/*` renderiza dados.
+Resultado: ele não aparece em nenhum dia de junho, mesmo sendo CG/COV operacional ativo.
 
-Essa revogação foi um falso positivo do scanner: funções `SECURITY DEFINER` são, por definição, expostas a roles de cliente — a segurança vem do corpo da função, não da ausência de `EXECUTE`.
+## Plano de correção
 
-## Solução
+### 1. Limpeza imediata dos dados (migration)
+- Identificar todas as duplicatas de militar por `(user_id, matricula_norm)` onde `matricula_norm` não é nulo.
+- Para cada grupo: manter o ID mais "rico" (com mais memberships e/ou férias) e migrar referências do duplicado para esse ID em:
+  - `escala_ordinaria_membros`
+  - `ferias_militares`
+- Remover o registro duplicado.
+- No caso do Antonio Flores: manter `6fee2152…` (tem 3 memberships + férias) e remover `dfb98c95…` após mover sua membership de Escala 2/mai.
 
-Nova migração que restaura o `EXECUTE` para `authenticated` (e `anon` quando aplicável):
+### 2. Prevenir novas duplicatas (migration)
+- Adicionar índice único parcial em `militares (user_id, matricula_norm) WHERE matricula_norm IS NOT NULL AND ativo = true`.
+- Garante que o mesmo quartel não cadastre dois militares ativos com a mesma matrícula.
 
-```sql
-GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_user_status(uuid) TO authenticated;
-```
+### 3. Tela de cadastro de militares (frontend)
+- Tratar o erro de violação de unicidade com mensagem amigável: "Já existe um militar ativo com esta matrícula".
+- Opcional: na criação, fazer um pré-check via select para avisar antes de submeter.
 
-Não devolvo `EXECUTE` para `anon` por padrão (não há fluxo anônimo no app); se algo quebrar para visitante deslogado, adiciono na sequência.
+### 4. Robustez no gerador (`src/utils/escala.functions.ts`)
+- Ao montar a lista de militares para o mês, deduplicar defensivamente por `matricula_norm` (manter o primeiro com membership na escala selecionada) e emitir um **alerta** listando duplicatas detectadas — assim, mesmo que apareça uma duplicata futura, o usuário é avisado em vez de o militar sumir silenciosamente.
+- Confirmar (e logar via alerta) quando um militar com membership na escala não consegue casar com nenhuma linha da aba Efetivo, para facilitar diagnóstico futuro.
 
-## Memória de segurança
+### 5. Verificação
+- Após a limpeza, regerar a escala de **junho/2026 – Escala 2** e confirmar que o Sd Flores aparece nos dias esperados (respeitando férias 20–28/jun).
 
-Atualizo `@security-memory` para que o próximo scan **não** marque novamente esse `EXECUTE` como vulnerabilidade, registrando que essas funções são `SECURITY DEFINER` usadas pelas policies RLS e portanto precisam continuar executáveis pelo role `authenticated`.
+## Detalhes técnicos
 
-## Verificação
-
-1. Após a migração, recarregar `/app/importar` no preview.
-2. Confirmar nas requests de rede que `/profiles` e `/user_roles` retornam 200.
-3. Confirmar que a UI sai do spinner e mostra a aba Importar.
-
-## Fora de escopo
-
-- Nenhuma mudança em código React/TS.
-- Nenhuma mudança nas policies RLS em si.
-- Nenhuma mudança no `AuthProvider`.
+- A duplicação foi detectada por: `SELECT … FROM militares WHERE nome ILIKE '%flores%'` retornou 2 linhas com mesma matrícula 3715248, ambos `ativo=true`, `is_cg=true`, `is_cov=true`, `is_adm=false`, `tipo_escala='24h'`.
+- A migration de unicidade usa índice parcial para não bloquear casos legítimos de matrícula nula ou militares inativados (histórico).
+- A migração de referências é feita em transação única para evitar memberships órfãs.
