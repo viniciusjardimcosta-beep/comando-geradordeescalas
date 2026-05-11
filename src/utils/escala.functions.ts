@@ -1721,9 +1721,10 @@ export const gerarEscala = createServerFn({ method: "POST" })
        Permite que o template tenha buracos (militares removidos manualmente). */
     const efetivoToAnexoRow = new Map<number, number>();
     {
-      const rowsAnexo = sheetXmlRows(anexoSheet.xml);
-      for (const { r, inner } of rowsAnexo) {
-        const m = inner.match(/Efetivo!\$?[A-Z]\$?(\d+)/);
+      for (const rm of anexoSheet.xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
+        const r = Number(/\br="(\d+)"/.exec(rm[1])?.[1] ?? "0");
+        if (!r) continue;
+        const m = rm[2].match(/Efetivo!\$?[A-Z]\$?(\d+)/);
         if (m) {
           const efRow = Number(m[1]);
           if (!efetivoToAnexoRow.has(efRow)) efetivoToAnexoRow.set(efRow, r);
