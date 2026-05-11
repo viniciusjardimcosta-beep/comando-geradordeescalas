@@ -1676,11 +1676,13 @@ export const gerarEscala = createServerFn({ method: "POST" })
     efetivoSheet = getSheetXml(bundle, "efetivo");
 
     /* 3) Ler Efetivo — B=id func, C=nome, D=posto.
-       MAPEAMENTO RÍGIDO: cada militar é uma linha consecutiva da aba Efetivo,
-       e ocupa 3 linhas FIXAS na aba Anexo B (ORD, EXP, HE). NÃO pular linhas
-       automaticamente. Primeira linha vazia encerra a leitura; qualquer linha
-       com dados após ela é erro fatal de mapeamento. */
-    const efetivoRows: { idFunc: string; nome: string; postoGrad: string }[] = [];
+       Cada militar ocupa 3 linhas na aba Anexo B (ORD, EXP, HE). O bloco do
+       militar NÃO é necessariamente sequencial: usuários frequentemente
+       removem blocos de militares desligados/transferidos da aba Anexo B
+       enquanto mantêm o registro na aba Efetivo. Por isso, descobrimos a
+       linha real de cada militar lendo as fórmulas `=...Efetivo!C{n}...` da
+       coluna B do Anexo B (mapa efetivoRow → linhaAnexoB). */
+    const efetivoRows: { r: number; idFunc: string; nome: string; postoGrad: string }[] = [];
     const efRows = iterRows(efetivoSheet.xml);
     const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
     let leituraEncerrada = false;
@@ -1706,12 +1708,29 @@ export const gerarEscala = createServerFn({ method: "POST" })
         );
       }
       efetivoRows.push({
+        r,
         idFunc: normMatricula(idFunc),
         nome: nomeStr,
         postoGrad: posto,
       });
     }
     if (efetivoRows.length === 0) throw new Error("Aba Efetivo está vazia.");
+
+    /* 3.1) Mapear efetivoRow → linha do bloco no Anexo B, lendo as fórmulas
+       `=...Efetivo!C{n}...` ou `=...Efetivo!B{n}...` da coluna B/C/D do Anexo B.
+       Permite que o template tenha buracos (militares removidos manualmente). */
+    const efetivoToAnexoRow = new Map<number, number>();
+    {
+      for (const rm of anexoSheet.xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
+        const r = Number(/\br="(\d+)"/.exec(rm[1])?.[1] ?? "0");
+        if (!r) continue;
+        const m = rm[2].match(/Efetivo!\$?[A-Z]\$?(\d+)/);
+        if (m) {
+          const efRow = Number(m[1]);
+          if (!efetivoToAnexoRow.has(efRow)) efetivoToAnexoRow.set(efRow, r);
+        }
+      }
+    }
 
     /* 4) Militares cadastrados do usuário (com flags multi-papel) */
     const { data: cadastrados, error: errCad } = await supabase
@@ -1784,10 +1803,36 @@ export const gerarEscala = createServerFn({ method: "POST" })
       }
     }
 
-    /* 5) Runtime dos militares — linhas R12, R15, R18... */
+    /* 5) Runtime dos militares — rowOrd descoberto via fórmula no Anexo B.
+       Se o template não tiver bloco para o militar, ele é marcado inativo
+       e gera alerta. Fallback sequencial só se NENHUM mapeamento foi achado
+       (template totalmente sem fórmulas, planilha "limpa"). */
     const naoCadastrados: string[] = [];
+    const semBlocoNoAnexo: string[] = [];
+    const usarFallbackSequencial = efetivoToAnexoRow.size === 0;
+    const rowOrdUsadas = new Set<number>();
     const militares: MilitarRT[] = efetivoRows.map((ef, i) => {
-      const rowOrd = 12 + i * 3;
+      let rowOrd: number;
+      let temBloco = true;
+      if (usarFallbackSequencial) {
+        rowOrd = 12 + i * 3;
+      } else {
+        const mapped = efetivoToAnexoRow.get(ef.r);
+        if (mapped) {
+          rowOrd = mapped;
+        } else {
+          rowOrd = 100000 + i;
+          temBloco = false;
+          semBlocoNoAnexo.push(`${ef.nome}${ef.idFunc ? ` (${ef.idFunc})` : ""}`);
+        }
+      }
+      if (rowOrdUsadas.has(rowOrd)) {
+        rowOrd = 100000 + i;
+        temBloco = false;
+        semBlocoNoAnexo.push(`${ef.nome} (linha duplicada no Anexo B)`);
+      }
+      rowOrdUsadas.add(rowOrd);
+
       const cad = cadPorMat.get(ef.idFunc) ?? cadPorNome.get(normNome(ef.nome));
       const isCov = !!cad?.isCov;
       const isCg = !!cad?.isCg;
@@ -1803,8 +1848,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         posto: ef.postoGrad ?? "",
         postoCat: classificarPosto(ef.postoGrad ?? ""),
         isCov, isCg, isAdm,
-        // militar não cadastrado: existe na planilha (preserva layout) mas não recebe lançamentos automáticos
-        ativo: !!cad,
+        ativo: !!cad && temBloco,
         cargaH: 0,
         ultimoServico: 0,
         afastDias: new Set(),
@@ -1812,8 +1856,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         grupoOrdem: cad ? grupoPorMilitar.get(cad.id) : undefined,
         tipoEscala: cad?.tipoEscala ?? "24h",
       };
-      // pré-aplica férias do plano anual (sem alerta aqui — será consolidado na seção 6.1)
-      if (cad) {
+      if (cad && temBloco) {
         const periodos = feriasPorMilitar.get(cad.id) ?? [];
         for (const p of periodos) {
           const ini = new Date(p.inicio);
@@ -1834,6 +1877,12 @@ export const gerarEscala = createServerFn({ method: "POST" })
       alertas.push({
         tipo: "info",
         msg: `${naoCadastrados.length} militar(es) da planilha não estão cadastrados e foram ignorados: ${naoCadastrados.join(", ")}.`,
+      });
+    }
+    if (semBlocoNoAnexo.length) {
+      alertas.push({
+        tipo: "warn",
+        msg: `${semBlocoNoAnexo.length} militar(es) cadastrado(s) não possuem bloco na aba "Anexo B - Escala" e não foram escalados: ${semBlocoNoAnexo.join(", ")}. Adicione as 3 linhas (ORD/EFE, EXP/COM, HE) com fórmula =Efetivo!C{linha} no template.`,
       });
     }
 
