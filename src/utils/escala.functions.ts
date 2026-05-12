@@ -1089,13 +1089,19 @@ function escalar(
       });
 
     // Equalização: se algum candidato tem flag `equalizar`, ordena por menor HE no mês.
-    // Caso contrário, mantém o ordenamento clássico por menor cargaH.
+    // Caso contrário, prioriza MAIOR margem ORD restante (carga_mensal − acumulado).
+    // Militares próximos do teto são deprioridados — assim o tapamento de furo não
+    // empurra ninguém pra HE quando ainda há gente com folga ordinária.
     const algumEqualizar = candidatos.some((m) => limiteHePorMilitar.get(m.rowOrd)?.equalizar);
+    const margemOrd = (m: MilitarRT): number =>
+      Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
     candidatos.sort((a, b) => {
       if (algumEqualizar) {
         const ha = horasHeMes(a), hb = horasHeMes(b);
         if (ha !== hb) return ha - hb;
       }
+      const ma = margemOrd(a), mb = margemOrd(b);
+      if (ma !== mb) return mb - ma; // maior margem primeiro
       return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
     });
 
