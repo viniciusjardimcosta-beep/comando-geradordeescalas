@@ -1574,6 +1574,32 @@ function escalar(
     });
   }
 
+  /* 6.6ª ETAPA — ADM: HE só pode existir após atingir a carga mensal completa
+     via EXP/CM. Se a soma EXP+CM do mês ficou abaixo do alvo, qualquer HE
+     lançada (manual via observações) é removida — regime ADM é separado do
+     operacional e EXP é a fonte primária da carga ordinária. */
+  const heAdmRemovidas: string[] = [];
+  for (const m of militares) {
+    if (!m.isAdm) continue;
+    const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
+    const alvoAdm = cargaMensalProporcional(diasAfAdm);
+    let totalExpAdm = 0;
+    for (let d = 1; d <= dias; d++) totalExpAdm += horasExpDia(m, d);
+    if (totalExpAdm >= alvoAdm) continue; // carga completa: HE permitida
+    for (let d = 1; d <= dias; d++) {
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (!sHe) continue;
+      he.get(d)!.delete(m.rowOrd);
+      heAdmRemovidas.push(`${m.nome} dia ${d}: HE ${sHe} removida (carga ordinária EXP/CM ainda não atingida: ${totalExpAdm}h/${alvoAdm}h)`);
+    }
+  }
+  if (heAdmRemovidas.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `HE ADM removida (regra: HE só após fechar carga mensal via EXP/CM): ${heAdmRemovidas.join("; ")}.`,
+    });
+  }
+
   /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
   const furos: string[] = [];
   const conflitosDescanso: string[] = [];
