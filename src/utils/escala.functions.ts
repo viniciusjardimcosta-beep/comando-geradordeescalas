@@ -1729,15 +1729,30 @@ export const gerarEscala = createServerFn({ method: "POST" })
        enquanto mantêm o registro na aba Efetivo. Por isso, descobrimos a
        linha real de cada militar lendo as fórmulas `=...Efetivo!C{n}...` da
        coluna B do Anexo B (mapa efetivoRow → linhaAnexoB). */
-    const efetivoRows: { r: number; idFunc: string; nome: string; postoGrad: string }[] = [];
-    const efRows = iterRows(efetivoSheet.xml);
-    const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
-    let leituraEncerrada = false;
-    for (let r = 2; r <= maxEfRow; r++) {
-      const idFunc = readCell(bundle, efetivoSheet.xml, makeRef(r, 2));
-      const nomeStr = readCell(bundle, efetivoSheet.xml, makeRef(r, 3));
-      const posto = readCell(bundle, efetivoSheet.xml, makeRef(r, 4));
-      const vazia = !nomeStr.trim() && !idFunc.trim();
+     // Identifica linhas efetivamente vazias na aba Efetivo antes de processar a escala.
+     // Considera vazia toda linha cujos campos-chave (matrícula, nome, posto e COV)
+     // estejam todos em branco — evita criar militares fantasmas a partir de linhas
+     // residuais da planilha.
+     const isLinhaEfetivamenteVazia = (row: { matricula?: string; nome?: string; posto?: string; cov?: string }) => {
+       const camposImportantes = [row.matricula, row.nome, row.posto, row.cov];
+       return camposImportantes.every((valor) => String(valor ?? "").trim() === "");
+     };
+
+     const efetivoRows: { r: number; idFunc: string; nome: string; postoGrad: string }[] = [];
+     const efRows = iterRows(efetivoSheet.xml);
+     const maxEfRow = efRows.length ? Math.max(...efRows.map((r) => r.r)) : 100;
+     let leituraEncerrada = false;
+     for (let r = 2; r <= maxEfRow; r++) {
+       const idFunc = readCell(bundle, efetivoSheet.xml, makeRef(r, 2));
+       const nomeStr = readCell(bundle, efetivoSheet.xml, makeRef(r, 3));
+       const posto = readCell(bundle, efetivoSheet.xml, makeRef(r, 4));
+       const covCell = readCell(bundle, efetivoSheet.xml, makeRef(r, 5));
+       const vazia = isLinhaEfetivamenteVazia({
+         matricula: idFunc,
+         nome: nomeStr,
+         posto,
+         cov: covCell,
+       });
       if (vazia) {
         leituraEncerrada = true;
         continue;
