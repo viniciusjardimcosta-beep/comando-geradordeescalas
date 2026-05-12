@@ -982,15 +982,30 @@ function escalar(
     // proibido aqui — qualquer furo restante será tapado SOMENTE como HE na
     // etapa seguinte. Isto reproduz o comportamento do escalante humano:
     // monta a 24x72 base sem interferência, só depois corrige falhas.
+    // Espaço ORD restante no mês (carga - acumulado). Militares sem espaço
+    // só geram HE no plantão e devem ser DEPRIORIZADOS — rule "procurar outro
+    // militar disponível antes de ultrapassar a carga ordinária".
+    const espacoOrdRestante = (m: MilitarRT): number =>
+      Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    const ordenar = (a: MilitarRT, b: MilitarRT): number => {
+      // 1º: quem ainda tem espaço ORD no mês vem antes de quem já fechou
+      const semA = espacoOrdRestante(a) <= 0 ? 1 : 0;
+      const semB = espacoOrdRestante(b) <= 0 ? 1 : 0;
+      if (semA !== semB) return semA - semB;
+      // 2º: menor carga acumulada
+      if (a.cargaH !== b.cargaH) return a.cargaH - b.cargaH;
+      // 3º: serviço mais antigo
+      return a.ultimoServico - b.ultimoServico;
+    };
     const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
       const noGrupo = militares
         .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
-        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+        .sort(ordenar);
       if (noGrupo[0]) return noGrupo[0];
       // Militares sem grupo definido (config legada): entram por menor carga
       const semGrupo = militares
         .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
-        .sort((a, b) => a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico);
+        .sort(ordenar);
       return semGrupo[0] ?? null;
       // NÃO há fallback cross-group em ORD: furo vira HE na etapa 4.
     };
