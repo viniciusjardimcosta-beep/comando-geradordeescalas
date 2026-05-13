@@ -1386,13 +1386,46 @@ function escalar(
       continue;
     }
 
-    // ===== ADM: completar carga horária mensal aumentando EXP em dias úteis =====
+    // ===== ADM: ajustar EXP ao alvo mensal proporcional =====
+    // Pode tanto FALTAR (completar) quanto SOBRAR (cortar dos últimos dias).
+    // Militar ADM nunca pode estourar a carga mensal.
     if (m.isAdm) {
       const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
       const alvoAdm = cargaMensalProporcional(diasAfAdm);
-      if (alvoAdm <= 0) continue;
       let totalExp = 0;
       for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
+
+      if (alvoAdm <= 0) {
+        // sem alvo (afastado o mês inteiro) — limpar qualquer EXP residual
+        for (let d = 1; d <= dias; d++) expm.get(d)?.delete(m.rowOrd);
+        continue;
+      }
+
+      if (totalExp > alvoAdm) {
+        // SOBRA → encurtar/remover EXP do último dia útil para o primeiro
+        let excedente = totalExp - alvoAdm;
+        const cortes: string[] = [];
+        for (let d = dias; d >= 1 && excedente > 0; d--) {
+          const sAtual = expm.get(d)?.get(m.rowOrd);
+          if (!sAtual) continue;
+          const hAtual = horasExpSigla(sAtual);
+          if (hAtual <= 0) continue;
+          const tipo = /^(EXP|CM|TELE)/i.exec(sAtual)?.[1].toUpperCase() ?? "EXP";
+          const cortar = Math.min(hAtual, excedente);
+          const novaH = hAtual - cortar;
+          if (novaH <= 0) {
+            expm.get(d)!.delete(m.rowOrd);
+          } else {
+            expm.get(d)!.set(m.rowOrd, `${tipo}${novaH}`);
+          }
+          excedente -= cortar;
+          cortes.push(`d${d} -${cortar}h`);
+        }
+        const reduzido = (totalExp - alvoAdm) - excedente;
+        acertosExpAdm.push(`${m.nome} (-${reduzido}h EXP — teto mensal: ${cortes.join(", ")})`);
+        continue;
+      }
+
       let faltamAdm = alvoAdm - totalExp;
       if (faltamAdm <= 0) continue;
       // 1ª passada: aumentar siglas EXP existentes até 12h por dia
@@ -1806,12 +1839,19 @@ export const gerarEscala = createServerFn({ method: "POST" })
       cadPorNome.set(normNome(c.nome as string), info);
     }
 
-    /* 4.1) Férias automáticas do ano alvo */
+    /* 4.1) Férias automáticas — todo período que cruza o mês alvo
+            (filtra por intervalo de datas, não pelo campo `ano` do plano,
+            que é só o ano em que o usuário registrou e pode divergir do
+            período real, inclusive em viradas de ano). */
+    const inicioMes = `${data.ano}-${String(data.mes).padStart(2, "0")}-01`;
+    const ultimoDiaMes = diasNoMes(data.mes, data.ano);
+    const fimMes = `${data.ano}-${String(data.mes).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
     const { data: feriasRows } = await supabase
       .from("ferias_militares")
       .select("militar_id, data_inicio, data_fim")
       .eq("user_id", userId)
-      .eq("ano", data.ano);
+      .lte("data_inicio", fimMes)
+      .gte("data_fim", inicioMes);
 
     const feriasPorMilitar = new Map<string, { inicio: string; fim: string }[]>();
     for (const f of feriasRows ?? []) {

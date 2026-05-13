@@ -1,53 +1,44 @@
-## Objetivo
+## Diagnóstico
 
-Refinar `lancaServico24` em `src/utils/escala.functions.ts` para que, quando o saldo ORD do mês for menor que o plantão 24h, o sistema lance **CM exatamente com o saldo faltante** e converta o restante do plantão em **HE**, em vez de tentar encaixar uma sigla ORD parcial (`23`/`2`).
+### Bug 1 — Férias (plano anual) não aplicadas como FER
 
-A unidade de comparação é o **plantão 24h inteiro** (16h dia + 8h madrugada; 16h no último dia do mês).
+`gerarEscala` filtra `ferias_militares` por `eq("ano", data.ano)` (linha 1814 de `src/utils/escala.functions.ts`). Esse campo `ano` é o "ano do plano" registrado pelo usuário na tela de Férias — e **não corresponde ao ano do período**. Exemplo real do banco: várias linhas com `ano = 2026` cobrindo `data_inicio = 2025-12-05 … data_fim = 2025-12-20`. Ao gerar a escala de **dezembro/2025** o sistema consulta `ano=2025`, não acha nada e nenhum FER é injetado em `ia.afastamentos`. Períodos que cruzam virada de ano também são perdidos.
 
-## Regra final
+### Bug 2 — Militar ADM ultrapassa a carga horária mensal
 
-```
-saldo       = cargaMaxOrd(m) - horasOrdinariasAcumuladas(m)
-horasTurno  = ultimoDia ? 16 : 24
-horasDia    = 16  (ou cabeOrdCheio? 18)
-horasMad    = ultimoDia ? 0 : 8  (ou cabeOrdCheio? 6)
+A etapa 6.2 lança `EXP9` (seg-qui) + `EXP6` (sex) em todo dia útil sem limite, e a etapa 6.5 (linhas 1389-1427) só **adiciona** expediente quando o total está abaixo do alvo — nunca remove o excedente. Para meses como dezembro/2025 (5 segundas, 5 terças, 5 quartas, 4 quintas, 4 sextas) a base já totaliza 19·9 + 4·6 = **195 h**, contra alvo `cargaBase(31) = 177 h`. Resultado: AK do ADM fica em vermelho.
 
-SE saldo >= horasTurno
-   → manter caminho atual: lança plantão ORD cheio (sigla "234" + "1")
-SE saldo <= 0
-   → manter caminho atual: tudo HE (respeitando limiteRestanteHe)
-SENÃO  (0 < saldo < horasTurno)
-   → CM(saldo) distribuído entre dia e madrugada
-   → HE(horasTurno - saldo) preenchendo o restante físico, limitado por limiteRestanteHe
-   → não usar sigla ORD parcial (23/2)
-```
+## Correções
 
-Distribuição de CM quando `0 < saldo < horasTurno`:
-- `cmDia  = min(saldo, horasDia)`
-- `cmMad  = saldo - cmDia` (sempre 0 quando saldo ≤ 16)
-- `heDia  = min(horasDia - cmDia, restanteHe)`
-- `heMad  = min(horasMad - cmMad, restanteHe - heDia)` (se não for último dia)
+Arquivo único: `src/utils/escala.functions.ts`.
 
-## Mudanças no código
+### 1) Carregar férias por intervalo de datas, não por ano
+Substituir o filtro `eq("ano", data.ano)` da query `ferias_militares` por uma sobreposição com o mês alvo:
+- calcular `inicioMes = YYYY-MM-01` e `fimMes = último dia do mês` em ISO;
+- usar `.lte("data_inicio", fimMes).gte("data_fim", inicioMes)` para trazer todo período que cruza o mês (cobre virada de ano).
 
-Arquivo único: `src/utils/escala.functions.ts`, função `lancaServico24` (linhas ~807-934).
+Manter o restante da expansão dia-a-dia já existente (linhas 1900-1913), que já filtra por `getUTCFullYear() === data.ano && getUTCMonth()+1 === data.mes`.
 
-1. Remover o ramo especial `espacoOrd > 0 && espacoOrd < 6` (linhas 863-881) — torna-se caso particular da nova regra geral.
-2. Substituir o bloco "encaixe parcial de sigla ORD" (linhas 883-931) pela ramificação acima:
-   - **Ramo A — saldo cobre plantão cheio**: mantém a lógica atual de `cabeOrdCheio` (sigla `234` + `1`) usada quando `espacoOrd >= 18` e não é último dia. Para `ultimoDia` com `espacoOrd >= 16`, lança `23` (12h) + CM4 — manter essa exceção atual ou simplificar para CM16? Será CM16 puro pela nova regra (sem sigla ORD parcial).
-   - **Ramo B — saldo zero**: tudo HE, igual hoje (linhas 890-900).
-   - **Ramo C — saldo parcial**: aplica CM(saldo)+HE(resto) conforme distribuição acima.
-3. Não alterar o caminho `destinoHe` (cobertura de furo, linhas 829-854) — ele já segue exatamente a regra `CM até espaço ORD + HE no resto`.
-4. Não alterar critérios de elegibilidade, ordenação, cooldown nem limites de HE.
+### 2) Capar carga ADM no alvo proporcional
+Reescrever o ramo `if (m.isAdm)` da etapa 6.5 (linhas 1389-1427) para:
 
-## Garantias
+1. Calcular `alvoAdm = cargaMensalProporcional(diasAfAdm)` e `totalExp` atual.
+2. Se `totalExp > alvoAdm` → **remover/encurtar EXP do fim do mês para o início** até `totalExp == alvoAdm`:
+   - Iterar `d` do último dia útil para o primeiro;
+   - Pular dias com `naoEscalar` ou `ord` (afastamento);
+   - Para cada `EXP*`/`CM*`/`TELE*` existente: reduzir a hora da sigla (`EXP9` → `EXP{9-x}`); se chegar a 0, remover a sigla;
+   - Continuar até zerar o excedente.
+   - Registrar em `acertosExpAdm` (`"NOME (-Xh EXP — teto mensal)"`).
+3. Se `totalExp < alvoAdm` → manter as duas passadas atuais (aumentar siglas existentes até 12h, depois lançar EXP novo).
+4. Se igual → nada a fazer.
 
-- Saldo ORD nunca é ultrapassado por sigla ORD (já que ORD só é lançada quando cabe o plantão inteiro).
-- CM fecha exatamente o saldo restante quando o militar é escalado num dia em que o turno excede a capacidade.
-- HE só aparece após esgotar o saldo ORD do mês.
-- Teto mensal de HE (`limiteRestanteHe`) continua respeitado.
+Não alterar a etapa 6.2 (manter o lançamento padrão EXP9/EXP6); o cap fica concentrado na etapa 6.5 para preservar a regra de “seg-qui = 9h, sex = 6h” quando couber, e só comprimir os dias finais quando estourar.
+
+Manter intactas as etapas 6.5.1 (modo ordinário puro), 6.6 (HE ADM só após fechar carga) e demais regras já existentes.
 
 ## Validação
 
 - Build do projeto.
-- Inspeção mental dos casos: saldo=24, saldo=18, saldo=16, saldo=10, saldo=4, saldo=0; com e sem `ultimoDia`.
+- Re-gerar escala de dezembro/2025 e conferir:
+  - Militares com período em `ferias_militares` recebem `FER` nos dias do plano (via alerta consolidado);
+  - AK dos ADM não estoura — alerta `Expediente complementar (ADM)` mostra os ajustes (`-Xh EXP — teto mensal` quando aplicável).
