@@ -1806,12 +1806,19 @@ export const gerarEscala = createServerFn({ method: "POST" })
       cadPorNome.set(normNome(c.nome as string), info);
     }
 
-    /* 4.1) Férias automáticas do ano alvo */
+    /* 4.1) Férias automáticas — todo período que cruza o mês alvo
+            (filtra por intervalo de datas, não pelo campo `ano` do plano,
+            que é só o ano em que o usuário registrou e pode divergir do
+            período real, inclusive em viradas de ano). */
+    const inicioMes = `${data.ano}-${String(data.mes).padStart(2, "0")}-01`;
+    const ultimoDiaMes = diasNoMes(data.mes, data.ano);
+    const fimMes = `${data.ano}-${String(data.mes).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
     const { data: feriasRows } = await supabase
       .from("ferias_militares")
       .select("militar_id, data_inicio, data_fim")
       .eq("user_id", userId)
-      .eq("ano", data.ano);
+      .lte("data_inicio", fimMes)
+      .gte("data_fim", inicioMes);
 
     const feriasPorMilitar = new Map<string, { inicio: string; fim: string }[]>();
     for (const f of feriasRows ?? []) {
