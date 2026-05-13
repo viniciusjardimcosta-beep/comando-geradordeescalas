@@ -1,46 +1,53 @@
-## Diagnóstico
+## Objetivo
 
-O Sd **Antonio Tolfo Flores** (matrícula `3715248`) está cadastrado **duas vezes** no banco:
+Refinar `lancaServico24` em `src/utils/escala.functions.ts` para que, quando o saldo ORD do mês for menor que o plantão 24h, o sistema lance **CM exatamente com o saldo faltante** e converta o restante do plantão em **HE**, em vez de tentar encaixar uma sigla ORD parcial (`23`/`2`).
 
-| ID | Escalas associadas | Férias |
-|---|---|---|
-| `6fee2152…` | Escala 1 (abr), Escala 2 (mai), **Escala 2 (jun)** | 20–28/mai e 20–28/jun |
-| `dfb98c95…` | Escala 2 (mai) apenas | — |
+A unidade de comparação é o **plantão 24h inteiro** (16h dia + 8h madrugada; 16h no último dia do mês).
 
-Como há dois registros com a **mesma matrícula**, o gerador (que casa militares ↔ aba Efetivo da planilha pelo ID Func) provavelmente:
-- Encontra duas linhas candidatas e descarta uma como duplicata, **OU**
-- Casa o militar com a linha errada e o lançamento vai pra um slot que depois é sobrescrito/ignorado, **OU**
-- Em alguma etapa de dedupe interna ele é removido inteiramente.
+## Regra final
 
-Resultado: ele não aparece em nenhum dia de junho, mesmo sendo CG/COV operacional ativo.
+```
+saldo       = cargaMaxOrd(m) - horasOrdinariasAcumuladas(m)
+horasTurno  = ultimoDia ? 16 : 24
+horasDia    = 16  (ou cabeOrdCheio? 18)
+horasMad    = ultimoDia ? 0 : 8  (ou cabeOrdCheio? 6)
 
-## Plano de correção
+SE saldo >= horasTurno
+   → manter caminho atual: lança plantão ORD cheio (sigla "234" + "1")
+SE saldo <= 0
+   → manter caminho atual: tudo HE (respeitando limiteRestanteHe)
+SENÃO  (0 < saldo < horasTurno)
+   → CM(saldo) distribuído entre dia e madrugada
+   → HE(horasTurno - saldo) preenchendo o restante físico, limitado por limiteRestanteHe
+   → não usar sigla ORD parcial (23/2)
+```
 
-### 1. Limpeza imediata dos dados (migration)
-- Identificar todas as duplicatas de militar por `(user_id, matricula_norm)` onde `matricula_norm` não é nulo.
-- Para cada grupo: manter o ID mais "rico" (com mais memberships e/ou férias) e migrar referências do duplicado para esse ID em:
-  - `escala_ordinaria_membros`
-  - `ferias_militares`
-- Remover o registro duplicado.
-- No caso do Antonio Flores: manter `6fee2152…` (tem 3 memberships + férias) e remover `dfb98c95…` após mover sua membership de Escala 2/mai.
+Distribuição de CM quando `0 < saldo < horasTurno`:
+- `cmDia  = min(saldo, horasDia)`
+- `cmMad  = saldo - cmDia` (sempre 0 quando saldo ≤ 16)
+- `heDia  = min(horasDia - cmDia, restanteHe)`
+- `heMad  = min(horasMad - cmMad, restanteHe - heDia)` (se não for último dia)
 
-### 2. Prevenir novas duplicatas (migration)
-- Adicionar índice único parcial em `militares (user_id, matricula_norm) WHERE matricula_norm IS NOT NULL AND ativo = true`.
-- Garante que o mesmo quartel não cadastre dois militares ativos com a mesma matrícula.
+## Mudanças no código
 
-### 3. Tela de cadastro de militares (frontend)
-- Tratar o erro de violação de unicidade com mensagem amigável: "Já existe um militar ativo com esta matrícula".
-- Opcional: na criação, fazer um pré-check via select para avisar antes de submeter.
+Arquivo único: `src/utils/escala.functions.ts`, função `lancaServico24` (linhas ~807-934).
 
-### 4. Robustez no gerador (`src/utils/escala.functions.ts`)
-- Ao montar a lista de militares para o mês, deduplicar defensivamente por `matricula_norm` (manter o primeiro com membership na escala selecionada) e emitir um **alerta** listando duplicatas detectadas — assim, mesmo que apareça uma duplicata futura, o usuário é avisado em vez de o militar sumir silenciosamente.
-- Confirmar (e logar via alerta) quando um militar com membership na escala não consegue casar com nenhuma linha da aba Efetivo, para facilitar diagnóstico futuro.
+1. Remover o ramo especial `espacoOrd > 0 && espacoOrd < 6` (linhas 863-881) — torna-se caso particular da nova regra geral.
+2. Substituir o bloco "encaixe parcial de sigla ORD" (linhas 883-931) pela ramificação acima:
+   - **Ramo A — saldo cobre plantão cheio**: mantém a lógica atual de `cabeOrdCheio` (sigla `234` + `1`) usada quando `espacoOrd >= 18` e não é último dia. Para `ultimoDia` com `espacoOrd >= 16`, lança `23` (12h) + CM4 — manter essa exceção atual ou simplificar para CM16? Será CM16 puro pela nova regra (sem sigla ORD parcial).
+   - **Ramo B — saldo zero**: tudo HE, igual hoje (linhas 890-900).
+   - **Ramo C — saldo parcial**: aplica CM(saldo)+HE(resto) conforme distribuição acima.
+3. Não alterar o caminho `destinoHe` (cobertura de furo, linhas 829-854) — ele já segue exatamente a regra `CM até espaço ORD + HE no resto`.
+4. Não alterar critérios de elegibilidade, ordenação, cooldown nem limites de HE.
 
-### 5. Verificação
-- Após a limpeza, regerar a escala de **junho/2026 – Escala 2** e confirmar que o Sd Flores aparece nos dias esperados (respeitando férias 20–28/jun).
+## Garantias
 
-## Detalhes técnicos
+- Saldo ORD nunca é ultrapassado por sigla ORD (já que ORD só é lançada quando cabe o plantão inteiro).
+- CM fecha exatamente o saldo restante quando o militar é escalado num dia em que o turno excede a capacidade.
+- HE só aparece após esgotar o saldo ORD do mês.
+- Teto mensal de HE (`limiteRestanteHe`) continua respeitado.
 
-- A duplicação foi detectada por: `SELECT … FROM militares WHERE nome ILIKE '%flores%'` retornou 2 linhas com mesma matrícula 3715248, ambos `ativo=true`, `is_cg=true`, `is_cov=true`, `is_adm=false`, `tipo_escala='24h'`.
-- A migration de unicidade usa índice parcial para não bloquear casos legítimos de matrícula nula ou militares inativados (histórico).
-- A migração de referências é feita em transação única para evitar memberships órfãs.
+## Validação
+
+- Build do projeto.
+- Inspeção mental dos casos: saldo=24, saldo=18, saldo=16, saldo=10, saldo=4, saldo=0; com e sem `ultimoDia`.
