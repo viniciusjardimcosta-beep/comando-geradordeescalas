@@ -858,37 +858,27 @@ function escalar(
     const usadoOrd = horasOrdinariasAcumuladas(m);
     const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
 
-    // Saldo ORD < 6h (menos que um turno): NÃO abrir turno ORD.
-    // Lança o saldo restante como CM no dia e completa o serviço (16h dia + 8h madrugada) com HE.
-    if (espacoOrd > 0 && espacoOrd < 6) {
-      const horasDia = 16;
-      const horasMadrugada = ultimoDia ? 0 : 8;
-      let restanteHe = limiteRestanteHe(m);
+    // Plantão físico de referência:
+    // - Não-último dia: 24h (16 dia + 8 madrugada), com partição 18+6 SOMENTE quando cabe ORD cheio.
+    // - Último dia: 16h (apenas bloco do dia).
+    const horasTurno = ultimoDia ? 16 : 24;
+    const cabeOrdCheio = !ultimoDia && espacoOrd >= horasTurno; // saldo cobre plantão 24h inteiro
+    const horasDia = cabeOrdCheio ? 18 : 16;
+    const horasMadrugada = ultimoDia ? 0 : (cabeOrdCheio ? 6 : 8);
 
-      setCm(dia, espacoOrd);
-      const heDia = Math.min(horasDia - espacoOrd, restanteHe);
-      setHe(dia, heDia);
-      restanteHe -= heDia;
-
-      if (!ultimoDia) {
-        const heMad = Math.min(horasMadrugada, restanteHe);
-        setHe(dia + 1, heMad);
-      }
-
+    // Ramo A — saldo cobre plantão cheio: lança sigla ORD "234" + "1".
+    if (cabeOrdCheio) {
+      ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
+      m.cargaH += 18;
+      ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
+      m.cargaH += 6;
       marcaInicioServico(m, dia);
       m.ultimoServico = dia;
       return;
     }
 
-    // Se cabe um 234 cheio (≥18h ORD disponíveis e não é último dia), usa partição 18+6
-    const cabeOrdCheio = !ultimoDia && espacoOrd >= 18;
-    const horasDia = cabeOrdCheio ? 18 : 16;
-    const horasMadrugada = ultimoDia ? 0 : (cabeOrdCheio ? 6 : 8);
-    const horasFisicas = horasDia + horasMadrugada;
-    const ordUsar = Math.min(espacoOrd, horasFisicas);
-
-    if (ordUsar <= 0) {
-      // Sem espaço ORD → tudo HE, mas respeitando o teto mensal de HE
+    // Ramo B — sem espaço ORD: tudo HE, respeitando teto mensal de HE.
+    if (espacoOrd <= 0) {
       const restanteHe = limiteRestanteHe(m);
       const heDia = Math.min(horasDia, restanteHe);
       const heMad = ultimoDia ? 0 : Math.min(horasMadrugada, Math.max(0, restanteHe - heDia));
@@ -899,36 +889,25 @@ function escalar(
       return;
     }
 
-    const ordDiaAlvo = Math.min(ordUsar, horasDia);
-    const ordDiaTurno = Math.floor(ordDiaAlvo / 6) * 6;
-    const ordDiaSigla = siglaOrdPorHoras(ordDiaTurno);
-    if (ordDiaSigla) {
-      ord.get(dia)!.set(m.rowOrd, ordDiaSigla);
-      m.cargaH += ordDiaTurno;
-    }
-    setCm(dia, ordDiaAlvo - ordDiaTurno);
-    setHe(dia, horasDia - ordDiaAlvo);
+    // Ramo C — saldo parcial (0 < saldo < horasTurno):
+    // CM lança EXATAMENTE o saldo restante (fecha a carga ordinária);
+    // HE preenche o restante físico do plantão, limitado pelo teto mensal de HE.
+    // Não usar sigla ORD parcial (23/2): regra do usuário — saldo→CM+HE.
+    const cmDia = Math.min(espacoOrd, horasDia);
+    const cmMad = Math.max(0, espacoOrd - cmDia); // 0 quando espacoOrd ≤ 16
+    let restanteHe = limiteRestanteHe(m);
+
+    setCm(dia, cmDia);
+    const heDia = Math.min(horasDia - cmDia, restanteHe);
+    setHe(dia, heDia);
+    restanteHe -= heDia;
 
     if (!ultimoDia) {
-      const ordMadAlvo = Math.min(Math.max(0, ordUsar - horasDia), horasMadrugada);
-      // Só usa sigla "1" (=6h) se o plantão entrou como 234 cheio E sobrou ORD ≥6 para a madrugada
-      if (cabeOrdCheio && ordMadAlvo >= 6) {
-        ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
-        m.cargaH += 6;
-        // horasMadrugada é 6 quando cabeOrdCheio → nada de HE extra
-        const heMadExtra = horasMadrugada - 6;
-        if (heMadExtra > 0) setHe(dia + 1, heMadExtra);
-      } else {
-        // Madrugada precisa fechar SEMPRE o bloco físico (horasMadrugada h),
-        // independente de quanto ORD residual sobrou — o resto vira HE.
-        setCm(dia + 1, ordMadAlvo);
-        const heMadFechar = Math.max(0, horasMadrugada - ordMadAlvo);
-        if (heMadFechar > 0) {
-          const restanteHe = limiteRestanteHe(m);
-          setHe(dia + 1, Math.min(heMadFechar, restanteHe));
-        }
-      }
+      setCm(dia + 1, cmMad);
+      const heMad = Math.min(horasMadrugada - cmMad, restanteHe);
+      setHe(dia + 1, heMad);
     }
+
     marcaInicioServico(m, dia);
     m.ultimoServico = dia;
   };
