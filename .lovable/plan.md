@@ -1,44 +1,51 @@
 ## Diagnóstico
 
-### Bug 1 — Férias (plano anual) não aplicadas como FER
+A lógica de teto e complemento de carga **já existe** dentro de `escalar()` em `src/utils/escala.functions.ts` (etapa 6.5):
 
-`gerarEscala` filtra `ferias_militares` por `eq("ano", data.ano)` (linha 1814 de `src/utils/escala.functions.ts`). Esse campo `ano` é o "ano do plano" registrado pelo usuário na tela de Férias — e **não corresponde ao ano do período**. Exemplo real do banco: várias linhas com `ano = 2026` cobrindo `data_inicio = 2025-12-05 … data_fim = 2025-12-20`. Ao gerar a escala de **dezembro/2025** o sistema consulta `ano=2025`, não acha nada e nenhum FER é injetado em `ia.afastamentos`. Períodos que cruzam virada de ano também são perdidos.
+- Linhas 1404–1426: corta EXP do ADM quando `totalExp > alvoAdm` (cap mensal).
+- Linhas 1486–1502: lança `CM` em dias úteis livres quando o operacional fecha o mês abaixo de `cargaMin`.
 
-### Bug 2 — Militar ADM ultrapassa a carga horária mensal
+O problema é que o `for (const m of militares)` que executa essas duas rotinas tem, logo no começo, um curto-circuito para o modo ordinário puro (linhas 1375–1387):
 
-A etapa 6.2 lança `EXP9` (seg-qui) + `EXP6` (sex) em todo dia útil sem limite, e a etapa 6.5 (linhas 1389-1427) só **adiciona** expediente quando o total está abaixo do alvo — nunca remove o excedente. Para meses como dezembro/2025 (5 segundas, 5 terças, 5 quartas, 4 quintas, 4 sextas) a base já totaliza 19·9 + 4·6 = **195 h**, contra alvo `cargaBase(31) = 177 h`. Resultado: AK do ADM fica em vermelho.
+```ts
+if (par.modo === "ordinario_puro") {
+  if (m.isAdm) continue;          // pula o cap do ADM
+  …
+  if (cargaOrdPure < cargaMinPure) {
+    acertosCm.push(`… faltam Xh — modo ordinário puro: sem complemento`);
+  }
+  continue;                       // pula o lançamento de CM
+}
+```
 
-## Correções
+Com isso, em modo puro:
+- ADM ignora o cap e fica com 186 h (etapa 6.2 lançou EXP9/EXP6 sem limite).
+- Operacionais ficam 1 h abaixo do alvo (176 h em vez de 177 h) porque o `CM` faltante não é lançado.
 
-Arquivo único: `src/utils/escala.functions.ts`.
+Em modo `auto` o cap do ADM funciona porque o `continue` não dispara, mas a lógica está duplicada e frágil — qualquer modo novo pode regressar.
 
-### 1) Carregar férias por intervalo de datas, não por ano
-Substituir o filtro `eq("ano", data.ano)` da query `ferias_militares` por uma sobreposição com o mês alvo:
-- calcular `inicioMes = YYYY-MM-01` e `fimMes = último dia do mês` em ISO;
-- usar `.lte("data_inicio", fimMes).gte("data_fim", inicioMes)` para trazer todo período que cruza o mês (cobre virada de ano).
+## Correção
 
-Manter o restante da expansão dia-a-dia já existente (linhas 1900-1913), que já filtra por `getUTCFullYear() === data.ano && getUTCMonth()+1 === data.mes`.
+Arquivo único: `src/utils/escala.functions.ts`. Sem mudar fórmulas (`cargaBase`, `cargaMensalProporcional`) — apenas **deixar a lógica que já existe rodar em qualquer modo**.
 
-### 2) Capar carga ADM no alvo proporcional
-Reescrever o ramo `if (m.isAdm)` da etapa 6.5 (linhas 1389-1427) para:
+1. **Remover o bloco `if (par.modo === "ordinario_puro")` (linhas 1375–1387)** do início do `for (const m of militares)` em `escalar()`. O fluxo passa a ser único:
+   - ADM → cap atual (linhas 1392–1460), sem ramificação por modo.
+   - Operacional → complemento `CM` atual (linhas 1462–1507), sem ramificação por modo.
 
-1. Calcular `alvoAdm = cargaMensalProporcional(diasAfAdm)` e `totalExp` atual.
-2. Se `totalExp > alvoAdm` → **remover/encurtar EXP do fim do mês para o início** até `totalExp == alvoAdm`:
-   - Iterar `d` do último dia útil para o primeiro;
-   - Pular dias com `naoEscalar` ou `ord` (afastamento);
-   - Para cada `EXP*`/`CM*`/`TELE*` existente: reduzir a hora da sigla (`EXP9` → `EXP{9-x}`); se chegar a 0, remover a sigla;
-   - Continuar até zerar o excedente.
-   - Registrar em `acertosExpAdm` (`"NOME (-Xh EXP — teto mensal)"`).
-3. Se `totalExp < alvoAdm` → manter as duas passadas atuais (aumentar siglas existentes até 12h, depois lançar EXP novo).
-4. Se igual → nada a fazer.
+2. **Não mexer** em:
+   - `cargaBase`, `cargaMensalProporcional`, `horasOrdSigla`, `ORD_HORAS`.
+   - Etapa 6.2 (lançamento EXP9/EXP6 ADM).
+   - Etapa 6.5.1 (sanitização ADM em fds/feriado).
+   - Etapa 6.6 (HE só após fechar carga ADM).
 
-Não alterar a etapa 6.2 (manter o lançamento padrão EXP9/EXP6); o cap fica concentrado na etapa 6.5 para preservar a regra de “seg-qui = 9h, sex = 6h” quando couber, e só comprimir os dias finais quando estourar.
+3. **Manter** os alertas existentes (`Expediente complementar (ADM): … teto mensal`, `Complemento de carga (CM) lançado: …`) — eles passam a aparecer também em modo puro, dando rastro de auditoria.
 
-Manter intactas as etapas 6.5.1 (modo ordinário puro), 6.6 (HE ADM só após fechar carga) e demais regras já existentes.
+Efeito prático: em todo modo, o motor vai (a) cortar EXP do ADM quando o lançamento padrão estourar o teto e (b) preencher operacionais com `CM` até bater a carga mensal proporcional — exatamente o que a fórmula já manda.
 
 ## Validação
 
 - Build do projeto.
-- Re-gerar escala de dezembro/2025 e conferir:
-  - Militares com período em `ferias_militares` recebem `FER` nos dias do plano (via alerta consolidado);
-  - AK dos ADM não estoura — alerta `Expediente complementar (ADM)` mostra os ajustes (`-Xh EXP — teto mensal` quando aplicável).
+- Re-gerar dezembro/2025 nos dois modos:
+  - TENENTE 1 / TENENTE 2 → 177 h (cap remove 9 h do dia 31).
+  - Operacionais 24×72 com 7 plantões → 177 h (CM9 distribuído em dia útil livre).
+  - Alertas `Expediente complementar (ADM): … teto mensal` e `Complemento de carga (CM) lançado: …` presentes.

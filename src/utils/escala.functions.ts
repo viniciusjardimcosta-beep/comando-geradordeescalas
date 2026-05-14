@@ -1370,21 +1370,9 @@ function escalar(
   for (const m of militares) {
     if (!m.ativo) continue;
 
-    // MODO ORDINÁRIO PURO: NÃO completa carga (sem CM, EXP novo ou HE).
-    // Apenas registra alerta se a carga ORD ficou abaixo/acima da mínima mensal.
-    if (par.modo === "ordinario_puro") {
-      if (m.isAdm) continue;
-      const diasAfPure = diasAfastadoMap.get(m.rowOrd) ?? 0;
-      const cargaMinPure = cargaMensalProporcional(diasAfPure);
-      if (cargaMinPure <= 0) continue;
-      const cargaOrdPure = horasOrdMes(m);
-      if (cargaOrdPure < cargaMinPure) {
-        acertosCm.push(`${m.nome} (faltam ${cargaMinPure - cargaOrdPure}h — modo ordinário puro: sem complemento)`);
-      } else if (cargaOrdPure > cargaMinPure) {
-        acertosHe.push(`${m.nome} (+${cargaOrdPure - cargaMinPure}h ORD acima da carga — verificar)`);
-      }
-      continue;
-    }
+    // Fluxo único: cap do ADM e complemento CM do operacional rodam em qualquer
+    // modo (auto ou ordinario_puro), garantindo a carga mensal proporcional.
+
 
     // ===== ADM: ajustar EXP ao alvo mensal proporcional =====
     // Pode tanto FALTAR (completar) quanto SOBRAR (cortar dos últimos dias).
