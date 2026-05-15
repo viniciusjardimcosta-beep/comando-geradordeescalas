@@ -2161,7 +2161,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       .insert(insertPayload)
       .select("id")
       .single();
-    if (insErr) throw new Error("Falha ao registrar histórico: " + insErr.message);
+    if (insErr) { console.error("[gerarEscala] insert histórico:", insErr); throw new Error("Falha ao registrar histórico."); }
 
     const { data: signed } = await supabase.storage
       .from("escalas")
