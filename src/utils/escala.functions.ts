@@ -1800,7 +1800,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo, tipo_escala")
       .eq("user_id", userId)
       .eq("ativo", true);
-    if (errCad) throw new Error("Falha ao ler militares: " + errCad.message);
+    if (errCad) { console.error("[gerarEscala] read militares:", errCad); throw new Error("Falha ao ler militares."); }
 
     interface CadInfo {
       id: string;
