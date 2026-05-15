@@ -2135,7 +2135,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         upsert: false,
       });
-    if (upErr) throw new Error("Falha ao salvar arquivo: " + upErr.message);
+    if (upErr) { console.error("[gerarEscala] upload arquivo:", upErr); throw new Error("Falha ao salvar arquivo."); }
 
     const insertPayload = {
       user_id: userId,
