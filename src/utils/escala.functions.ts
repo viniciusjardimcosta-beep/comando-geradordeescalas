@@ -1800,7 +1800,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       .select("id, matricula_norm, nome, is_cov, is_cg, is_adm, ativo, tipo_escala")
       .eq("user_id", userId)
       .eq("ativo", true);
-    if (errCad) throw new Error("Falha ao ler militares: " + errCad.message);
+    if (errCad) { console.error("[gerarEscala] read militares:", errCad); throw new Error("Falha ao ler militares."); }
 
     interface CadInfo {
       id: string;
@@ -2135,7 +2135,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
         contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         upsert: false,
       });
-    if (upErr) throw new Error("Falha ao salvar arquivo: " + upErr.message);
+    if (upErr) { console.error("[gerarEscala] upload arquivo:", upErr); throw new Error("Falha ao salvar arquivo."); }
 
     const insertPayload = {
       user_id: userId,
@@ -2161,7 +2161,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       .insert(insertPayload)
       .select("id")
       .single();
-    if (insErr) throw new Error("Falha ao registrar histórico: " + insErr.message);
+    if (insErr) { console.error("[gerarEscala] insert histórico:", insErr); throw new Error("Falha ao registrar histórico."); }
 
     const { data: signed } = await supabase.storage
       .from("escalas")
@@ -2181,9 +2181,9 @@ export const gerarEscala = createServerFn({ method: "POST" })
       },
       militaresProcessados: militares.length,
     };
-   } catch (err) {
+    } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[gerarEscala] erro no handler:", msg, err);
-      throw new Error(msg);
+      throw new Error("Erro interno ao gerar escala. Tente novamente.");
    }
   });
