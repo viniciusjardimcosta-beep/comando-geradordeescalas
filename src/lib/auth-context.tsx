@@ -4,12 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type UserStatus = "pendente" | "aprovado" | "bloqueado";
 export type AppRole = "admin" | "user";
+export type SubscriptionStatus = "trial" | "active" | "expired" | "canceled";
+export type PlanType = "trial" | "mensal" | "semestral" | "anual";
 
 export interface Profile {
   id: string;
   email: string;
   nome: string | null;
   status: UserStatus;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  subscription_status: SubscriptionStatus;
+  subscription_end_date: string | null;
+  plan_type: PlanType;
 }
 
 interface AuthContextValue {
@@ -20,11 +27,33 @@ interface AuthContextValue {
   loading: boolean;
   isAdmin: boolean;
   isApproved: boolean;
+  hasAccess: boolean;
+  trialDaysLeft: number | null;
+  isTrial: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function computeAccess(profile: Profile | null, isAdmin: boolean): { hasAccess: boolean; daysLeft: number | null; isTrial: boolean } {
+  if (!profile) return { hasAccess: false, daysLeft: null, isTrial: false };
+  if (isAdmin) return { hasAccess: true, daysLeft: null, isTrial: false };
+  const now = Date.now();
+  if (profile.subscription_status === "active") {
+    if (!profile.subscription_end_date || new Date(profile.subscription_end_date).getTime() > now) {
+      return { hasAccess: true, daysLeft: null, isTrial: false };
+    }
+  }
+  if (profile.subscription_status === "trial" && profile.trial_end_date) {
+    const end = new Date(profile.trial_end_date).getTime();
+    const ms = end - now;
+    if (ms > 0) {
+      return { hasAccess: true, daysLeft: Math.ceil(ms / (1000 * 60 * 60 * 24)), isTrial: true };
+    }
+  }
+  return { hasAccess: false, daysLeft: 0, isTrial: profile.subscription_status === "trial" };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -34,7 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async (userId: string) => {
     const [{ data: prof }, { data: roles }] = await Promise.all([
-      supabase.from("profiles").select("id, email, nome, status").eq("id", userId).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("id, email, nome, status, trial_start_date, trial_end_date, subscription_status, subscription_end_date, plan_type")
+        .eq("id", userId)
+        .maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
     setProfile(prof as Profile | null);
@@ -43,11 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Listener primeiro
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       setSession(sess);
       if (sess?.user) {
-        // defer para evitar deadlock no callback
         setTimeout(() => loadProfile(sess.user.id), 0);
       } else {
         setProfile(null);
@@ -55,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // 2. Sessão existente
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
       setSession(sess);
       if (sess?.user) {
@@ -79,14 +109,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   };
 
+  const isAdmin = role === "admin";
+  const access = computeAccess(profile, isAdmin);
+
   const value: AuthContextValue = {
     session,
     user: session?.user ?? null,
     profile,
     role,
     loading,
-    isAdmin: role === "admin",
+    isAdmin,
     isApproved: profile?.status === "aprovado",
+    hasAccess: access.hasAccess,
+    trialDaysLeft: access.daysLeft,
+    isTrial: access.isTrial,
     refresh,
     signOut,
   };
