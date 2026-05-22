@@ -83,7 +83,8 @@ async function fileToBase64(f: File): Promise<string> {
 }
 
 function ImportarPage() {
-  const { user, session } = useAuth();
+  const { user, session, hasAccess, isAdmin } = useAuth();
+  const podeGerar = hasAccess || isAdmin;
   const fileRef = useRef<HTMLInputElement>(null);
   const gerarFn = useServerFn(gerarEscala);
 
@@ -196,6 +197,10 @@ function ImportarPage() {
     (planilhaAno !== undefined && planilhaAno !== ano);
 
   const abrirObservacoes = () => {
+    if (!podeGerar) {
+      toast.error("Período de teste expirado. Assine um plano para gerar escalas.");
+      return;
+    }
     if (!file) { toast.error("Selecione a planilha-modelo."); return; }
     if (!anexoBName) { toast.error("Arquivo sem aba Anexo B."); return; }
     if (divergenciaMesAno) { setOpenConfirmDivergencia(true); return; }
@@ -203,6 +208,10 @@ function ImportarPage() {
   };
 
   const baixar = async (path: string | null) => {
+    if (!podeGerar) {
+      toast.error("Período de teste expirado. Assine um plano para baixar escalas.");
+      return;
+    }
     if (!path) return;
     const { data, error } = await supabase.storage.from("escalas").createSignedUrl(path, 60 * 5);
     if (error || !data?.signedUrl) { toast.error("Não foi possível gerar link."); return; }
@@ -327,7 +336,7 @@ function ImportarPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName}>
+            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName || !podeGerar}>
               <Sparkles className="mr-2 h-4 w-4" /> Continuar para observações
             </Button>
           </div>

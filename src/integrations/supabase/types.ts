@@ -238,7 +238,12 @@ export type Database = {
           email: string
           id: string
           nome: string | null
+          plan_type: Database["public"]["Enums"]["plan_type"]
           status: Database["public"]["Enums"]["user_status"]
+          subscription_end_date: string | null
+          subscription_status: Database["public"]["Enums"]["subscription_status"]
+          trial_end_date: string | null
+          trial_start_date: string | null
           updated_at: string
         }
         Insert: {
@@ -246,7 +251,12 @@ export type Database = {
           email: string
           id: string
           nome?: string | null
+          plan_type?: Database["public"]["Enums"]["plan_type"]
           status?: Database["public"]["Enums"]["user_status"]
+          subscription_end_date?: string | null
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          trial_end_date?: string | null
+          trial_start_date?: string | null
           updated_at?: string
         }
         Update: {
@@ -254,7 +264,12 @@ export type Database = {
           email?: string
           id?: string
           nome?: string | null
+          plan_type?: Database["public"]["Enums"]["plan_type"]
           status?: Database["public"]["Enums"]["user_status"]
+          subscription_end_date?: string | null
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          trial_end_date?: string | null
+          trial_start_date?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -289,6 +304,7 @@ export type Database = {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["user_status"]
       }
+      has_active_access: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -300,6 +316,8 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       funcao_militar: "COV" | "CG"
+      plan_type: "trial" | "mensal" | "semestral" | "anual"
+      subscription_status: "trial" | "active" | "expired" | "canceled"
       user_status: "pendente" | "aprovado" | "bloqueado"
     }
     CompositeTypes: {
@@ -430,6 +448,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       funcao_militar: ["COV", "CG"],
+      plan_type: ["trial", "mensal", "semestral", "anual"],
+      subscription_status: ["trial", "active", "expired", "canceled"],
       user_status: ["pendente", "aprovado", "bloqueado"],
     },
   },

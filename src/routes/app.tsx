@@ -2,14 +2,14 @@ import { createFileRoute, Outlet, Link, Navigate, useLocation } from "@tanstack/
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered } from "lucide-react";
+import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock } from "lucide-react";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
 });
 
 function AppLayout() {
-  const { loading, session, profile, isAdmin, isApproved, signOut } = useAuth();
+  const { loading, session, profile, isAdmin, isApproved, hasAccess, isTrial, trialDaysLeft, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -27,8 +27,12 @@ function AppLayout() {
     { to: "/app/militares", label: "Militares", icon: UserSquare2, show: true },
     { to: "/app/escalas", label: "Escalas Ordinárias", icon: ListOrdered, show: true },
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
+    { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
   ];
+
+  const mostrarBannerTrial = isTrial && trialDaysLeft !== null && trialDaysLeft > 0 && trialDaysLeft <= 7;
+  const mostrarBannerBloqueio = !hasAccess && !isAdmin;
 
   return (
     <div className="min-h-screen">
@@ -83,6 +87,33 @@ function AppLayout() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {mostrarBannerBloqueio && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+              <div>
+                <p className="font-semibold text-destructive">Seu período de teste expirou</p>
+                <p className="text-muted-foreground">Geração e exportação de escalas estão bloqueadas. Assine um plano para continuar.</p>
+              </div>
+            </div>
+            <Link to="/app/assinatura">
+              <Button size="sm">Ver planos</Button>
+            </Link>
+          </div>
+        )}
+        {!mostrarBannerBloqueio && mostrarBannerTrial && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              <span>
+                <strong>{trialDaysLeft}</strong> dia{trialDaysLeft === 1 ? "" : "s"} restante{trialDaysLeft === 1 ? "" : "s"} no seu teste gratuito.
+              </span>
+            </div>
+            <Link to="/app/assinatura">
+              <Button size="sm" variant="outline">Ver planos</Button>
+            </Link>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

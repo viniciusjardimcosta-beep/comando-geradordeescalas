@@ -20,6 +20,7 @@ import { Route as AppMilitaresRouteImport } from './routes/app.militares'
 import { Route as AppImportarRouteImport } from './routes/app.importar'
 import { Route as AppFeriasRouteImport } from './routes/app.ferias'
 import { Route as AppEscalasRouteImport } from './routes/app.escalas'
+import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
 
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
@@ -76,6 +77,11 @@ const AppEscalasRoute = AppEscalasRouteImport.update({
   path: '/escalas',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
+  id: '/assinatura',
+  path: '/assinatura',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/assinatura': typeof AppAssinaturaRoute
   '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/aguardando': typeof AguardandoRoute
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/assinatura': typeof AppAssinaturaRoute
   '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
+  '/app/assinatura': typeof AppAssinaturaRoute
   '/app/escalas': typeof AppEscalasRoute
   '/app/ferias': typeof AppFeriasRoute
   '/app/importar': typeof AppImportarRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/assinatura'
     | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/aguardando'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/assinatura'
     | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/redefinir-senha'
+    | '/app/assinatura'
     | '/app/escalas'
     | '/app/ferias'
     | '/app/importar'
@@ -244,10 +256,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEscalasRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/assinatura': {
+      id: '/app/assinatura'
+      path: '/assinatura'
+      fullPath: '/app/assinatura'
+      preLoaderRoute: typeof AppAssinaturaRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAssinaturaRoute: typeof AppAssinaturaRoute
   AppEscalasRoute: typeof AppEscalasRoute
   AppFeriasRoute: typeof AppFeriasRoute
   AppImportarRoute: typeof AppImportarRoute
@@ -257,6 +277,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAssinaturaRoute: AppAssinaturaRoute,
   AppEscalasRoute: AppEscalasRoute,
   AppFeriasRoute: AppFeriasRoute,
   AppImportarRoute: AppImportarRoute,
