@@ -1684,16 +1684,22 @@ export const gerarEscala = createServerFn({ method: "POST" })
    try {
      const { supabase, userId } = context;
 
-     /* 0) Guard de autorização: somente usuários aprovados podem gerar escala */
-     const { data: profileStatus, error: profileErr } = await supabase
-       .from("profiles")
-       .select("status")
-       .eq("id", userId)
-       .maybeSingle();
-     if (profileErr) throw new Error("Não foi possível validar o perfil do usuário.");
-     if (!profileStatus || profileStatus.status !== "aprovado") {
-       throw new Response("Forbidden: usuário não aprovado", { status: 403 });
-     }
+      /* 0) Guard de autorização: usuário aprovado E com acesso ativo (trial ou assinatura) */
+      const { data: profileStatus, error: profileErr } = await supabase
+        .from("profiles")
+        .select("status, subscription_status, subscription_end_date, trial_end_date")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profileErr) throw new Error("Não foi possível validar o perfil do usuário.");
+      if (!profileStatus || profileStatus.status !== "aprovado") {
+        throw new Response("Forbidden: usuário não aprovado", { status: 403 });
+      }
+      // Checa acesso via RPC (admin sempre passa; trial válido ou assinatura ativa).
+      const { data: hasAccess, error: accessErr } = await supabase.rpc("has_active_access", { _user_id: userId });
+      if (accessErr) { console.error("[gerarEscala] has_active_access:", accessErr); throw new Error("Falha ao validar assinatura."); }
+      if (!hasAccess) {
+        throw new Response("Subscription required: período de teste expirado ou assinatura inativa.", { status: 402 });
+      }
 
      const alertas: Alerta[] = [];
 
