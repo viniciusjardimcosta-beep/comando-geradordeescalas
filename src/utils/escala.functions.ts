@@ -2121,6 +2121,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
       escritas++;
     };
 
+    if (demoMode) {
+      for (const mp of [ord, expm, he]) {
+        for (const dia of Array.from(mp.keys())) {
+          if (dia > DEMO_MAX_DIAS) mp.delete(dia);
+        }
+      }
+    }
+
     for (const [dia, slot] of ord.entries()) {
       for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 0, sigla);
     }
