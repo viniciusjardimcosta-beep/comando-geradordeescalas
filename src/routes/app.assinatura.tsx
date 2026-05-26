@@ -90,7 +90,7 @@ function AssinaturaPage() {
       <div>
         <h2 className="text-xl font-semibold">Escolha seu plano</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          A contratação será processada externamente. Em breve disponibilizaremos pagamento integrado.
+          Clique em <strong>Contratar</strong> para ser redirecionado ao checkout seguro da Nexano.
         </p>
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           {planos.map((p) => (
