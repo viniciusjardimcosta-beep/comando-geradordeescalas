@@ -9,9 +9,9 @@ export const Route = createFileRoute("/app/assinatura")({
 });
 
 const planos = [
-  { id: "mensal", nome: "Mensal", preco: "49", desc: "Cobrança mensal", destaque: false },
-  { id: "semestral", nome: "Semestral", preco: "39", desc: "Equivalente mensal · cobrança semestral", destaque: false },
-  { id: "anual", nome: "Anual", preco: "25", desc: "Equivalente mensal · cobrança anual", destaque: true, badge: "Melhor custo-benefício" },
+  { id: "mensal", nome: "Mensal", preco: "49", desc: "Cobrança mensal", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=KY8MOGZ" },
+  { id: "semestral", nome: "Semestral", preco: "39", desc: "Equivalente mensal · cobrança semestral", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=QG5PAFN" },
+  { id: "anual", nome: "Anual", preco: "25", desc: "Equivalente mensal · cobrança anual", destaque: true, badge: "Melhor custo-benefício", link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC" },
 ] as const;
 
 function AssinaturaPage() {
