@@ -336,8 +336,8 @@ function ImportarPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName || !podeGerar}>
-              <Sparkles className="mr-2 h-4 w-4" /> Continuar para observações
+            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName}>
+              <Sparkles className="mr-2 h-4 w-4" /> {isDemo ? "Gerar prévia (demo)" : "Continuar para observações"}
             </Button>
           </div>
         </div>
