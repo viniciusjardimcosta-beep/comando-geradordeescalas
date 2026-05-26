@@ -1697,11 +1697,21 @@ export const gerarEscala = createServerFn({ method: "POST" })
       // Checa acesso via RPC (admin sempre passa; trial válido ou assinatura ativa).
       const { data: hasAccess, error: accessErr } = await supabase.rpc("has_active_access", { _user_id: userId });
       if (accessErr) { console.error("[gerarEscala] has_active_access:", accessErr); throw new Error("Falha ao validar assinatura."); }
-      if (!hasAccess) {
-        throw new Response("Subscription required: período de teste expirado ou assinatura inativa.", { status: 402 });
-      }
+      const demoMode = !hasAccess;
+      const DEMO_MAX_DIAS = 7;
 
      const alertas: Alerta[] = [];
+
+     if (demoMode) {
+       // No modo demonstração, forçamos ordinário puro: sem tapar furos com HE
+       // e sem completar carga (CM/EXP). E truncamos a escala para no máximo
+       // DEMO_MAX_DIAS dias. O arquivo NÃO é salvo nem disponibilizado para download.
+       data.parametros.modo = "ordinario_puro";
+       alertas.push({
+         tipo: "warn",
+         msg: `MODO DEMONSTRAÇÃO LIMITADO — prévia restrita aos primeiros ${DEMO_MAX_DIAS} dias, sem correção automática de HE, sem completar carga e sem exportação. Assine um plano para gerar a escala completa do mês e baixar o arquivo.`,
+       });
+     }
 
      /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
@@ -2111,6 +2121,14 @@ export const gerarEscala = createServerFn({ method: "POST" })
       escritas++;
     };
 
+    if (demoMode) {
+      for (const mp of [ord, expm, he]) {
+        for (const dia of Array.from(mp.keys())) {
+          if (dia > DEMO_MAX_DIAS) mp.delete(dia);
+        }
+      }
+    }
+
     for (const [dia, slot] of ord.entries()) {
       for (const [rowOrd, sigla] of slot.entries()) setSigla(dia, rowOrd, 0, sigla);
     }
@@ -2134,6 +2152,26 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const outBytes = saveXlsx(bundle);
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `${userId}/${data.ano}-${String(data.mes).padStart(2, "0")}-${ts}.xlsx`;
+
+    // Modo demonstração: não salva no storage, não registra histórico, não devolve download.
+    if (demoMode) {
+      return {
+        ok: true,
+        demo: true,
+        escalaId: null,
+        downloadUrl: null,
+        escritas,
+        alertas,
+        iaResumo: {
+          afastamentos: ia.afastamentos.length,
+          lancamentos: ia.lancamentos.length,
+          reforcos: ia.reforcos.length,
+          excecoes: ia.excecoes.length,
+        },
+        militaresProcessados: militares.length,
+      };
+    }
+
 
     const { error: upErr } = await supabase.storage
       .from("escalas")

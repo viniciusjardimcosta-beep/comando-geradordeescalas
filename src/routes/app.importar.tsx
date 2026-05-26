@@ -84,7 +84,8 @@ async function fileToBase64(f: File): Promise<string> {
 
 function ImportarPage() {
   const { user, session, hasAccess, isAdmin } = useAuth();
-  const podeGerar = hasAccess || isAdmin;
+  const podeBaixar = hasAccess || isAdmin;
+  const isDemo = !podeBaixar;
   const fileRef = useRef<HTMLInputElement>(null);
   const gerarFn = useServerFn(gerarEscala);
 
@@ -197,18 +198,17 @@ function ImportarPage() {
     (planilhaAno !== undefined && planilhaAno !== ano);
 
   const abrirObservacoes = () => {
-    if (!podeGerar) {
-      toast.error("Período de teste expirado. Assine um plano para gerar escalas.");
-      return;
-    }
     if (!file) { toast.error("Selecione a planilha-modelo."); return; }
     if (!anexoBName) { toast.error("Arquivo sem aba Anexo B."); return; }
+    if (isDemo) {
+      toast.warning("Modo demonstração: a prévia será limitada aos primeiros 7 dias e não poderá ser baixada.");
+    }
     if (divergenciaMesAno) { setOpenConfirmDivergencia(true); return; }
     setOpenObs(true);
   };
 
   const baixar = async (path: string | null) => {
-    if (!podeGerar) {
+    if (!podeBaixar) {
       toast.error("Período de teste expirado. Assine um plano para baixar escalas.");
       return;
     }
@@ -239,7 +239,12 @@ function ImportarPage() {
         throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
       }
 
-      toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+      const isDemoResp = (result as { demo?: boolean }).demo === true;
+      if (isDemoResp) {
+        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${result.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
+      } else {
+        toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+      }
       if (result.downloadUrl) {
         window.open(result.downloadUrl, "_blank");
       }
@@ -336,8 +341,8 @@ function ImportarPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName || !podeGerar}>
-              <Sparkles className="mr-2 h-4 w-4" /> Continuar para observações
+            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName}>
+              <Sparkles className="mr-2 h-4 w-4" /> {isDemo ? "Gerar prévia (demo)" : "Continuar para observações"}
             </Button>
           </div>
         </div>
@@ -412,6 +417,18 @@ function ImportarPage() {
               reforços de COV/CG em dias específicos ou exceções por militar. A IA vai interpretar e aplicar.
             </DialogDescription>
           </DialogHeader>
+
+          {isDemo && (
+            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-warning" />
+              <div>
+                <p className="font-semibold text-warning">Modo demonstração limitado</p>
+                <p className="text-xs text-muted-foreground">
+                  A prévia será gerada apenas para os <strong>primeiros 7 dias</strong>, sem correção automática de HE, sem completar carga horária e <strong>sem opção de download</strong>. Assine um plano para liberar a geração completa e a exportação.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Modo de geração */}
           <div className="space-y-2 rounded-md border border-border bg-input/30 p-3">
