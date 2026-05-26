@@ -1697,11 +1697,21 @@ export const gerarEscala = createServerFn({ method: "POST" })
       // Checa acesso via RPC (admin sempre passa; trial válido ou assinatura ativa).
       const { data: hasAccess, error: accessErr } = await supabase.rpc("has_active_access", { _user_id: userId });
       if (accessErr) { console.error("[gerarEscala] has_active_access:", accessErr); throw new Error("Falha ao validar assinatura."); }
-      if (!hasAccess) {
-        throw new Response("Subscription required: período de teste expirado ou assinatura inativa.", { status: 402 });
-      }
+      const demoMode = !hasAccess;
+      const DEMO_MAX_DIAS = 7;
 
      const alertas: Alerta[] = [];
+
+     if (demoMode) {
+       // No modo demonstração, forçamos ordinário puro: sem tapar furos com HE
+       // e sem completar carga (CM/EXP). E truncamos a escala para no máximo
+       // DEMO_MAX_DIAS dias. O arquivo NÃO é salvo nem disponibilizado para download.
+       data.parametros.modo = "ordinario_puro";
+       alertas.push({
+         tipo: "warn",
+         msg: `MODO DEMONSTRAÇÃO LIMITADO — prévia restrita aos primeiros ${DEMO_MAX_DIAS} dias, sem correção automática de HE, sem completar carga e sem exportação. Assine um plano para gerar a escala completa do mês e baixar o arquivo.`,
+       });
+     }
 
      /* 1) Carregar workbook como ZIP (preserva 100% do arquivo original) */
     const bin = Uint8Array.from(atob(data.fileBase64), (c) => c.charCodeAt(0));
