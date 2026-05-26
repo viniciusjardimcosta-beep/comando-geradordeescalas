@@ -2153,6 +2153,26 @@ export const gerarEscala = createServerFn({ method: "POST" })
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `${userId}/${data.ano}-${String(data.mes).padStart(2, "0")}-${ts}.xlsx`;
 
+    // Modo demonstração: não salva no storage, não registra histórico, não devolve download.
+    if (demoMode) {
+      return {
+        ok: true,
+        demo: true,
+        escalaId: null,
+        downloadUrl: null,
+        escritas,
+        alertas,
+        iaResumo: {
+          afastamentos: ia.afastamentos.length,
+          lancamentos: ia.lancamentos.length,
+          reforcos: ia.reforcos.length,
+          excecoes: ia.excecoes.length,
+        },
+        militaresProcessados: militares.length,
+      };
+    }
+
+
     const { error: upErr } = await supabase.storage
       .from("escalas")
       .upload(path, outBytes, {
