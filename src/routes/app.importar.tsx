@@ -84,7 +84,8 @@ async function fileToBase64(f: File): Promise<string> {
 
 function ImportarPage() {
   const { user, session, hasAccess, isAdmin } = useAuth();
-  const podeGerar = hasAccess || isAdmin;
+  const podeBaixar = hasAccess || isAdmin;
+  const isDemo = !podeBaixar;
   const fileRef = useRef<HTMLInputElement>(null);
   const gerarFn = useServerFn(gerarEscala);
 
