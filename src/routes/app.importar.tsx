@@ -418,6 +418,18 @@ function ImportarPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {isDemo && (
+            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-warning" />
+              <div>
+                <p className="font-semibold text-warning">Modo demonstração limitado</p>
+                <p className="text-xs text-muted-foreground">
+                  A prévia será gerada apenas para os <strong>primeiros 7 dias</strong>, sem correção automática de HE, sem completar carga horária e <strong>sem opção de download</strong>. Assine um plano para liberar a geração completa e a exportação.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Modo de geração */}
           <div className="space-y-2 rounded-md border border-border bg-input/30 p-3">
             <Label className="text-sm font-semibold">Modo de geração</Label>
