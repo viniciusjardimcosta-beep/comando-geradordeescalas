@@ -9,9 +9,9 @@ export const Route = createFileRoute("/app/assinatura")({
 });
 
 const planos = [
-  { id: "mensal", nome: "Mensal", preco: "49", desc: "Cobrança mensal", destaque: false },
-  { id: "semestral", nome: "Semestral", preco: "39", desc: "Equivalente mensal · cobrança semestral", destaque: false },
-  { id: "anual", nome: "Anual", preco: "25", desc: "Equivalente mensal · cobrança anual", destaque: true, badge: "Melhor custo-benefício" },
+  { id: "mensal", nome: "Mensal", preco: "49", desc: "Cobrança mensal", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=KY8MOGZ" },
+  { id: "semestral", nome: "Semestral", preco: "39", desc: "Equivalente mensal · cobrança semestral", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=QG5PAFN" },
+  { id: "anual", nome: "Anual", preco: "25", desc: "Equivalente mensal · cobrança anual", destaque: true, badge: "Melhor custo-benefício", link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC" },
 ] as const;
 
 function AssinaturaPage() {
@@ -90,7 +90,7 @@ function AssinaturaPage() {
       <div>
         <h2 className="text-xl font-semibold">Escolha seu plano</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          A contratação será processada externamente. Em breve disponibilizaremos pagamento integrado.
+          Clique em <strong>Contratar</strong> para ser redirecionado ao checkout seguro da Nexano.
         </p>
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           {planos.map((p) => (
@@ -123,12 +123,11 @@ function AssinaturaPage() {
               <Button
                 className="mt-8 w-full"
                 variant={p.destaque ? "default" : "outline"}
-                onClick={() => {
-                  // Integração futura via Nexano
-                  alert("A contratação será habilitada em breve. Entre em contato com o suporte.");
-                }}
+                asChild
               >
-                Contratar
+                <a href={p.link} target="_blank" rel="noopener noreferrer">
+                  Contratar
+                </a>
               </Button>
             </div>
           ))}
