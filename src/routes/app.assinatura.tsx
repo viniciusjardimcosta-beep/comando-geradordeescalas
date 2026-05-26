@@ -123,12 +123,11 @@ function AssinaturaPage() {
               <Button
                 className="mt-8 w-full"
                 variant={p.destaque ? "default" : "outline"}
-                onClick={() => {
-                  // Integração futura via Nexano
-                  alert("A contratação será habilitada em breve. Entre em contato com o suporte.");
-                }}
+                asChild
               >
-                Contratar
+                <a href={p.link} target="_blank" rel="noopener noreferrer">
+                  Contratar
+                </a>
               </Button>
             </div>
           ))}
