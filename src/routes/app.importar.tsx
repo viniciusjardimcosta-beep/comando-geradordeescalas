@@ -239,7 +239,12 @@ function ImportarPage() {
         throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
       }
 
-      toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+      const isDemoResp = (result as { demo?: boolean }).demo === true;
+      if (isDemoResp) {
+        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${result.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
+      } else {
+        toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+      }
       if (result.downloadUrl) {
         window.open(result.downloadUrl, "_blank");
       }
