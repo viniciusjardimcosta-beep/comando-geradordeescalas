@@ -198,18 +198,17 @@ function ImportarPage() {
     (planilhaAno !== undefined && planilhaAno !== ano);
 
   const abrirObservacoes = () => {
-    if (!podeGerar) {
-      toast.error("Período de teste expirado. Assine um plano para gerar escalas.");
-      return;
-    }
     if (!file) { toast.error("Selecione a planilha-modelo."); return; }
     if (!anexoBName) { toast.error("Arquivo sem aba Anexo B."); return; }
+    if (isDemo) {
+      toast.warning("Modo demonstração: a prévia será limitada aos primeiros 7 dias e não poderá ser baixada.");
+    }
     if (divergenciaMesAno) { setOpenConfirmDivergencia(true); return; }
     setOpenObs(true);
   };
 
   const baixar = async (path: string | null) => {
-    if (!podeGerar) {
+    if (!podeBaixar) {
       toast.error("Período de teste expirado. Assine um plano para baixar escalas.");
       return;
     }
