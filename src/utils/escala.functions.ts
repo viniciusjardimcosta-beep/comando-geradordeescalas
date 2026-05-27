@@ -47,6 +47,20 @@ const InputSchema = z.object({
 });
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
+type FalhaCritica = { dia: number; etapa: string; motivo: string };
+
+/** Tetos de segurança contra loops degenerados no motor. Cada iteração interna
+ *  acrescenta no máximo 1 militar/HE — 200 por dia é muito acima do alvo
+ *  máximo (20) e cobre fallback CG/COV/forçar. MAX_ITER_TOTAL evita qualquer
+ *  travamento global mesmo em meses de 31 dias com configuração patológica. */
+const MAX_ITER_POR_DIA = 200;
+const MAX_ITER_TOTAL = 50_000;
+class EscalaLoopError extends Error {
+  constructor(public dia: number, public etapa: string) {
+    super(`Loop excedeu limite seguro na etapa "${etapa}" (dia ${dia}).`);
+    this.name = "EscalaLoopError";
+  }
+}
 
 // Siglas válidas extraídas do glossário da planilha oficial
 const SIGLAS_AFASTAMENTO = new Set([
