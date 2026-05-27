@@ -2124,9 +2124,43 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
 
-    /* 7) Motor */
+    /* 7) Motor — com proteção contra loop e diagnóstico de "dia impossível" */
     const dias = diasNoMes(data.mes, data.ano);
-    const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
+    const falhasCriticas: FalhaCritica[] = [];
+    let ord: Map<number, Map<number, string>>;
+    let expm: Map<number, Map<number, string>>;
+    let he: Map<number, Map<number, string>>;
+    try {
+      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas);
+      ord = res.ord; expm = res.exp; he = res.he;
+    } catch (e) {
+      if (e instanceof EscalaLoopError) {
+        // Loop excedeu teto de segurança — não há solução viável; aborta sem salvar.
+        return {
+          ok: false as const,
+          motivo: "loop_excedido",
+          falhasCriticas: [{
+            dia: e.dia,
+            etapa: e.etapa,
+            motivo: `Geração interrompida: o sistema fez muitas tentativas sem encontrar solução válida na etapa "${e.etapa}" do dia ${e.dia}. Verifique se há militares suficientes e ajuste as observações.`,
+          }],
+          alertas,
+        };
+      }
+      throw e;
+    }
+
+    /* 7.1) Se o motor identificou dia(s) impossível(eis), interrompe sem salvar
+            arquivo nem registrar histórico. A UI mostra cada falha ao usuário. */
+    if (falhasCriticas.length > 0 && !demoMode) {
+      return {
+        ok: false as const,
+        motivo: "dia_impossivel",
+        falhasCriticas,
+        alertas,
+      };
+    }
+
 
     /* 8) Acumular edições para a aba Anexo B (cirúrgico — não toca em
           estilos, validações, fórmulas das demais células). */
