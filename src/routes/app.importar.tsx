@@ -235,7 +235,23 @@ function ImportarPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
 
-      if (!result || typeof result !== "object" || !("escritas" in result)) {
+      if (!result || typeof result !== "object") {
+        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
+      }
+
+      // Falha crítica: motor não conseguiu completar dia(s) — não há arquivo nem histórico.
+      if ((result as { ok?: boolean }).ok === false) {
+        const falhas = (result as { falhasCriticas?: { dia: number; etapa: string; motivo: string }[] }).falhasCriticas ?? [];
+        const primeira = falhas[0]?.motivo ?? "Não foi possível gerar a escala com as regras atuais.";
+        toast.error(primeira, {
+          duration: 12000,
+          description: falhas.length > 1 ? `Há ${falhas.length} dia(s) com problema. Ajuste afastamentos/efetivo nas observações e tente novamente.` : "Ajuste afastamentos/efetivo nas observações e tente novamente.",
+        });
+        setFalhasCriticas(falhas);
+        return;
+      }
+
+      if (!("escritas" in result)) {
         throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
       }
 
