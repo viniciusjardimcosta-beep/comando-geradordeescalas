@@ -596,6 +596,37 @@ Cb Beltrano não escalar dia 15.`}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de falhas críticas (dia(s) impossível(eis) — sem arquivo gerado) */}
+      <Dialog open={falhasCriticas.length > 0} onOpenChange={(o) => { if (!o) setFalhasCriticas([]); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Geração interrompida
+            </DialogTitle>
+            <DialogDescription>
+              O sistema não conseguiu completar a escala com as regras atuais. Nenhum arquivo foi gerado.
+              Ajuste afastamentos, efetivo ou os parâmetros nas observações e tente novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {falhasCriticas.map((f, i) => (
+              <div key={i} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                <div className="font-semibold text-destructive">Dia {f.dia}</div>
+                <div className="mt-1 text-foreground">{f.motivo}</div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFalhasCriticas([])}>Fechar</Button>
+            <Button onClick={() => { setFalhasCriticas([]); setOpenObs(true); }}>
+              Ajustar observações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
