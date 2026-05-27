@@ -47,6 +47,20 @@ const InputSchema = z.object({
 });
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
+type FalhaCritica = { dia: number; etapa: string; motivo: string };
+
+/** Tetos de segurança contra loops degenerados no motor. Cada iteração interna
+ *  acrescenta no máximo 1 militar/HE — 200 por dia é muito acima do alvo
+ *  máximo (20) e cobre fallback CG/COV/forçar. MAX_ITER_TOTAL evita qualquer
+ *  travamento global mesmo em meses de 31 dias com configuração patológica. */
+const MAX_ITER_POR_DIA = 200;
+const MAX_ITER_TOTAL = 50_000;
+class EscalaLoopError extends Error {
+  constructor(public dia: number, public etapa: string) {
+    super(`Loop excedeu limite seguro na etapa "${etapa}" (dia ${dia}).`);
+    this.name = "EscalaLoopError";
+  }
+}
 
 // Siglas válidas extraídas do glossário da planilha oficial
 const SIGLAS_AFASTAMENTO = new Set([
@@ -470,7 +484,12 @@ function escalar(
   par: z.infer<typeof ParametrosSchema>,
   ia: InterpretacaoIA,
   alertas: Alerta[],
+  falhasCriticas: FalhaCritica[] = [],
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
+  let iterTotal = 0;
+  const tick = (dia: number, etapa: string) => {
+    if (++iterTotal > MAX_ITER_TOTAL) throw new EscalaLoopError(dia, etapa);
+  };
   const ord = new Map<number, Map<number, string>>();
   const expm = new Map<number, Map<number, string>>();
   const he = new Map<number, Map<number, string>>();
@@ -999,7 +1018,9 @@ function escalar(
 
     // CGs
     let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
-    while (cgEscalados < minCg) {
+    let _itCg = 0;
+    while (cgEscalados < minCg && _itCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:CG");
       const cg = escolher("CG");
       if (!cg) break; // furo será reavaliado depois da etapa de HE
       lancaServico24(cg, dia);
@@ -1008,7 +1029,9 @@ function escalar(
 
     // COVs
     let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
-    while (covEscalados < minCov) {
+    let _itCov = 0;
+    while (covEscalados < minCov && _itCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:COV");
       const cov = escolher("COV");
       if (!cov) break;
       lancaServico24(cov, dia);
@@ -1017,7 +1040,9 @@ function escalar(
 
     // completar
     const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
-    while (escalados24() < totalAlvo) {
+    let _itFill = 0;
+    while (escalados24() < totalAlvo && _itFill++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:fill");
       const m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
       if (!m) break;
       lancaServico24(m, dia);
@@ -1124,12 +1149,16 @@ function escalar(
     const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
 
-    while (faltam > 0 && cgAtuais() < minCg) {
+    let _itHeCg = 0;
+    while (faltam > 0 && cgAtuais() < minCg && _itHeCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:CG");
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
       if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd); // marca pra não tentar de novo
     }
-    while (faltam > 0 && covAtuais() < minCov) {
+    let _itHeCov = 0;
+    while (faltam > 0 && covAtuais() < minCov && _itHeCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:COV");
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
       if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd);
@@ -1205,12 +1234,16 @@ function escalar(
       };
 
       // 1º CG, 2º COV, 3º preencher total
-      while (precisaForcar() && cgAtuais() < minCg) {
+      let _itFcCg = 0;
+      while (precisaForcar() && cgAtuais() < minCg && _itFcCg++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:CG");
         const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
         if (!m) break;
         if (!forcar(m)) usadosHe.add(m.rowOrd);
       }
-      while (precisaForcar() && covAtuais() < minCov) {
+      let _itFcCov = 0;
+      while (precisaForcar() && covAtuais() < minCov && _itFcCov++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:COV");
         const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
         if (!m) break;
         if (!forcar(m)) usadosHe.add(m.rowOrd);
@@ -1304,8 +1337,21 @@ function escalar(
         : " Não há candidatos disponíveis no efetivo.";
 
       alertas.push({
-        tipo: "warn",
+        tipo: "error",
         msg: `Dia ${dia}: guarnição mínima incompleta — falta ${partes.join(" e ")}.${motivoTxt}`,
+      });
+      // Falha crítica — sinaliza para interromper geração após o motor terminar
+      // (não interrompemos aqui para coletar todos os dias problemáticos do mês).
+      falhasCriticas.push({
+        dia,
+        etapa: cgFalta > 0 || covFalta > 0 ? "guarnicao_minima" : "efetivo",
+        motivo:
+          `Não foi possível completar o efetivo do dia ${dia}. ` +
+          `Nenhum militar disponível atende todas as regras (faltam: ` +
+          `${efetivoFalta} militar(es)` +
+          (cgFalta > 0 ? `, ${cgFalta} CG` : "") +
+          (covFalta > 0 ? `, ${covFalta} COV` : "") +
+          `).${motivoTxt}`,
       });
     }
   }
@@ -2078,9 +2124,43 @@ export const gerarEscala = createServerFn({ method: "POST" })
     }
 
 
-    /* 7) Motor */
+    /* 7) Motor — com proteção contra loop e diagnóstico de "dia impossível" */
     const dias = diasNoMes(data.mes, data.ano);
-    const { ord, exp: expm, he } = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas);
+    const falhasCriticas: FalhaCritica[] = [];
+    let ord: Map<number, Map<number, string>>;
+    let expm: Map<number, Map<number, string>>;
+    let he: Map<number, Map<number, string>>;
+    try {
+      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas);
+      ord = res.ord; expm = res.exp; he = res.he;
+    } catch (e) {
+      if (e instanceof EscalaLoopError) {
+        // Loop excedeu teto de segurança — não há solução viável; aborta sem salvar.
+        return {
+          ok: false as const,
+          motivo: "loop_excedido",
+          falhasCriticas: [{
+            dia: e.dia,
+            etapa: e.etapa,
+            motivo: `Geração interrompida: o sistema fez muitas tentativas sem encontrar solução válida na etapa "${e.etapa}" do dia ${e.dia}. Verifique se há militares suficientes e ajuste as observações.`,
+          }],
+          alertas,
+        };
+      }
+      throw e;
+    }
+
+    /* 7.1) Se o motor identificou dia(s) impossível(eis), interrompe sem salvar
+            arquivo nem registrar histórico. A UI mostra cada falha ao usuário. */
+    if (falhasCriticas.length > 0 && !demoMode) {
+      return {
+        ok: false as const,
+        motivo: "dia_impossivel",
+        falhasCriticas,
+        alertas,
+      };
+    }
+
 
     /* 8) Acumular edições para a aba Anexo B (cirúrgico — não toca em
           estilos, validações, fórmulas das demais células). */

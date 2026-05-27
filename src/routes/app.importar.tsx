@@ -114,6 +114,7 @@ function ImportarPage() {
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
+  const [falhasCriticas, setFalhasCriticas] = useState<{ dia: number; etapa: string; motivo: string }[]>([]);
 
   const loadHistorico = async () => {
     setLoadingHist(true);
@@ -235,7 +236,23 @@ function ImportarPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
 
-      if (!result || typeof result !== "object" || !("escritas" in result)) {
+      if (!result || typeof result !== "object") {
+        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
+      }
+
+      // Falha crítica: motor não conseguiu completar dia(s) — não há arquivo nem histórico.
+      if ((result as { ok?: boolean }).ok === false) {
+        const falhas = (result as { falhasCriticas?: { dia: number; etapa: string; motivo: string }[] }).falhasCriticas ?? [];
+        const primeira = falhas[0]?.motivo ?? "Não foi possível gerar a escala com as regras atuais.";
+        toast.error(primeira, {
+          duration: 12000,
+          description: falhas.length > 1 ? `Há ${falhas.length} dia(s) com problema. Ajuste afastamentos/efetivo nas observações e tente novamente.` : "Ajuste afastamentos/efetivo nas observações e tente novamente.",
+        });
+        setFalhasCriticas(falhas);
+        return;
+      }
+
+      if (!("escritas" in result)) {
         throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
       }
 
@@ -579,6 +596,37 @@ Cb Beltrano não escalar dia 15.`}
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de falhas críticas (dia(s) impossível(eis) — sem arquivo gerado) */}
+      <Dialog open={falhasCriticas.length > 0} onOpenChange={(o) => { if (!o) setFalhasCriticas([]); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Geração interrompida
+            </DialogTitle>
+            <DialogDescription>
+              O sistema não conseguiu completar a escala com as regras atuais. Nenhum arquivo foi gerado.
+              Ajuste afastamentos, efetivo ou os parâmetros nas observações e tente novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {falhasCriticas.map((f, i) => (
+              <div key={i} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                <div className="font-semibold text-destructive">Dia {f.dia}</div>
+                <div className="mt-1 text-foreground">{f.motivo}</div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFalhasCriticas([])}>Fechar</Button>
+            <Button onClick={() => { setFalhasCriticas([]); setOpenObs(true); }}>
+              Ajustar observações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

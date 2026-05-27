@@ -1,51 +1,58 @@
-## Diagnóstico
+## Email/login no Supabase
 
-A lógica de teto e complemento de carga **já existe** dentro de `escalar()` em `src/utils/escala.functions.ts` (etapa 6.5):
+Contas cadastradas no projeto:
 
-- Linhas 1404–1426: corta EXP do ADM quando `totalExp > alvoAdm` (cap mensal).
-- Linhas 1486–1502: lança `CM` em dias úteis livres quando o operacional fecha o mês abaixo de `cargaMin`.
+- **comandogeradordeescalas@gmail.com** — Administrador (role: admin) — criado em 14/05/2026
+- viniciusj.costa@hotmail.com — usuário aprovado
+- ademir.gunsch@icloud.com — usuário aprovado
 
-O problema é que o `for (const m of militares)` que executa essas duas rotinas tem, logo no começo, um curto-circuito para o modo ordinário puro (linhas 1375–1387):
+O login de admin que você usa no sistema é **comandogeradordeescalas@gmail.com**. Senha não é exposta — se precisar, use "Recuperar" na tela de login.
 
-```ts
-if (par.modo === "ordinario_puro") {
-  if (m.isAdm) continue;          // pula o cap do ADM
-  …
-  if (cargaOrdPure < cargaMinPure) {
-    acertosCm.push(`… faltam Xh — modo ordinário puro: sem complemento`);
-  }
-  continue;                       // pula o lançamento de CM
-}
-```
+---
 
-Com isso, em modo puro:
-- ADM ignora o cap e fica com 186 h (etapa 6.2 lançou EXP9/EXP6 sem limite).
-- Operacionais ficam 1 h abaixo do alvo (176 h em vez de 177 h) porque o `CM` faltante não é lançado.
+## Proteção contra loop infinito na geração da escala
 
-Em modo `auto` o cap do ADM funciona porque o `continue` não dispara, mas a lógica está duplicada e frágil — qualquer modo novo pode regressar.
+### Diagnóstico
 
-## Correção
+Hoje em `src/utils/escala.functions.ts` todos os `while` da geração (CGs, COVs, completar 24h, HE, força-exceção, complemento CM) já têm condição de parada explícita (`if (!m) break`). Não há loop infinito real, mas:
 
-Arquivo único: `src/utils/escala.functions.ts`. Sem mudar fórmulas (`cargaBase`, `cargaMensalProporcional`) — apenas **deixar a lógica que já existe rodar em qualquer modo**.
+1. Não há **teto global de tentativas/iterações** por dia — se um bug futuro fizer um candidato ser sempre "consumido sem preencher", o loop poderia girar.
+2. Quando não há solução, o motor segue silenciosamente para o próximo dia e o usuário só vê alertas dispersos. Não há **interrupção dura** com mensagem clara tipo "Não foi possível completar o efetivo do dia X".
+3. Não existe um **timeout total** da geração.
 
-1. **Remover o bloco `if (par.modo === "ordinario_puro")` (linhas 1375–1387)** do início do `for (const m of militares)` em `escalar()`. O fluxo passa a ser único:
-   - ADM → cap atual (linhas 1392–1460), sem ramificação por modo.
-   - Operacional → complemento `CM` atual (linhas 1462–1507), sem ramificação por modo.
+### Plano de implementação (escopo somente em `escala.functions.ts` e UI de importar)
 
-2. **Não mexer** em:
-   - `cargaBase`, `cargaMensalProporcional`, `horasOrdSigla`, `ORD_HORAS`.
-   - Etapa 6.2 (lançamento EXP9/EXP6 ADM).
-   - Etapa 6.5.1 (sanitização ADM em fds/feriado).
-   - Etapa 6.6 (HE só após fechar carga ADM).
+**1. Guardas de iteração por dia (motor `escalar`)**
+- Adicionar constante `MAX_ITER_POR_DIA = 200` em cada `while` de preenchimento (CG, COV, completar, HE auto, HE forçado). Cada iteração incrementa um contador; ao estourar, `break` + push em novo array `falhasCriticas` com `{ dia, etapa, motivo }`.
 
-3. **Manter** os alertas existentes (`Expediente complementar (ADM): … teto mensal`, `Complemento de carga (CM) lançado: …`) — eles passam a aparecer também em modo puro, dando rastro de auditoria.
+**2. Teto global da geração**
+- Contador `iterTotal` somando todos os loops do motor. Limite `MAX_ITER_TOTAL = 50_000`. Se estourar → lança `EscalaLoopError` interrompendo a geração imediatamente.
 
-Efeito prático: em todo modo, o motor vai (a) cortar EXP do ADM quando o lançamento padrão estourar o teto e (b) preencher operacionais com `CM` até bater a carga mensal proporcional — exatamente o que a fórmula já manda.
+**3. Detecção de "dia impossível"**
+- Ao final do laço por dia (após etapas auto + forçado), se `faltamFinal > 0` OU `cgFalta > 0` OU `covFalta > 0`, registrar entrada em `falhasCriticas` com mensagem padronizada:
+  > "Não foi possível completar o efetivo do dia D. Nenhum militar disponível atende todas as regras (faltam: X militares, Y CG, Z COV)."
+- Manter o diagnóstico atual de motivos (teto HE, folga 12h, afastamento) como detalhe da mesma falha.
 
-## Validação
+**4. Política de interrupção**
+- Novo parâmetro opcional `pararEmDiaImpossivel` (default `true`). Quando `true`: ao registrar 1ª falha crítica, interrompe geração e retorna `{ ok: false, falhasCriticas, alertas }` em vez de prosseguir.
+- Quando `false` (uso futuro / debug): continua mas marca a escala como `status: "incompleta"`.
 
-- Build do projeto.
-- Re-gerar dezembro/2025 nos dois modos:
-  - TENENTE 1 / TENENTE 2 → 177 h (cap remove 9 h do dia 31).
-  - Operacionais 24×72 com 7 plantões → 177 h (CM9 distribuído em dia útil livre).
-  - Alertas `Expediente complementar (ADM): … teto mensal` e `Complemento de carga (CM) lançado: …` presentes.
+**5. Tipos e retorno do server function `gerarEscala`**
+- Estender retorno com `falhasCriticas?: Array<{dia:number, etapa:string, motivo:string}>`.
+- Em caso de interrupção: NÃO salvar arquivo no storage, NÃO inserir em `escalas_geradas`, devolver status HTTP 200 com `{ ok:false, falhasCriticas }` (ou throw `Response(422)` — decidir; preferência: `ok:false` para a UI tratar sem erro de rede).
+
+**6. UI — `src/routes/app.importar.tsx`**
+- No handler `gerar`: se `result.ok === false && result.falhasCriticas`, exibir `toast.error` com a primeira mensagem e abrir um `AlertDialog`/seção listando todas as falhas críticas (dia + motivo). Não tentar baixar.
+- Botão "Tentar novamente" reabre a tela de observações para o usuário ajustar afastamentos/efetivo.
+
+### Detalhes técnicos
+
+- Sem mudanças de schema, sem migration.
+- Sem alteração nas regras de escala (cooldown 12h, 24x72, mín CG/COV) — só adiciona guardas e telemetria.
+- Sem mudança no modo demonstração (continua truncando em 7 dias antes do motor).
+- Mensagens em português, no padrão dos alertas existentes.
+
+### Arquivos alterados
+
+- `src/utils/escala.functions.ts` — guardas, `falhasCriticas`, retorno estendido.
+- `src/routes/app.importar.tsx` — tratamento de `ok:false` + dialog de falhas.
