@@ -1337,8 +1337,21 @@ function escalar(
         : " Não há candidatos disponíveis no efetivo.";
 
       alertas.push({
-        tipo: "warn",
+        tipo: "error",
         msg: `Dia ${dia}: guarnição mínima incompleta — falta ${partes.join(" e ")}.${motivoTxt}`,
+      });
+      // Falha crítica — sinaliza para interromper geração após o motor terminar
+      // (não interrompemos aqui para coletar todos os dias problemáticos do mês).
+      falhasCriticas.push({
+        dia,
+        etapa: cgFalta > 0 || covFalta > 0 ? "guarnicao_minima" : "efetivo",
+        motivo:
+          `Não foi possível completar o efetivo do dia ${dia}. ` +
+          `Nenhum militar disponível atende todas as regras (faltam: ` +
+          `${efetivoFalta} militar(es)` +
+          (cgFalta > 0 ? `, ${cgFalta} CG` : "") +
+          (covFalta > 0 ? `, ${covFalta} COV` : "") +
+          `).${motivoTxt}`,
       });
     }
   }
