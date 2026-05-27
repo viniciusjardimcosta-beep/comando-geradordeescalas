@@ -1018,7 +1018,9 @@ function escalar(
 
     // CGs
     let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
-    while (cgEscalados < minCg) {
+    let _itCg = 0;
+    while (cgEscalados < minCg && _itCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:CG");
       const cg = escolher("CG");
       if (!cg) break; // furo será reavaliado depois da etapa de HE
       lancaServico24(cg, dia);
@@ -1027,7 +1029,9 @@ function escalar(
 
     // COVs
     let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
-    while (covEscalados < minCov) {
+    let _itCov = 0;
+    while (covEscalados < minCov && _itCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:COV");
       const cov = escolher("COV");
       if (!cov) break;
       lancaServico24(cov, dia);
@@ -1036,7 +1040,9 @@ function escalar(
 
     // completar
     const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
-    while (escalados24() < totalAlvo) {
+    let _itFill = 0;
+    while (escalados24() < totalAlvo && _itFill++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:fill");
       const m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
       if (!m) break;
       lancaServico24(m, dia);
