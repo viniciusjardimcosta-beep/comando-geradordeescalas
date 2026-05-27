@@ -1234,12 +1234,16 @@ function escalar(
       };
 
       // 1º CG, 2º COV, 3º preencher total
-      while (precisaForcar() && cgAtuais() < minCg) {
+      let _itFcCg = 0;
+      while (precisaForcar() && cgAtuais() < minCg && _itFcCg++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:CG");
         const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
         if (!m) break;
         if (!forcar(m)) usadosHe.add(m.rowOrd);
       }
-      while (precisaForcar() && covAtuais() < minCov) {
+      let _itFcCov = 0;
+      while (precisaForcar() && covAtuais() < minCov && _itFcCov++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:COV");
         const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
         if (!m) break;
         if (!forcar(m)) usadosHe.add(m.rowOrd);
