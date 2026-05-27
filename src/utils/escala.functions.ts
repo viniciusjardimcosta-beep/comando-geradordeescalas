@@ -484,7 +484,12 @@ function escalar(
   par: z.infer<typeof ParametrosSchema>,
   ia: InterpretacaoIA,
   alertas: Alerta[],
+  falhasCriticas: FalhaCritica[] = [],
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
+  let iterTotal = 0;
+  const tick = (dia: number, etapa: string) => {
+    if (++iterTotal > MAX_ITER_TOTAL) throw new EscalaLoopError(dia, etapa);
+  };
   const ord = new Map<number, Map<number, string>>();
   const expm = new Map<number, Map<number, string>>();
   const he = new Map<number, Map<number, string>>();
