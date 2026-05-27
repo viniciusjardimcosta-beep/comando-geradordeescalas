@@ -1149,12 +1149,16 @@ function escalar(
     const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
     const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
 
-    while (faltam > 0 && cgAtuais() < minCg) {
+    let _itHeCg = 0;
+    while (faltam > 0 && cgAtuais() < minCg && _itHeCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:CG");
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
       if (!m) break;
       if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd); // marca pra não tentar de novo
     }
-    while (faltam > 0 && covAtuais() < minCov) {
+    let _itHeCov = 0;
+    while (faltam > 0 && covAtuais() < minCov && _itHeCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:COV");
       const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
       if (!m) break;
       if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd);
