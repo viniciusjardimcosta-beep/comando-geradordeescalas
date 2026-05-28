@@ -290,8 +290,9 @@ function ImportarPage() {
       if (r.downloadUrl) {
         window.open(r.downloadUrl, "_blank");
       }
-      if (r.alertas?.length) {
-        toast.warning(`${r.alertas.length} alerta(s) — ver no histórico.`);
+      const alertasArr = Array.isArray(r.alertas) ? r.alertas : [];
+      if (alertasArr.length > 0) {
+        toast.warning(`${alertasArr.length} alerta(s) — ver no histórico.`);
       }
       setOpenObs(false);
       setFile(null); setSheetNames([]); setAnexoBName(null);
