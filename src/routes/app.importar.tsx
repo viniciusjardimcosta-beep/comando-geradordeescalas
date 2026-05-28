@@ -220,6 +220,8 @@ function ImportarPage() {
     const { data, error } = await supabase.storage.from("escalas").createSignedUrl(path, 60 * 5);
     if (error || !data?.signedUrl) { toast.error("Não foi possível gerar link."); return; }
     window.open(data.signedUrl, "_blank");
+  };
+
   const gerar = async () => {
     if (!file || !user || !session) return;
     setBusy(true);
