@@ -621,8 +621,8 @@ Cb Beltrano não escalar dia 15.`}
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de falhas críticas (dia(s) impossível(eis) — sem arquivo gerado) */}
-      <Dialog open={falhasCriticas.length > 0} onOpenChange={(o) => { if (!o) setFalhasCriticas([]); }}>
+      {/* Dialog de falhas críticas (sem arquivo gerado) */}
+      <Dialog open={falhaCtrl !== null} onOpenChange={(o) => { if (!o) setFalhaCtrl(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -630,21 +630,38 @@ Cb Beltrano não escalar dia 15.`}
               Geração interrompida
             </DialogTitle>
             <DialogDescription>
-              O sistema não conseguiu completar a escala com as regras atuais. Nenhum arquivo foi gerado.
+              {falhaCtrl?.motivo ?? "Não foi possível gerar a escala."} Nenhum arquivo foi gerado.
               Ajuste afastamentos, efetivo ou os parâmetros nas observações e tente novamente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {falhasCriticas.map((f, i) => (
+            {falhaCtrl && falhaCtrl.itens.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem detalhes por dia.</p>
+            )}
+            {falhaCtrl?.itens.map((f, i) => (
               <div key={i} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
                 <div className="font-semibold text-destructive">Dia {f.dia}</div>
                 <div className="mt-1 text-foreground">{f.motivo}</div>
               </div>
             ))}
+            {falhaCtrl && falhaCtrl.alertas.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-primary">
+                  Ver {falhaCtrl.alertas.length} alerta(s) do motor
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {falhaCtrl.alertas.map((a, i) => (
+                    <li key={i} className={a.tipo === "error" ? "text-destructive" : a.tipo === "warn" ? "text-warning" : "text-muted-foreground"}>
+                      • {a.msg}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFalhasCriticas([])}>Fechar</Button>
-            <Button onClick={() => { setFalhasCriticas([]); setOpenObs(true); }}>
+            <Button variant="outline" onClick={() => setFalhaCtrl(null)}>Fechar</Button>
+            <Button onClick={() => { setFalhaCtrl(null); setOpenObs(true); }}>
               Ajustar observações
             </Button>
           </DialogFooter>
