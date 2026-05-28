@@ -48,10 +48,10 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
           >
             Voltar ao início
           </a>
-        </div>
-        </div>
       </div>
     </div>
+  );
+}
   );
 }
 
