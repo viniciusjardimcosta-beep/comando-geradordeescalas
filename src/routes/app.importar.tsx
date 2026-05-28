@@ -219,11 +219,10 @@ function ImportarPage() {
     const { data, error } = await supabase.storage.from("escalas").createSignedUrl(path, 60 * 5);
     if (error || !data?.signedUrl) { toast.error("Não foi possível gerar link."); return; }
     window.open(data.signedUrl, "_blank");
-  };
-
   const gerar = async () => {
     if (!file || !user || !session) return;
     setBusy(true);
+    setFalhaCtrl(null);
     try {
       const base64 = await fileToBase64(file);
       const viradaAnterior = Object.entries(viradaSel).map(([militarId, tipo]) => ({ militarId, tipo }));
@@ -238,37 +237,58 @@ function ImportarPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
 
+      // 1. Resposta inexistente / malformada
       if (!result || typeof result !== "object") {
-        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
-      }
-
-      // Falha crítica: motor não conseguiu completar dia(s) — não há arquivo nem histórico.
-      if ((result as { ok?: boolean }).ok === false) {
-        const falhas = (result as { falhasCriticas?: { dia: number; etapa: string; motivo: string }[] }).falhasCriticas ?? [];
-        const primeira = falhas[0]?.motivo ?? "Não foi possível gerar a escala com as regras atuais.";
-        toast.error(primeira, {
-          duration: 12000,
-          description: falhas.length > 1 ? `Há ${falhas.length} dia(s) com problema. Ajuste afastamentos/efetivo nas observações e tente novamente.` : "Ajuste afastamentos/efetivo nas observações e tente novamente.",
-        });
-        setFalhasCriticas(falhas);
+        toast.error("Resposta inválida do servidor. Verifique os logs da função.");
         return;
       }
 
-      if (!("escritas" in result)) {
-        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
+      const r = result as {
+        ok?: boolean;
+        motivo?: string;
+        falhasCriticas?: FalhaItem[];
+        alertas?: { tipo: string; msg: string }[];
+        escritas?: number;
+        downloadUrl?: string;
+        demo?: boolean;
+      };
+
+      // 2. Falha controlada do motor — NÃO acessar dados da escala
+      if (r.ok === false) {
+        const itens: FalhaItem[] = Array.isArray(r.falhasCriticas) ? r.falhasCriticas : [];
+        const alertas = Array.isArray(r.alertas) ? r.alertas : [];
+        const titulo =
+          r.motivo === "loop_excedido"
+            ? "Geração interrompida: muitas tentativas sem solução válida."
+            : r.motivo === "dia_impossivel"
+            ? "Não foi possível completar o efetivo em um ou mais dias."
+            : "Não foi possível gerar a escala com as regras atuais.";
+        const detalhe = itens[0]?.motivo ?? "Ajuste afastamentos/efetivo nas observações e tente novamente.";
+        toast.error(titulo, { duration: 12000, description: detalhe });
+        setFalhaCtrl({ motivo: titulo, itens, alertas });
+        console.warn("[gerar] falha controlada:", r);
+        return;
       }
 
-      const isDemoResp = (result as { demo?: boolean }).demo === true;
+      // 3. Sucesso esperado: ok === true e payload coerente
+      if (r.ok !== true || typeof r.escritas !== "number") {
+        toast.error("Resposta inválida do servidor. Verifique os logs da função.");
+        console.error("[gerar] resposta inesperada:", r);
+        return;
+      }
+
+      // 4. Caminho normal
+      const isDemoResp = r.demo === true;
       if (isDemoResp) {
-        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${result.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
+        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${r.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
       } else {
-        toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+        toast.success(`Escala gerada (${r.escritas} células preenchidas).`);
       }
-      if (result.downloadUrl) {
-        window.open(result.downloadUrl, "_blank");
+      if (r.downloadUrl) {
+        window.open(r.downloadUrl, "_blank");
       }
-      if (result.alertas?.length) {
-        toast.warning(`${result.alertas.length} alerta(s) — ver no histórico.`);
+      if (r.alertas?.length) {
+        toast.warning(`${r.alertas.length} alerta(s) — ver no histórico.`);
       }
       setOpenObs(false);
       setFile(null); setSheetNames([]); setAnexoBName(null);
@@ -280,9 +300,11 @@ function ImportarPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao gerar escala.";
       toast.error(msg);
-      console.error(e);
+      console.error("[gerar] exceção:", e);
     } finally {
       setBusy(false);
+    }
+  };
     }
   };
 
