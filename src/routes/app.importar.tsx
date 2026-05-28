@@ -38,6 +38,9 @@ interface HistoricoRow {
   created_at: string;
 }
 
+type FalhaItem = { dia: number; etapa: string; motivo: string };
+type FalhaCtrl = { motivo: string; itens: FalhaItem[]; alertas: { tipo: string; msg: string }[] };
+
 const meses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -114,7 +117,7 @@ function ImportarPage() {
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
-  const [falhasCriticas, setFalhasCriticas] = useState<{ dia: number; etapa: string; motivo: string }[]>([]);
+  const [falhaCtrl, setFalhaCtrl] = useState<FalhaCtrl | null>(null);
 
   const loadHistorico = async () => {
     setLoadingHist(true);
@@ -222,6 +225,7 @@ function ImportarPage() {
   const gerar = async () => {
     if (!file || !user || !session) return;
     setBusy(true);
+    setFalhaCtrl(null);
     try {
       const base64 = await fileToBase64(file);
       const viradaAnterior = Object.entries(viradaSel).map(([militarId, tipo]) => ({ militarId, tipo }));
@@ -236,37 +240,58 @@ function ImportarPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       } as Parameters<typeof gerarFn>[0]);
 
+      // 1. Resposta inexistente / malformada
       if (!result || typeof result !== "object") {
-        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
-      }
-
-      // Falha crítica: motor não conseguiu completar dia(s) — não há arquivo nem histórico.
-      if ((result as { ok?: boolean }).ok === false) {
-        const falhas = (result as { falhasCriticas?: { dia: number; etapa: string; motivo: string }[] }).falhasCriticas ?? [];
-        const primeira = falhas[0]?.motivo ?? "Não foi possível gerar a escala com as regras atuais.";
-        toast.error(primeira, {
-          duration: 12000,
-          description: falhas.length > 1 ? `Há ${falhas.length} dia(s) com problema. Ajuste afastamentos/efetivo nas observações e tente novamente.` : "Ajuste afastamentos/efetivo nas observações e tente novamente.",
-        });
-        setFalhasCriticas(falhas);
+        toast.error("Resposta inválida do servidor. Verifique os logs da função.");
         return;
       }
 
-      if (!("escritas" in result)) {
-        throw new Error("Resposta inválida do servidor. Verifique os logs da função.");
+      const r = result as {
+        ok?: boolean;
+        motivo?: string;
+        falhasCriticas?: FalhaItem[];
+        alertas?: { tipo: string; msg: string }[];
+        escritas?: number;
+        downloadUrl?: string;
+        demo?: boolean;
+      };
+
+      // 2. Falha controlada do motor — NÃO acessar dados da escala
+      if (r.ok === false) {
+        const itens: FalhaItem[] = Array.isArray(r.falhasCriticas) ? r.falhasCriticas : [];
+        const alertas = Array.isArray(r.alertas) ? r.alertas : [];
+        const titulo =
+          r.motivo === "loop_excedido"
+            ? "Geração interrompida: muitas tentativas sem solução válida."
+            : r.motivo === "dia_impossivel"
+            ? "Não foi possível completar o efetivo em um ou mais dias."
+            : "Não foi possível gerar a escala com as regras atuais.";
+        const detalhe = itens[0]?.motivo ?? "Ajuste afastamentos/efetivo nas observações e tente novamente.";
+        toast.error(titulo, { duration: 12000, description: detalhe });
+        setFalhaCtrl({ motivo: titulo, itens, alertas });
+        console.warn("[gerar] falha controlada:", r);
+        return;
       }
 
-      const isDemoResp = (result as { demo?: boolean }).demo === true;
+      // 3. Sucesso esperado: ok === true e payload coerente
+      if (r.ok !== true || typeof r.escritas !== "number") {
+        toast.error("Resposta inválida do servidor. Verifique os logs da função.");
+        console.error("[gerar] resposta inesperada:", r);
+        return;
+      }
+
+      // 4. Caminho normal
+      const isDemoResp = r.demo === true;
       if (isDemoResp) {
-        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${result.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
+        toast.warning(`Prévia gerada em MODO DEMONSTRAÇÃO (${r.escritas} células, até 7 dias). Assine um plano para gerar o mês completo e baixar o arquivo.`);
       } else {
-        toast.success(`Escala gerada (${result.escritas} células preenchidas).`);
+        toast.success(`Escala gerada (${r.escritas} células preenchidas).`);
       }
-      if (result.downloadUrl) {
-        window.open(result.downloadUrl, "_blank");
+      if (r.downloadUrl) {
+        window.open(r.downloadUrl, "_blank");
       }
-      if (result.alertas?.length) {
-        toast.warning(`${result.alertas.length} alerta(s) — ver no histórico.`);
+      if (r.alertas?.length) {
+        toast.warning(`${r.alertas.length} alerta(s) — ver no histórico.`);
       }
       setOpenObs(false);
       setFile(null); setSheetNames([]); setAnexoBName(null);
@@ -278,7 +303,7 @@ function ImportarPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao gerar escala.";
       toast.error(msg);
-      console.error(e);
+      console.error("[gerar] exceção:", e);
     } finally {
       setBusy(false);
     }
@@ -597,8 +622,8 @@ Cb Beltrano não escalar dia 15.`}
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de falhas críticas (dia(s) impossível(eis) — sem arquivo gerado) */}
-      <Dialog open={falhasCriticas.length > 0} onOpenChange={(o) => { if (!o) setFalhasCriticas([]); }}>
+      {/* Dialog de falhas críticas (sem arquivo gerado) */}
+      <Dialog open={falhaCtrl !== null} onOpenChange={(o) => { if (!o) setFalhaCtrl(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -606,21 +631,38 @@ Cb Beltrano não escalar dia 15.`}
               Geração interrompida
             </DialogTitle>
             <DialogDescription>
-              O sistema não conseguiu completar a escala com as regras atuais. Nenhum arquivo foi gerado.
+              {falhaCtrl?.motivo ?? "Não foi possível gerar a escala."} Nenhum arquivo foi gerado.
               Ajuste afastamentos, efetivo ou os parâmetros nas observações e tente novamente.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {falhasCriticas.map((f, i) => (
+            {falhaCtrl && falhaCtrl.itens.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sem detalhes por dia.</p>
+            )}
+            {falhaCtrl?.itens.map((f, i) => (
               <div key={i} className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm">
                 <div className="font-semibold text-destructive">Dia {f.dia}</div>
                 <div className="mt-1 text-foreground">{f.motivo}</div>
               </div>
             ))}
+            {falhaCtrl && falhaCtrl.alertas.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-primary">
+                  Ver {falhaCtrl.alertas.length} alerta(s) do motor
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs">
+                  {falhaCtrl.alertas.map((a, i) => (
+                    <li key={i} className={a.tipo === "error" ? "text-destructive" : a.tipo === "warn" ? "text-warning" : "text-muted-foreground"}>
+                      • {a.msg}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFalhasCriticas([])}>Fechar</Button>
-            <Button onClick={() => { setFalhasCriticas([]); setOpenObs(true); }}>
+            <Button variant="outline" onClick={() => setFalhaCtrl(null)}>Fechar</Button>
+            <Button onClick={() => { setFalhaCtrl(null); setOpenObs(true); }}>
               Ajustar observações
             </Button>
           </DialogFooter>
