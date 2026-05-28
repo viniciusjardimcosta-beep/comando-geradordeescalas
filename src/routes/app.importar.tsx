@@ -38,6 +38,9 @@ interface HistoricoRow {
   created_at: string;
 }
 
+type FalhaItem = { dia: number; etapa: string; motivo: string };
+type FalhaCtrl = { motivo: string; itens: FalhaItem[]; alertas: { tipo: string; msg: string }[] };
+
 const meses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
