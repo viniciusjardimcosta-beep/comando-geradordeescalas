@@ -114,8 +114,6 @@ function ImportarPage() {
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
-  type FalhaItem = { dia: number; etapa: string; motivo: string };
-  type FalhaCtrl = { motivo: string; itens: FalhaItem[]; alertas: { tipo: string; msg: string }[] };
   const [falhaCtrl, setFalhaCtrl] = useState<FalhaCtrl | null>(null);
 
   const loadHistorico = async () => {
