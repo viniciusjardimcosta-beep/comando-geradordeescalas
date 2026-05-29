@@ -55,10 +55,40 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
         <p className="mt-2 text-sm text-muted-foreground">
           Ocorreu uma falha inesperada nesta página. Você pode tentar novamente ou voltar ao início — o sistema continua funcionando.
         </p>
-        {import.meta.env.DEV && error?.message && (
-          <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
-            {error.message}
-          </pre>
+        {showDebug && error && (
+          <div className="mt-5 space-y-3 text-left">
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                Diagnóstico (modo debug)
+              </div>
+              <dl className="mt-2 space-y-1.5 text-xs">
+                {location && (
+                  <div className="flex gap-2">
+                    <dt className="min-w-[90px] font-mono text-muted-foreground">origem</dt>
+                    <dd className="font-mono text-foreground break-all">{location}</dd>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <dt className="min-w-[90px] font-mono text-muted-foreground">name</dt>
+                  <dd className="font-mono text-foreground break-all">{error.name}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="min-w-[90px] font-mono text-muted-foreground">message</dt>
+                  <dd className="font-mono text-destructive break-all">{error.message}</dd>
+                </div>
+              </dl>
+            </div>
+            {error.stack && (
+              <details className="rounded-md bg-muted p-3" open>
+                <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                  Stack trace
+                </summary>
+                <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-left font-mono text-[11px] leading-relaxed text-destructive">
+                  {error.stack}
+                </pre>
+              </details>
+            )}
+          </div>
         )}
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
