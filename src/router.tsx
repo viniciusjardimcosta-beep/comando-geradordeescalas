@@ -1,8 +1,36 @@
 import { createRouter, useRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
+// Modo debug temporário: força exibir diagnóstico mesmo em produção.
+const DEBUG_MODE = true;
+
+function extractFirstLocation(stack: string | undefined | null): string | null {
+  if (!stack) return null;
+  const lines = stack.split("\n").map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const m = line.match(/\(?([^()\s]+\.(?:tsx?|jsx?|mjs|cjs)):(\d+):(\d+)\)?/);
+    if (m) return `${m[1]}:${m[2]}:${m[3]}`;
+  }
+  return null;
+}
+
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+  const showDebug = DEBUG_MODE || import.meta.env.DEV;
+  const location = extractFirstLocation(error?.stack);
+
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.group("%c[Router] Erro em rota", "color:#ef4444;font-weight:bold");
+    // eslint-disable-next-line no-console
+    console.error("Mensagem:", error?.message);
+    // eslint-disable-next-line no-console
+    console.error("Stack:", error?.stack);
+    // eslint-disable-next-line no-console
+    console.error("Erro bruto:", error);
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
