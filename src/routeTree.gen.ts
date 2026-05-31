@@ -21,6 +21,7 @@ import { Route as AppImportarRouteImport } from './routes/app.importar'
 import { Route as AppFeriasRouteImport } from './routes/app.ferias'
 import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as ApiPublicWebhooksNexanoRouteImport } from './routes/api.public.webhooks.nexano'
 
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
@@ -82,6 +83,11 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicWebhooksNexanoRoute = ApiPublicWebhooksNexanoRouteImport.update({
+  id: '/api/public/webhooks/nexano',
+  path: '/api/public/webhooks/nexano',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app': typeof AppIndexRoute
+  '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app/'
+    | '/api/public/webhooks/nexano'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app'
+    | '/api/public/webhooks/nexano'
   id:
     | '__root__'
     | '/'
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app/'
+    | '/api/public/webhooks/nexano'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -175,6 +187,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  ApiPublicWebhooksNexanoRoute: typeof ApiPublicWebhooksNexanoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -263,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/webhooks/nexano': {
+      id: '/api/public/webhooks/nexano'
+      path: '/api/public/webhooks/nexano'
+      fullPath: '/api/public/webhooks/nexano'
+      preLoaderRoute: typeof ApiPublicWebhooksNexanoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -294,7 +314,17 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
+  ApiPublicWebhooksNexanoRoute: ApiPublicWebhooksNexanoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
