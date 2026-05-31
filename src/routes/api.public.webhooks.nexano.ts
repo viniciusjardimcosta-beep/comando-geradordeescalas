@@ -42,14 +42,19 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
           payload = { _raw: bodyText };
         }
 
-        // Aceita token via header OU dentro do body (token/secret/validation_token/webhook_token)
-        const bodyToken = (
-          (typeof payload.token === "string" && payload.token) ||
-          (typeof payload.secret === "string" && payload.secret) ||
-          (typeof payload.validation_token === "string" && payload.validation_token) ||
-          (typeof payload.webhook_token === "string" && payload.webhook_token) ||
-          ""
-        ).trim();
+        // Aceita token via header OU dentro do body da Nexano.
+        const tokenCandidates = [
+          payload.token,
+          payload.secret,
+          payload.validation_token,
+          payload.webhook_token,
+          payload.webhookSecret,
+          payload.webhook_secret,
+          payload.authentication_token,
+        ];
+        const bodyToken = tokenCandidates
+          .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+          ?.trim() ?? "";
 
         const headerTokenValid = !!secret && !!providedToken && providedToken === secret;
         const bodyTokenValid = !!secret && !!bodyToken && bodyToken === secret;
@@ -62,7 +67,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 provider: "nexano",
                 event_type: "auth_failed",
                 status: "error",
-                error_message: `Token inválido. secret_len=${secret.length} body_token_len=${bodyToken.length} header_token_len=${providedToken.length} match_body=${bodyToken === secret} match_header=${providedToken === secret}`,
+                error_message: `Token inválido. secret_len=${secret.length} body_token_len=${bodyToken.length} header_token_len=${providedToken.length} has_body_token=${!!bodyToken} match_body=${bodyToken === secret} match_header=${providedToken === secret}`,
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
                 headers: safeHeaders,
                 payload: payload,
