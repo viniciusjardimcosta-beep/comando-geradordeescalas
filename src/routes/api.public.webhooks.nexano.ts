@@ -43,12 +43,13 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         }
 
         // Aceita token via header OU dentro do body (token/secret/validation_token/webhook_token)
-        const bodyToken =
+        const bodyToken = (
           (typeof payload.token === "string" && payload.token) ||
           (typeof payload.secret === "string" && payload.secret) ||
           (typeof payload.validation_token === "string" && payload.validation_token) ||
           (typeof payload.webhook_token === "string" && payload.webhook_token) ||
-          null;
+          ""
+        ).trim();
 
         const headerTokenValid = !!secret && !!providedToken && providedToken === secret;
         const bodyTokenValid = !!secret && !!bodyToken && bodyToken === secret;
