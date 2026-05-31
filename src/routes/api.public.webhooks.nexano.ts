@@ -5,10 +5,12 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.NEXANO_WEBHOOK_SECRET;
-        const providedToken =
+        const secret = (process.env.NEXANO_WEBHOOK_SECRET ?? "").trim();
+        const providedToken = (
           request.headers.get("x-webhook-secret") ??
-          request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+          request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+          ""
+        ).trim();
 
         // Filtra headers sensíveis antes de persistir (nunca armazenar o segredo em billing_events).
         const SENSITIVE_HEADERS = new Set([
@@ -41,12 +43,13 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         }
 
         // Aceita token via header OU dentro do body (token/secret/validation_token/webhook_token)
-        const bodyToken =
+        const bodyToken = (
           (typeof payload.token === "string" && payload.token) ||
           (typeof payload.secret === "string" && payload.secret) ||
           (typeof payload.validation_token === "string" && payload.validation_token) ||
           (typeof payload.webhook_token === "string" && payload.webhook_token) ||
-          null;
+          ""
+        ).trim();
 
         const headerTokenValid = !!secret && !!providedToken && providedToken === secret;
         const bodyTokenValid = !!secret && !!bodyToken && bodyToken === secret;
@@ -59,7 +62,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 provider: "nexano",
                 event_type: "auth_failed",
                 status: "error",
-                error_message: "Token inválido ou ausente",
+                error_message: `Token inválido. secret_len=${secret.length} body_token_len=${bodyToken.length} header_token_len=${providedToken.length} match_body=${bodyToken === secret} match_header=${providedToken === secret}`,
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
                 headers: safeHeaders,
                 payload: payload,
