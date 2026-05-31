@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      billing_events: {
+        Row: {
+          created_at: string
+          customer_email: string | null
+          error_message: string | null
+          event_id: string | null
+          event_type: string | null
+          external_id: string | null
+          headers: Json
+          id: string
+          payload: Json
+          processed_at: string | null
+          provider: string
+          signature: string | null
+          source_ip: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_email?: string | null
+          error_message?: string | null
+          event_id?: string | null
+          event_type?: string | null
+          external_id?: string | null
+          headers?: Json
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          provider?: string
+          signature?: string | null
+          source_ip?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_email?: string | null
+          error_message?: string | null
+          event_id?: string | null
+          event_type?: string | null
+          external_id?: string | null
+          headers?: Json
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          provider?: string
+          signature?: string | null
+          source_ip?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       escala_ordinaria_membros: {
         Row: {
           created_at: string
