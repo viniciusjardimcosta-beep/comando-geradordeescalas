@@ -24,7 +24,8 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
           )
         );
 
-
+        // --- Validação de token ---
+        if (!secret || !providedToken || providedToken !== secret) {
           // Registra tentativa inválida (silencioso — não falha a resposta 401)
           try {
             await supabaseAdmin.from("billing_events").insert([
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 status: "error",
                 error_message: "Token inválido ou ausente",
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
-                headers: Object.fromEntries(request.headers.entries()),
+                headers: safeHeaders,
                 payload: {},
               },
             ]);
