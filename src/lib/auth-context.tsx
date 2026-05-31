@@ -17,7 +17,9 @@ export interface Profile {
   subscription_status: SubscriptionStatus;
   subscription_end_date: string | null;
   plan_type: PlanType;
+  password_temporary?: boolean;
 }
+
 
 interface AuthContextValue {
   session: Session | null;
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [{ data: prof }, { data: roles }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, email, nome, status, trial_start_date, trial_end_date, subscription_status, subscription_end_date, plan_type")
+        .select("id, email, nome, status, trial_start_date, trial_end_date, subscription_status, subscription_end_date, plan_type, password_temporary")
         .eq("id", userId)
         .maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId),

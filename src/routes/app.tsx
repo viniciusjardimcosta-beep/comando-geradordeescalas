@@ -20,7 +20,11 @@ function AppLayout() {
     );
   }
   if (!session) return <Navigate to="/auth" />;
+  if (profile?.password_temporary && location.pathname !== "/redefinir-senha") {
+    return <Navigate to="/redefinir-senha" />;
+  }
   if (!isApproved) return <Navigate to="/aguardando" />;
+
 
   const tabs = [
     { to: "/app/importar", label: "Importar planilha", icon: FileSpreadsheet, show: true },

@@ -286,42 +286,141 @@ export type Database = {
         }
         Relationships: []
       }
+      nexano_subscriptions: {
+        Row: {
+          created_at: string
+          customer_cpf: string | null
+          customer_email: string
+          customer_name: string | null
+          customer_phone: string | null
+          end_at: string | null
+          id: string
+          interval_count: number | null
+          interval_type: string | null
+          last_billing_event_id: string | null
+          last_event_type: string | null
+          last_transaction_id: string | null
+          last_transaction_identifier: string | null
+          offer_code: string | null
+          product_external_id: string | null
+          product_id: string | null
+          product_name: string | null
+          start_at: string | null
+          subscription_external_id: string | null
+          subscription_identifier: string
+          subscription_status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_cpf?: string | null
+          customer_email: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          end_at?: string | null
+          id?: string
+          interval_count?: number | null
+          interval_type?: string | null
+          last_billing_event_id?: string | null
+          last_event_type?: string | null
+          last_transaction_id?: string | null
+          last_transaction_identifier?: string | null
+          offer_code?: string | null
+          product_external_id?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          start_at?: string | null
+          subscription_external_id?: string | null
+          subscription_identifier: string
+          subscription_status: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_cpf?: string | null
+          customer_email?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          end_at?: string | null
+          id?: string
+          interval_count?: number | null
+          interval_type?: string | null
+          last_billing_event_id?: string | null
+          last_event_type?: string | null
+          last_transaction_id?: string | null
+          last_transaction_identifier?: string | null
+          offer_code?: string | null
+          product_external_id?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          start_at?: string | null
+          subscription_external_id?: string | null
+          subscription_identifier?: string
+          subscription_status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          cpf: string | null
           created_at: string
           email: string
           id: string
           nome: string | null
+          password_temporary: boolean
           plan_type: Database["public"]["Enums"]["plan_type"]
+          plano_nome: string | null
           status: Database["public"]["Enums"]["user_status"]
           subscription_end_date: string | null
+          subscription_identifier: string | null
+          subscription_provider: string | null
+          subscription_start_date: string | null
           subscription_status: Database["public"]["Enums"]["subscription_status"]
+          telefone: string | null
           trial_end_date: string | null
           trial_start_date: string | null
           updated_at: string
         }
         Insert: {
+          cpf?: string | null
           created_at?: string
           email: string
           id: string
           nome?: string | null
+          password_temporary?: boolean
           plan_type?: Database["public"]["Enums"]["plan_type"]
+          plano_nome?: string | null
           status?: Database["public"]["Enums"]["user_status"]
           subscription_end_date?: string | null
+          subscription_identifier?: string | null
+          subscription_provider?: string | null
+          subscription_start_date?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          telefone?: string | null
           trial_end_date?: string | null
           trial_start_date?: string | null
           updated_at?: string
         }
         Update: {
+          cpf?: string | null
           created_at?: string
           email?: string
           id?: string
           nome?: string | null
+          password_temporary?: boolean
           plan_type?: Database["public"]["Enums"]["plan_type"]
+          plano_nome?: string | null
           status?: Database["public"]["Enums"]["user_status"]
           subscription_end_date?: string | null
+          subscription_identifier?: string | null
+          subscription_provider?: string | null
+          subscription_start_date?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          telefone?: string | null
           trial_end_date?: string | null
           trial_start_date?: string | null
           updated_at?: string
@@ -371,7 +470,12 @@ export type Database = {
       app_role: "admin" | "user"
       funcao_militar: "COV" | "CG"
       plan_type: "trial" | "mensal" | "semestral" | "anual"
-      subscription_status: "trial" | "active" | "expired" | "canceled"
+      subscription_status:
+        | "trial"
+        | "active"
+        | "expired"
+        | "canceled"
+        | "refunded"
       user_status: "pendente" | "aprovado" | "bloqueado"
     }
     CompositeTypes: {
@@ -503,7 +607,13 @@ export const Constants = {
       app_role: ["admin", "user"],
       funcao_militar: ["COV", "CG"],
       plan_type: ["trial", "mensal", "semestral", "anual"],
-      subscription_status: ["trial", "active", "expired", "canceled"],
+      subscription_status: [
+        "trial",
+        "active",
+        "expired",
+        "canceled",
+        "refunded",
+      ],
       user_status: ["pendente", "aprovado", "bloqueado"],
     },
   },
