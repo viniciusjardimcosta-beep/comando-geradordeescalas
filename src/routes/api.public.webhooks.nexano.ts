@@ -14,15 +14,17 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         if (!secret || !providedToken || providedToken !== secret) {
           // Registra tentativa inválida (silencioso — não falha a resposta 401)
           try {
-            await supabaseAdmin.from("billing_events").insert({
-              provider: "nexano",
-              event_type: "auth_failed",
-              status: "error",
-              error_message: "Token inválido ou ausente",
-              source_ip: request.headers.get("x-forwarded-for") ?? null,
-              headers: Object.fromEntries(request.headers.entries()),
-              payload: {},
-            });
+            await supabaseAdmin.from("billing_events").insert([
+              {
+                provider: "nexano",
+                event_type: "auth_failed",
+                status: "error",
+                error_message: "Token inválido ou ausente",
+                source_ip: request.headers.get("x-forwarded-for") ?? null,
+                headers: Object.fromEntries(request.headers.entries()),
+                payload: {},
+              },
+            ]);
           } catch {
             // ignore
           }
@@ -79,17 +81,19 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         try {
           const { error } = await supabaseAdmin
             .from("billing_events")
-            .insert({
-              provider: "nexano",
-              event_id: eventId,
-              event_type: eventType,
-              status: "received",
-              external_id: externalId,
-              customer_email: customerEmail,
-              source_ip: request.headers.get("x-forwarded-for") ?? null,
-              headers: Object.fromEntries(request.headers.entries()),
-              payload: payload,
-            });
+            .insert([
+              {
+                provider: "nexano",
+                event_id: eventId,
+                event_type: eventType,
+                status: "received",
+                external_id: externalId,
+                customer_email: customerEmail,
+                source_ip: request.headers.get("x-forwarded-for") ?? null,
+                headers: Object.fromEntries(request.headers.entries()),
+                payload: payload,
+              },
+            ]);
           if (error) insertError = new Error(error.message);
         } catch (err) {
           insertError = err instanceof Error ? err : new Error(String(err));
