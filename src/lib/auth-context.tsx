@@ -17,7 +17,9 @@ export interface Profile {
   subscription_status: SubscriptionStatus;
   subscription_end_date: string | null;
   plan_type: PlanType;
+  password_temporary?: boolean;
 }
+
 
 interface AuthContextValue {
   session: Session | null;
