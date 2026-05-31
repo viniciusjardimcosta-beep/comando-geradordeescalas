@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, Navigate, useLocation } from "@tanstack/
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock } from "lucide-react";
+import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock, CreditCard } from "lucide-react";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
@@ -33,6 +33,7 @@ function AppLayout() {
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
+    { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, show: isAdmin },
   ];
 
   const mostrarBannerTrial = isTrial && trialDaysLeft !== null && trialDaysLeft > 0 && trialDaysLeft <= 7;
