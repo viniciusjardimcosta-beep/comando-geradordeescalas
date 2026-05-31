@@ -25,8 +25,34 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         );
 
         // --- Validação de token ---
-        if (!secret || !providedToken || providedToken !== secret) {
-          // Registra tentativa inválida (silencioso — não falha a resposta 401)
+        // --- Leitura do body ANTES da validação (auditoria + discovery) ---
+        let bodyText = "";
+        try {
+          bodyText = await request.text();
+        } catch {
+          // ignore
+        }
+
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = bodyText ? JSON.parse(bodyText) : {};
+        } catch {
+          payload = { _raw: bodyText };
+        }
+
+        // Aceita token via header OU dentro do body (token/secret/validation_token/webhook_token)
+        const bodyToken =
+          (typeof payload.token === "string" && payload.token) ||
+          (typeof payload.secret === "string" && payload.secret) ||
+          (typeof payload.validation_token === "string" && payload.validation_token) ||
+          (typeof payload.webhook_token === "string" && payload.webhook_token) ||
+          null;
+
+        const headerTokenValid = !!secret && !!providedToken && providedToken === secret;
+        const bodyTokenValid = !!secret && !!bodyToken && bodyToken === secret;
+
+        if (!headerTokenValid && !bodyTokenValid) {
+          // Registra tentativa inválida COM payload completo para descobrir como a Nexano autentica
           try {
             await supabaseAdmin.from("billing_events").insert([
               {
@@ -36,7 +62,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 error_message: "Token inválido ou ausente",
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
                 headers: safeHeaders,
-                payload: {},
+                payload: payload,
               },
             ]);
           } catch {
@@ -50,27 +76,6 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
               headers: { "Content-Type": "application/json" },
             }
           );
-        }
-
-        // --- Leitura do body ---
-        let bodyText: string;
-        try {
-          bodyText = await request.text();
-        } catch {
-          return new Response(
-            JSON.stringify({ ok: false, error: "Bad Request" }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        let payload: Record<string, unknown> = {};
-        try {
-          payload = JSON.parse(bodyText);
-        } catch {
-          // Payload não é JSON válido — registra como texto bruto
         }
 
         const eventId =
