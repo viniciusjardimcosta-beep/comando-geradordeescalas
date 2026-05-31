@@ -221,9 +221,8 @@ function AuditoriaPage() {
                       ? "text-muted-foreground"
                       : "text-destructive font-semibold";
                   return (
-                    <>
+                    <Fragment key={m.nome}>
                       <TableRow
-                        key={m.nome}
                         className="cursor-pointer"
                         onClick={() => toggleExp(m.nome)}
                       >
