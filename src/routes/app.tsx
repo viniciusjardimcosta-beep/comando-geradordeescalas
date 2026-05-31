@@ -31,6 +31,7 @@ function AppLayout() {
     { to: "/app/militares", label: "Militares", icon: UserSquare2, show: true },
     { to: "/app/escalas", label: "Escalas Ordinárias", icon: ListOrdered, show: true },
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
+    { to: "/app/auditoria", label: "Auditoria", icon: ClipboardCheck, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
     { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, show: isAdmin },
