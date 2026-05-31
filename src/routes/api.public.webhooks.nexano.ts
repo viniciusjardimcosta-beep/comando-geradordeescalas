@@ -104,7 +104,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 external_id: externalId,
                 customer_email: customerEmail,
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
-                headers: Object.fromEntries(request.headers.entries()),
+                headers: safeHeaders,
                 payload: payload,
               },
             ]);
