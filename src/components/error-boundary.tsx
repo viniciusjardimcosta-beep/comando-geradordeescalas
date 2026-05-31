@@ -11,9 +11,8 @@ interface State {
   componentStack: string | null;
 }
 
-// Modo debug: força exibir diagnóstico mesmo em produção enquanto investigamos.
-// Defina como `false` quando terminar de diagnosticar.
-const DEBUG_MODE = true;
+// Diagnóstico detalhado apenas em desenvolvimento; em produção mostramos mensagem genérica.
+const DEBUG_MODE = import.meta.env.DEV;
 
 function extractFirstComponent(componentStack: string | null): string | null {
   if (!componentStack) return null;

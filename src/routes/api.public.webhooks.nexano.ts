@@ -10,6 +10,20 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
           request.headers.get("x-webhook-secret") ??
           request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
+        // Filtra headers sensíveis antes de persistir (nunca armazenar o segredo em billing_events).
+        const SENSITIVE_HEADERS = new Set([
+          "authorization",
+          "x-webhook-secret",
+          "cookie",
+          "set-cookie",
+          "proxy-authorization",
+        ]);
+        const safeHeaders = Object.fromEntries(
+          [...request.headers.entries()].filter(
+            ([k]) => !SENSITIVE_HEADERS.has(k.toLowerCase())
+          )
+        );
+
         // --- Validação de token ---
         if (!secret || !providedToken || providedToken !== secret) {
           // Registra tentativa inválida (silencioso — não falha a resposta 401)
@@ -21,7 +35,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 status: "error",
                 error_message: "Token inválido ou ausente",
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
-                headers: Object.fromEntries(request.headers.entries()),
+                headers: safeHeaders,
                 payload: {},
               },
             ]);
@@ -90,7 +104,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 external_id: externalId,
                 customer_email: customerEmail,
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
-                headers: Object.fromEntries(request.headers.entries()),
+                headers: safeHeaders,
                 payload: payload,
               },
             ]);
