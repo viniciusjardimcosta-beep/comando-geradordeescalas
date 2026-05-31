@@ -10,8 +10,21 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
           request.headers.get("x-webhook-secret") ??
           request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-        // --- Validação de token ---
-        if (!secret || !providedToken || providedToken !== secret) {
+        // Filtra headers sensíveis antes de persistir (nunca armazenar o segredo em billing_events).
+        const SENSITIVE_HEADERS = new Set([
+          "authorization",
+          "x-webhook-secret",
+          "cookie",
+          "set-cookie",
+          "proxy-authorization",
+        ]);
+        const safeHeaders = Object.fromEntries(
+          [...request.headers.entries()].filter(
+            ([k]) => !SENSITIVE_HEADERS.has(k.toLowerCase())
+          )
+        );
+
+
           // Registra tentativa inválida (silencioso — não falha a resposta 401)
           try {
             await supabaseAdmin.from("billing_events").insert([
