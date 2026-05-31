@@ -41,7 +41,14 @@ function ResetPasswordPage() {
       }
     }
     setBusy(true);
+    const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.auth.updateUser({ password: pass });
+    if (!error && userData.user) {
+      await supabase
+        .from("profiles")
+        .update({ password_temporary: false })
+        .eq("id", userData.user.id);
+    }
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -49,6 +56,7 @@ function ResetPasswordPage() {
     }
     toast.success("Senha atualizada!");
     navigate({ to: "/" });
+
   };
 
   return (
