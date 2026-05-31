@@ -263,31 +263,26 @@ async function handleActivation(a: ActivationArgs) {
 
   // 4) Atualizar perfil (não sobrescreve admin)
   if (!isAdmin) {
-    const profileUpdate: Record<string, unknown> = {
-      subscription_status: "active",
-      subscription_provider: "nexano",
-      subscription_identifier: a.subIdentifier,
-      subscription_start_date: a.subStartAt,
-      subscription_end_date: endDate,
-      plano_nome: a.productName,
-      plan_type: "mensal",
-      status: "aprovado",
-      nome: a.customerName,
-      cpf: stripDigits(a.customerCpf) ?? stripDigits(a.customerCnpj),
-      telefone: a.customerPhone,
-    };
-
-    // Se é conta nova (não existia antes), marca senha temporária
-    if (!existing) {
-      profileUpdate.password_temporary = true;
-    }
-
     const { error: updErr } = await supabaseAdmin
       .from("profiles")
-      .update(profileUpdate)
+      .update({
+        subscription_status: "active",
+        subscription_provider: "nexano",
+        subscription_identifier: a.subIdentifier,
+        subscription_start_date: a.subStartAt,
+        subscription_end_date: endDate,
+        plano_nome: a.productName,
+        plan_type: "mensal",
+        status: "aprovado",
+        nome: a.customerName,
+        cpf: stripDigits(a.customerCpf) ?? stripDigits(a.customerCnpj),
+        telefone: a.customerPhone,
+        password_temporary: !existing ? true : undefined,
+      })
       .eq("id", userId);
     if (updErr) throw new Error(`update profile: ${updErr.message}`);
   }
+
 
   // 5) Upsert da assinatura (histórico)
   const { error: subErr } = await supabaseAdmin
