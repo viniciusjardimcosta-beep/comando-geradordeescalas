@@ -33,6 +33,7 @@ function AppLayout() {
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
+    { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, show: isAdmin },
   ];
 
   const mostrarBannerTrial = isTrial && trialDaysLeft !== null && trialDaysLeft > 0 && trialDaysLeft <= 7;
