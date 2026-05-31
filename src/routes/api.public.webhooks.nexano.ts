@@ -62,7 +62,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
                 provider: "nexano",
                 event_type: "auth_failed",
                 status: "error",
-                error_message: "Token inválido ou ausente",
+                error_message: `Token inválido. secret_len=${secret.length} body_token_len=${bodyToken.length} header_token_len=${providedToken.length} match_body=${bodyToken === secret} match_header=${providedToken === secret}`,
                 source_ip: request.headers.get("x-forwarded-for") ?? null,
                 headers: safeHeaders,
                 payload: payload,
