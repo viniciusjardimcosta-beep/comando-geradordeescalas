@@ -5,10 +5,12 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.NEXANO_WEBHOOK_SECRET;
-        const providedToken =
+        const secret = (process.env.NEXANO_WEBHOOK_SECRET ?? "").trim();
+        const providedToken = (
           request.headers.get("x-webhook-secret") ??
-          request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+          request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+          ""
+        ).trim();
 
         // Filtra headers sensíveis antes de persistir (nunca armazenar o segredo em billing_events).
         const SENSITIVE_HEADERS = new Set([
