@@ -232,7 +232,7 @@ function Landing() {
             <div className="panel relative flex flex-col p-6">
               <h3 className="text-lg font-semibold">Plano Mensal</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Ideal para quem deseja conhecer o sistema e gerar suas escalas sem compromisso de longo prazo.
+                Ideal para quem deseja gerar escalas de forma rápida e sem compromisso de longo prazo.
               </p>
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-sm text-muted-foreground">R$</span>
@@ -243,7 +243,7 @@ function Landing() {
                 {[
                   "Geração automática de escalas",
                   "Exportação para planilha",
-                  "Gestão de férias e afastamentos",
+                  "Controle de férias e afastamentos",
                   "Controle de carga horária",
                   "Suporte por e-mail",
                 ].map((f) => (
@@ -253,9 +253,14 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <Link to="/auth" className="mt-8">
+              <a
+                href="https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=KY8MOGZ"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8"
+              >
                 <Button className="w-full" variant="outline">Assinar Plano Mensal</Button>
-              </Link>
+              </a>
             </div>
 
             {/* Anual destaque */}
@@ -273,17 +278,16 @@ function Landing() {
                 <span className="text-sm text-muted-foreground">/ano</span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Equivalente a apenas <strong className="text-foreground">R$ 16,42 por mês</strong>
+                Apenas <strong className="text-foreground">R$ 16,42 por mês</strong>
               </p>
               <div className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-md bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
-                Economize R$ 161,80 por ano
+                Economize R$ 161,80 por ano em comparação ao plano mensal
               </div>
               <ul className="mt-6 space-y-2 text-sm">
                 {[
                   "Tudo do plano mensal",
-                  "Menor custo por mês",
+                  "Menor custo mensal",
                   "Atualizações incluídas",
-                  "Prioridade em melhorias futuras",
                   "Melhor custo-benefício",
                 ].map((f) => (
                   <li key={f} className="flex items-center gap-2 text-muted-foreground">
@@ -292,26 +296,22 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <Link to="/auth" className="mt-8">
+              <a
+                href="https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8"
+              >
                 <Button className="w-full">Assinar Plano Anual</Button>
-              </Link>
+              </a>
             </div>
           </div>
 
-          {/* Comparação manual */}
+          {/* Benefício */}
           <div className="panel mx-auto mt-12 max-w-4xl p-8">
-            <h3 className="text-xl font-bold tracking-tight">Quanto custa fazer uma escala manualmente?</h3>
-            <p className="mt-2 text-sm text-muted-foreground">Horas gastas revisando:</p>
-            <ul className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-              {["Férias", "Afastamentos", "Carga horária", "Horas extras", "Guarnições"].map((i) => (
-                <li key={i} className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  {i}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 text-sm">
-              Com o <strong className="text-primary">Comando</strong>, uma tarefa que pode levar horas é concluída em minutos.
+            <h3 className="text-xl font-bold tracking-tight">Quanto tempo você gasta montando uma escala manualmente?</h3>
+            <p className="mt-3 text-sm text-muted-foreground">
+              O <strong className="text-primary">Scale Master</strong> automatiza férias, afastamentos, carga horária, horas extras e distribuição das guarnições, reduzindo horas de trabalho para poucos minutos.
             </p>
           </div>
 
@@ -329,6 +329,7 @@ function Landing() {
           </p>
         </div>
       </section>
+
 
       {/* RODAPÉ */}
       <footer className="border-t border-border/60 py-10">
