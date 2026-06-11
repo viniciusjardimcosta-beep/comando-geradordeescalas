@@ -261,6 +261,21 @@ async function handleActivation(a: ActivationArgs) {
 
   const endDate = computeEndDate(a.subStartAt, a.intervalCount, a.intervalType);
 
+  // Determinar plan_type a partir do offerCode (com fallback por product.name).
+  // Enum permitido: 'trial' | 'mensal' | 'semestral' | 'anual'.
+  // Nunca bloqueia a ativação — em último caso usa 'mensal' como default seguro.
+  const resolvePlanType = (): "mensal" | "semestral" | "anual" => {
+    const offer = (a.offerCode ?? "").trim().toUpperCase();
+    if (offer === "KY8MOGZ") return "mensal";
+    if (offer === "LBFYJPC") return "anual";
+    const name = (a.productName ?? "").toLowerCase();
+    if (name.includes("anual")) return "anual";
+    if (name.includes("semestral")) return "semestral";
+    if (name.includes("mensal")) return "mensal";
+    return "mensal";
+  };
+  const planType = resolvePlanType();
+
   // 4) Atualizar perfil (não sobrescreve admin)
   if (!isAdmin) {
     const { error: updErr } = await supabaseAdmin
@@ -272,7 +287,7 @@ async function handleActivation(a: ActivationArgs) {
         subscription_start_date: a.subStartAt,
         subscription_end_date: endDate,
         plano_nome: a.productName,
-        plan_type: "mensal",
+        plan_type: planType,
         status: "aprovado",
         nome: a.customerName,
         cpf: stripDigits(a.customerCpf) ?? stripDigits(a.customerCnpj),
@@ -282,6 +297,7 @@ async function handleActivation(a: ActivationArgs) {
       .eq("id", userId);
     if (updErr) throw new Error(`update profile: ${updErr.message}`);
   }
+
 
 
   // 5) Upsert da assinatura (histórico)
