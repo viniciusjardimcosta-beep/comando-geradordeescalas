@@ -227,48 +227,106 @@ function Landing() {
             <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Planos</h2>
             <p className="mt-3 text-muted-foreground">Escolha o ciclo que faz mais sentido para sua operação.</p>
           </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {[
-              { nome: "Mensal", preco: "49", ciclo: "/mês", desc: "Cobrança mensal", destaque: false },
-              { nome: "Semestral", preco: "39", ciclo: "/mês", desc: "Cobrança semestral", destaque: false },
-              { nome: "Anual", preco: "25", ciclo: "/mês", desc: "Cobrança anual", destaque: true, badge: "Melhor custo-benefício" },
-            ].map((p) => (
-              <div
-                key={p.nome}
-                className={`panel relative flex flex-col p-6 ${
-                  p.destaque ? "border-primary ring-2 ring-primary/40 shadow-[0_0_40px_-10px_var(--primary)]" : ""
-                }`}
-              >
-                {p.destaque && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
-                    {p.badge}
-                  </span>
-                )}
-                <h3 className="text-lg font-semibold">{p.nome}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">{p.desc}</p>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="text-sm text-muted-foreground">R$</span>
-                  <span className="text-5xl font-bold tracking-tight">{p.preco}</span>
-                  <span className="text-sm text-muted-foreground">{p.ciclo}</span>
-                </div>
-                <ul className="mt-6 space-y-2 text-sm">
-                  {["Escalas ilimitadas", "Exportação Excel e PDF", "Suporte por email", "Atualizações inclusas"].map(
-                    (f) => (
-                      <li key={f} className="flex items-center gap-2 text-muted-foreground">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        {f}
-                      </li>
-                    ),
-                  )}
-                </ul>
-                <Link to="/auth" className="mt-8">
-                  <Button className="w-full" variant={p.destaque ? "default" : "outline"}>
-                    Assinar plano
-                  </Button>
-                </Link>
+          <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+            {/* Mensal */}
+            <div className="panel relative flex flex-col p-6">
+              <h3 className="text-lg font-semibold">Plano Mensal</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ideal para quem deseja conhecer o sistema e gerar suas escalas sem compromisso de longo prazo.
+              </p>
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="text-sm text-muted-foreground">R$</span>
+                <span className="text-5xl font-bold tracking-tight">29,90</span>
+                <span className="text-sm text-muted-foreground">/mês</span>
               </div>
-            ))}
+              <ul className="mt-6 space-y-2 text-sm">
+                {[
+                  "Geração automática de escalas",
+                  "Exportação para planilha",
+                  "Gestão de férias e afastamentos",
+                  "Controle de carga horária",
+                  "Suporte por e-mail",
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-muted-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/auth" className="mt-8">
+                <Button className="w-full" variant="outline">Assinar Plano Mensal</Button>
+              </Link>
+            </div>
+
+            {/* Anual destaque */}
+            <div className="panel relative flex flex-col overflow-hidden border-primary p-6 ring-2 ring-primary/40 shadow-[0_0_40px_-10px_var(--primary)] bg-gradient-to-br from-primary/10 via-transparent to-[oklch(0.55_0.18_240)]/10">
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground">
+                ⭐ MAIS ESCOLHIDO
+              </span>
+              <h3 className="text-lg font-semibold">Plano Anual</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A melhor opção para quem gera escalas regularmente e deseja o menor custo possível.
+              </p>
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="text-sm text-muted-foreground">R$</span>
+                <span className="text-5xl font-bold tracking-tight">197</span>
+                <span className="text-sm text-muted-foreground">/ano</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Equivalente a apenas <strong className="text-foreground">R$ 16,42 por mês</strong>
+              </p>
+              <div className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-md bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
+                Economize R$ 161,80 por ano
+              </div>
+              <ul className="mt-6 space-y-2 text-sm">
+                {[
+                  "Tudo do plano mensal",
+                  "Menor custo por mês",
+                  "Atualizações incluídas",
+                  "Prioridade em melhorias futuras",
+                  "Melhor custo-benefício",
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-muted-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/auth" className="mt-8">
+                <Button className="w-full">Assinar Plano Anual</Button>
+              </Link>
+            </div>
           </div>
+
+          {/* Comparação manual */}
+          <div className="panel mx-auto mt-12 max-w-4xl p-8">
+            <h3 className="text-xl font-bold tracking-tight">Quanto custa fazer uma escala manualmente?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">Horas gastas revisando:</p>
+            <ul className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              {["Férias", "Afastamentos", "Carga horária", "Horas extras", "Guarnições"].map((i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  {i}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-sm">
+              Com o <strong className="text-primary">Comando</strong>, uma tarefa que pode levar horas é concluída em minutos.
+            </p>
+          </div>
+
+          {/* Economia */}
+          <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/15 to-[oklch(0.55_0.18_240)]/15 p-8 text-center">
+            <p className="text-sm font-semibold text-primary">💡 Menos de R$ 0,55 por dia</p>
+            <p className="mt-3 text-2xl font-bold tracking-tight">Plano Anual: R$ 197 por ano</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Equivalente a <strong className="text-foreground">R$ 16,42 por mês</strong> ou <strong className="text-foreground">R$ 0,54 por dia</strong>
+            </p>
+          </div>
+
+          <p className="mx-auto mt-8 max-w-3xl text-center text-xs text-muted-foreground">
+            Todos os planos possuem acesso completo às funcionalidades do sistema. A diferença está apenas na forma de cobrança e na economia obtida pelo período contratado.
+          </p>
         </div>
       </section>
 
