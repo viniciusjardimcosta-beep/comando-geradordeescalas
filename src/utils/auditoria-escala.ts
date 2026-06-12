@@ -233,13 +233,17 @@ export function auditarEscalaXlsx(
       }
     }
 
-    /* virada de mês: cada "234" no dia D deve ter "1" em D+1 */
+    /* virada de mês: cada "234" no dia D deve ter continuação em D+1
+       ("1" ordinário, ou CM/HE quando a madrugada fecha carga/excedente) */
     for (const l of lancs) {
       if (l.linha === "ORD" && l.sigla === "234" && l.dia < dias) {
-        const seguinte = lancs.find((x) => x.dia === l.dia + 1 && x.linha === "ORD");
-        if (!seguinte || seguinte.sigla !== "1") {
+        const segOrd = lancs.find((x) => x.dia === l.dia + 1 && x.linha === "ORD");
+        const segComp = lancs.find(
+          (x) => x.dia === l.dia + 1 && (x.linha === "EXP" || x.linha === "HE") && x.horas > 0,
+        );
+        if ((!segOrd || segOrd.sigla !== "1") && !segComp) {
           detalhes.push(
-            `Dia ${l.dia} célula ${l.celula}: 234 (18h) sem complemento "1" (6h) no dia ${l.dia + 1} — virada incompleta.`,
+            `Dia ${l.dia} célula ${l.celula}: 234 (18h) sem complemento "1" (6h) ou CM/HE no dia ${l.dia + 1} — virada incompleta.`,
           );
         }
       }

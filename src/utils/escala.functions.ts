@@ -909,21 +909,40 @@ function escalar(
     }
 
     // Ramo C — saldo parcial (0 < saldo < horasTurno):
-    // CM lança EXATAMENTE o saldo restante (fecha a carga ordinária);
-    // HE preenche o restante físico do plantão, limitado pelo teto mensal de HE.
-    // Não usar sigla ORD parcial (23/2): regra do usuário — saldo→CM+HE.
-    const cmDia = Math.min(espacoOrd, horasDia);
-    const cmMad = Math.max(0, espacoOrd - cmDia); // 0 quando espacoOrd ≤ 16
+    // REGRA ABSOLUTA: CM nunca substitui turno operacional. Ordem de preenchimento:
+    //   1) maior sigla ORD que cabe no saldo (234=18h, 23=12h, 2=6h);
+    //   2) CM apenas para a diferença final da carga ordinária (ajuste fino);
+    //   3) HE para todo o excedente físico do plantão (respeitando teto mensal).
+    const siglaOrdParcial = siglaOrdPorHoras(espacoOrd);
+    const horasOrdParcial = siglaOrdParcial ? horasOrdSigla(siglaOrdParcial) : 0;
+    if (siglaOrdParcial) {
+      ord.get(dia)!.set(m.rowOrd, siglaOrdParcial);
+      m.cargaH += horasOrdParcial;
+    }
+
+    // Partição física: "234" entra às 18h (18h dia + 6h madrugada);
+    // demais jornadas entram às 08h (16h dia + 8h madrugada).
+    const ordCheioNoDia = siglaOrdParcial === SIGLA_ORD_DIA;
+    const capDia = ordCheioNoDia ? 18 : 16;
+    const capMad = ultimoDia ? 0 : ordCheioNoDia ? 6 : 8;
+
+    let saldoCm = espacoOrd - horasOrdParcial;
     let restanteHe = limiteRestanteHe(m);
 
+    // Bloco do dia: ORD já ocupa horasOrdParcial; CM fecha o fino; HE no resto.
+    const livreDia = Math.max(0, capDia - horasOrdParcial);
+    const cmDia = Math.min(saldoCm, livreDia);
     setCm(dia, cmDia);
-    const heDia = Math.min(horasDia - cmDia, restanteHe);
+    saldoCm -= cmDia;
+    const heDia = Math.min(livreDia - cmDia, restanteHe);
     setHe(dia, heDia);
     restanteHe -= heDia;
 
+    // Bloco da madrugada (D+1): CM do restante necessário, depois HE.
     if (!ultimoDia) {
+      const cmMad = Math.min(saldoCm, capMad);
       setCm(dia + 1, cmMad);
-      const heMad = Math.min(horasMadrugada - cmMad, restanteHe);
+      const heMad = Math.min(capMad - cmMad, restanteHe);
       setHe(dia + 1, heMad);
     }
 
