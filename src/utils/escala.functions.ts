@@ -1715,57 +1715,96 @@ function escalar(
   }
 
   /* 8ª ETAPA — Reconciliação Final de Carga (ORD→HE).
-     Corrige somente diferenças pequenas (≤2h, tipicamente 1h) entre carga
-     ordinária lançada e o teto mensal, movendo o excedente de um CM já
-     existente para HE no mesmo dia.
-       Ex.: carga 240h, lançado CM16 fechando 241h e HE menor que o devido
-            → vira CM15 + HE1 (sem alterar o total de horas trabalhadas).
-     Idempotente: se o dia já tem HE para o militar, pula esse dia; ao rodar
-     a 2ª vez o excedente é 0 e nada é alterado.
+     Recalcula a carga DIRETAMENTE da grade final que será gravada na planilha
+     (ord/expm/he) — não depende dos acumuladores intermediários.
+       alvoOrd  = Math.round(cargaMaxOrd(m))   (ex.: 176.7 → 177)
+       ordinária = Σ ORD/EFE + Σ EXP/CM/TELE
+       he        = Σ HE
+       diferença = ordinária - alvoOrd
+     Se diferença ∈ [1..4]h, busca um lançamento complementar (CM/EXP/TELE)
+     com h > diferença em um dia SEM HE para o militar e converte:
+        XXXn  →  XXX(n - diferença)  +  HE(diferença)   (mesmo dia permitido)
+     Total de horas trabalhadas inalterado. Permitida coexistência CM+HE no
+     mesmo dia apenas como fechamento de carga.
+     Idempotente: após aplicar, a diferença vira 0; e dias com HE pré-existente
+     do militar nunca são reescritos.
      NÃO mexe em ORD ("234"/"1"), NÃO toca em ADM, NÃO redistribui dias,
-     NÃO ultrapassa o teto mensal de HE do militar. Se não houver CM
-     elegível ou faltar espaço HE, apenas registra alerta. */
+     NÃO ultrapassa o teto mensal de HE do militar. Se não conseguir corrigir
+     com segurança, emite alerta específico identificando o militar. */
   const reconciliadosOk: string[] = [];
   const reconciliadosFalha: string[] = [];
   for (const m of militares) {
     if (!m.ativo) continue;
     if (m.isAdm) continue;
     if (m.tipoEscala === "parcial") continue;
-    const alvo = cargaMaxOrd(m);
-    if (alvo <= 0) continue;
-    const ordTotal = horasOrdinariasAcumuladas(m);
-    const excedente = ordTotal - alvo;
-    if (excedente <= 0 || excedente > 2) continue;
+
+    const alvoOrd = Math.round(cargaMaxOrd(m));
+    if (alvoOrd <= 0) continue;
+
+    // Lê direto da grade final (ord/expm/he) que será escrita na planilha.
+    let ordinariaAntes = 0;
+    let heAntes = 0;
+    for (let d = 1; d <= dias; d++) {
+      const sOrd = ord.get(d)?.get(m.rowOrd);
+      if (sOrd && !SIGLAS_AFASTAMENTO.has(sOrd)) ordinariaAntes += horasOrdSigla(sOrd);
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp) ordinariaAntes += horasCompSigla(sExp);
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe) heAntes += horasHeSigla(sHe);
+    }
+    const diferenca = ordinariaAntes - alvoOrd;
+    if (diferenca <= 0 || diferenca > 4) continue;
+
     const restanteHe = limiteRestanteHe(m);
-    if (restanteHe < excedente) {
-      reconciliadosFalha.push(`${m.nome} (+${excedente}h ORD, teto HE atingido)`);
+    if (restanteHe < diferenca) {
+      const msg = `Reconciliação não aplicada para ${m.nome}: teto mensal de HE atingido (+${diferenca}h).`;
+      reconciliadosFalha.push(msg);
+      console.warn("[reconciliacao]", { militar: m.nome, alvoOrd, ordinariaAntes, heAntes, acao: "skip-teto-he" });
       continue;
     }
-    let aplicou = false;
-    // Preferir CM grande para preservar margem; iterar do maior pro menor.
-    const candidatos: Array<{ d: number; h: number }> = [];
+
+    // Candidatos: qualquer lançamento complementar (CM/EXP/TELE) divisível.
+    // Preferir maior h para preservar margem; sem HE pré-existente no dia.
+    const candidatos: Array<{ d: number; prefixo: string; h: number }> = [];
     for (let d = 1; d <= dias; d++) {
       const s = expm.get(d)?.get(m.rowOrd);
       if (!s) continue;
-      const mt = /^CM(\d{1,2})$/i.exec(s);
+      const mt = /^(CM|EXP|TELE)(\d{1,2})$/i.exec(s.trim());
       if (!mt) continue;
-      const h = Number(mt[1]);
-      if (h <= excedente) continue;          // não zerar o CM
-      if (he.get(d)?.has(m.rowOrd)) continue; // idempotência: dia já tem HE
-      candidatos.push({ d, h });
+      const h = Number(mt[2]);
+      if (h <= diferenca) continue;            // não zerar o lançamento
+      if (he.get(d)?.has(m.rowOrd)) continue;  // idempotência
+      candidatos.push({ d, prefixo: mt[1].toUpperCase(), h });
     }
     candidatos.sort((a, b) => b.h - a.h);
-    if (candidatos.length > 0) {
-      const c = candidatos[0];
-      const novoCm = c.h - excedente;
-      expm.get(c.d)!.set(m.rowOrd, `CM${novoCm}`);
-      he.get(c.d)!.set(m.rowOrd, `HE${excedente}`);
-      reconciliadosOk.push(`${m.nome} dia ${c.d}: CM${c.h}→CM${novoCm}+HE${excedente}`);
-      aplicou = true;
+
+    if (candidatos.length === 0) {
+      const msg = `Reconciliação não aplicada para ${m.nome}: não foi encontrado lançamento final divisível (+${diferenca}h).`;
+      reconciliadosFalha.push(msg);
+      console.warn("[reconciliacao]", { militar: m.nome, alvoOrd, ordinariaAntes, heAntes, acao: "sem-candidato" });
+      continue;
     }
-    if (!aplicou) {
-      reconciliadosFalha.push(`${m.nome} (+${excedente}h ORD, sem CM elegível)`);
-    }
+
+    const c = candidatos[0];
+    const novoH = c.h - diferenca;
+    const novoLanc = `${c.prefixo}${novoH}`;
+    const novaHe = `HE${diferenca}`;
+    expm.get(c.d)!.set(m.rowOrd, novoLanc);
+    he.get(c.d)!.set(m.rowOrd, novaHe);
+
+    const ordinariaDepois = ordinariaAntes - diferenca;
+    const heDepois = heAntes + diferenca;
+    const acao = `dia ${c.d}: ${c.prefixo}${c.h} → ${novoLanc} + ${novaHe}`;
+    reconciliadosOk.push(`${m.nome} ${acao}`);
+    console.info("[reconciliacao]", {
+      militar: m.nome,
+      alvoOrd,
+      ordinariaAntes,
+      heAntes,
+      acao,
+      ordinariaDepois,
+      heDepois,
+    });
   }
   if (reconciliadosOk.length) {
     alertas.push({
@@ -1776,7 +1815,7 @@ function escalar(
   if (reconciliadosFalha.length) {
     alertas.push({
       tipo: "warn",
-      msg: `Reconciliação final não aplicada (verificar manualmente): ${reconciliadosFalha.join("; ")}.`,
+      msg: reconciliadosFalha.join(" "),
     });
   }
 
