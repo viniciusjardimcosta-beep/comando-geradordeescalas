@@ -1714,6 +1714,72 @@ function escalar(
     });
   }
 
+  /* 8ª ETAPA — Reconciliação Final de Carga (ORD→HE).
+     Corrige somente diferenças pequenas (≤2h, tipicamente 1h) entre carga
+     ordinária lançada e o teto mensal, movendo o excedente de um CM já
+     existente para HE no mesmo dia.
+       Ex.: carga 240h, lançado CM16 fechando 241h e HE menor que o devido
+            → vira CM15 + HE1 (sem alterar o total de horas trabalhadas).
+     Idempotente: se o dia já tem HE para o militar, pula esse dia; ao rodar
+     a 2ª vez o excedente é 0 e nada é alterado.
+     NÃO mexe em ORD ("234"/"1"), NÃO toca em ADM, NÃO redistribui dias,
+     NÃO ultrapassa o teto mensal de HE do militar. Se não houver CM
+     elegível ou faltar espaço HE, apenas registra alerta. */
+  const reconciliadosOk: string[] = [];
+  const reconciliadosFalha: string[] = [];
+  for (const m of militares) {
+    if (!m.ativo) continue;
+    if (m.isAdm) continue;
+    if (m.tipoEscala === "parcial") continue;
+    const alvo = cargaMaxOrd(m);
+    if (alvo <= 0) continue;
+    const ordTotal = horasOrdinariasAcumuladas(m);
+    const excedente = ordTotal - alvo;
+    if (excedente <= 0 || excedente > 2) continue;
+    const restanteHe = limiteRestanteHe(m);
+    if (restanteHe < excedente) {
+      reconciliadosFalha.push(`${m.nome} (+${excedente}h ORD, teto HE atingido)`);
+      continue;
+    }
+    let aplicou = false;
+    // Preferir CM grande para preservar margem; iterar do maior pro menor.
+    const candidatos: Array<{ d: number; h: number }> = [];
+    for (let d = 1; d <= dias; d++) {
+      const s = expm.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      const mt = /^CM(\d{1,2})$/i.exec(s);
+      if (!mt) continue;
+      const h = Number(mt[1]);
+      if (h <= excedente) continue;          // não zerar o CM
+      if (he.get(d)?.has(m.rowOrd)) continue; // idempotência: dia já tem HE
+      candidatos.push({ d, h });
+    }
+    candidatos.sort((a, b) => b.h - a.h);
+    if (candidatos.length > 0) {
+      const c = candidatos[0];
+      const novoCm = c.h - excedente;
+      expm.get(c.d)!.set(m.rowOrd, `CM${novoCm}`);
+      he.get(c.d)!.set(m.rowOrd, `HE${excedente}`);
+      reconciliadosOk.push(`${m.nome} dia ${c.d}: CM${c.h}→CM${novoCm}+HE${excedente}`);
+      aplicou = true;
+    }
+    if (!aplicou) {
+      reconciliadosFalha.push(`${m.nome} (+${excedente}h ORD, sem CM elegível)`);
+    }
+  }
+  if (reconciliadosOk.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Reconciliação final ORD→HE aplicada: ${reconciliadosOk.join("; ")}.`,
+    });
+  }
+  if (reconciliadosFalha.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Reconciliação final não aplicada (verificar manualmente): ${reconciliadosFalha.join("; ")}.`,
+    });
+  }
+
   return { ord, exp: expm, he };
 }
 
