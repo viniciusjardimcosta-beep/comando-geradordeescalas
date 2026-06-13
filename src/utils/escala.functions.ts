@@ -821,130 +821,79 @@ function escalar(
     return null;
   };
 
-  // Lança uma jornada completa: primeiro consome carga ordinária mensal (ORD+CM)
-  // exatamente até o teto do ME; tudo que passar disso vira HE na própria jornada.
+  // Lança uma jornada real de serviço pela linha do tempo física 2→3→4→1.
+  // Primeiro consome carga ordinária mensal em blocos operacionais de 6h; CM só
+  // fecha a fração final menor que 6h dentro do bloco real, e o restante físico
+  // do serviço vira HE no dia correto da sequência.
   const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
     const ultimoDia = dia === dias;
-    // Particionamento físico padrão de uma jornada 24h:
-    // - Plantão ORD cheio (sigla "234"): 18h dia + 6h madrugada (entrada 18h)
-    // - Qualquer jornada que NÃO seja "234" cheio (CM/HE puro ou misto): 16h dia + 8h madrugada
-    //   (entrada 08h, saída 00h, plantão noturno entra 00h e devolve às 08h)
     const setHe = (d: number, h: number) => {
       if (h <= 0) return;
-      he.get(d)!.set(m.rowOrd, `HE${h}`);
+      const atual = he.get(d)!.get(m.rowOrd);
+      const jaLancado = atual ? horasHeSigla(atual) : 0;
+      he.get(d)!.set(m.rowOrd, `HE${jaLancado + h}`);
       m.cargaH += h;
     };
     const setCm = (d: number, h: number) => {
       if (h <= 0) return;
-      expm.get(d)!.set(m.rowOrd, `CM${h}`);
+      const atual = expm.get(d)!.get(m.rowOrd);
+      const jaLancado = atual && /^CM\d{1,2}$/i.test(atual) ? horasCompSigla(atual) : 0;
+      expm.get(d)!.set(m.rowOrd, `CM${jaLancado + h}`);
       m.cargaH += h;
     };
+    const lancaPorLinhaDoTempo = (saldoOrdInicial: number, limiteHeInicial: number) => {
+      const blocos: Array<{ sigla: "2" | "3" | "4" | "1"; d: number }> = [
+        { sigla: "2", d: dia },
+        { sigla: "3", d: dia },
+        { sigla: "4", d: dia },
+        ...(ultimoDia ? [] : [{ sigla: "1" as const, d: dia + 1 }]),
+      ];
+      const ordPartes = new Map<number, string[]>();
+      const cmPorDia = new Map<number, number>();
+      const hePorDia = new Map<number, number>();
+      let saldoOrd = Math.max(0, saldoOrdInicial);
+      let restanteHe = limiteHeInicial;
 
-    // Caminho cobertura de furo — partição 16h dia + 8h madrugada (16h só, no último dia).
-    // IMPORTANTE: mesmo sendo cobertura, primeiro consome o espaço ORD ainda disponível
-    // no mês como CM (complemento), e SÓ o que sobrar vira HE. Isso evita inflar HE
-    // quando o militar ainda tinha carga ordinária a fechar (ex.: 16h cobertura, 5h ORD
-    // pendentes → CM5 + HE11 em vez de HE16 + CM5 inacessível em outro dia).
-    if (destinoHe) {
-      const horasDia = 16;
-      const horasMadrugada = ultimoDia ? 0 : 8;
-      let espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
-      let restanteHe = limiteRestanteHe(m);
+      const addOrd = (d: number, sigla: string) => {
+        const partes = ordPartes.get(d) ?? [];
+        partes.push(sigla);
+        ordPartes.set(d, partes);
+      };
+      const addCm = (d: number, h: number) => cmPorDia.set(d, (cmPorDia.get(d) ?? 0) + h);
+      const addHe = (d: number, h: number) => {
+        const lancar = Math.min(h, restanteHe);
+        if (lancar <= 0) return;
+        hePorDia.set(d, (hePorDia.get(d) ?? 0) + lancar);
+        restanteHe -= lancar;
+      };
 
-      // Bloco do dia
-      const cmDia = Math.min(horasDia, espacoOrd);
-      const heDia = Math.min(horasDia - cmDia, restanteHe);
-      setCm(dia, cmDia);
-      setHe(dia, heDia);
-      espacoOrd -= cmDia;
-      restanteHe -= heDia;
-
-      // Bloco da madrugada
-      if (!ultimoDia) {
-        const cmMad = Math.min(horasMadrugada, espacoOrd);
-        const heMad = Math.min(horasMadrugada - cmMad, restanteHe);
-        setCm(dia + 1, cmMad);
-        setHe(dia + 1, heMad);
+      for (const bloco of blocos) {
+        if (saldoOrd >= 6) {
+          addOrd(bloco.d, bloco.sigla);
+          saldoOrd -= 6;
+          continue;
+        }
+        if (saldoOrd > 0) {
+          addCm(bloco.d, saldoOrd);
+          addHe(bloco.d, 6 - saldoOrd);
+          saldoOrd = 0;
+          continue;
+        }
+        addHe(bloco.d, 6);
       }
 
-      marcaInicioServico(m, dia);
-      m.ultimoServico = dia;
-      return;
-    }
+      for (const [d, partes] of ordPartes) {
+        ord.get(d)!.set(m.rowOrd, partes.join(""));
+        m.cargaH += partes.length * 6;
+      }
+      for (const [d, h] of cmPorDia) setCm(d, h);
+      for (const [d, h] of hePorDia) setHe(d, h);
+    };
 
-    // Decisão ORD vs HE pela carga mensal
-    const tetoOrd = cargaMaxOrd(m);
-    const usadoOrd = horasOrdinariasAcumuladas(m);
-    const espacoOrd = Math.max(0, tetoOrd - usadoOrd);
-
-    // Plantão físico de referência:
-    // - Não-último dia: 24h (16 dia + 8 madrugada), com partição 18+6 SOMENTE quando cabe ORD cheio.
-    // - Último dia: 16h (apenas bloco do dia).
-    const horasTurno = ultimoDia ? 16 : 24;
-    const cabeOrdCheio = !ultimoDia && espacoOrd >= horasTurno; // saldo cobre plantão 24h inteiro
-    const horasDia = cabeOrdCheio ? 18 : 16;
-    const horasMadrugada = ultimoDia ? 0 : (cabeOrdCheio ? 6 : 8);
-
-    // Ramo A — saldo cobre plantão cheio: lança sigla ORD "234" + "1".
-    if (cabeOrdCheio) {
-      ord.get(dia)!.set(m.rowOrd, SIGLA_ORD_DIA);
-      m.cargaH += 18;
-      ord.get(dia + 1)!.set(m.rowOrd, SIGLA_ORD_MADRUGADA);
-      m.cargaH += 6;
-      marcaInicioServico(m, dia);
-      m.ultimoServico = dia;
-      return;
-    }
-
-    // Ramo B — sem espaço ORD: tudo HE, respeitando teto mensal de HE.
-    if (espacoOrd <= 0) {
-      const restanteHe = limiteRestanteHe(m);
-      const heDia = Math.min(horasDia, restanteHe);
-      const heMad = ultimoDia ? 0 : Math.min(horasMadrugada, Math.max(0, restanteHe - heDia));
-      setHe(dia, heDia);
-      if (!ultimoDia) setHe(dia + 1, heMad);
-      marcaInicioServico(m, dia);
-      m.ultimoServico = dia;
-      return;
-    }
-
-    // Ramo C — saldo parcial (0 < saldo < horasTurno):
-    // REGRA ABSOLUTA: CM nunca substitui turno operacional. Ordem de preenchimento:
-    //   1) maior sigla ORD que cabe no saldo (234=18h, 23=12h, 2=6h);
-    //   2) CM apenas para a diferença final da carga ordinária (ajuste fino);
-    //   3) HE para todo o excedente físico do plantão (respeitando teto mensal).
-    const siglaOrdParcial = siglaOrdPorHoras(espacoOrd);
-    const horasOrdParcial = siglaOrdParcial ? horasOrdSigla(siglaOrdParcial) : 0;
-    if (siglaOrdParcial) {
-      ord.get(dia)!.set(m.rowOrd, siglaOrdParcial);
-      m.cargaH += horasOrdParcial;
-    }
-
-    // Partição física: "234" entra às 18h (18h dia + 6h madrugada);
-    // demais jornadas entram às 08h (16h dia + 8h madrugada).
-    const ordCheioNoDia = siglaOrdParcial === SIGLA_ORD_DIA;
-    const capDia = ordCheioNoDia ? 18 : 16;
-    const capMad = ultimoDia ? 0 : ordCheioNoDia ? 6 : 8;
-
-    let saldoCm = espacoOrd - horasOrdParcial;
+    // Decisão ORD/CM/HE pela carga mensal, aplicada dentro da linha do tempo real.
+    const espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
     let restanteHe = limiteRestanteHe(m);
-
-    // Bloco do dia: ORD já ocupa horasOrdParcial; CM fecha o fino; HE no resto.
-    const livreDia = Math.max(0, capDia - horasOrdParcial);
-    const cmDia = Math.min(saldoCm, livreDia);
-    setCm(dia, cmDia);
-    saldoCm -= cmDia;
-    const heDia = Math.min(livreDia - cmDia, restanteHe);
-    setHe(dia, heDia);
-    restanteHe -= heDia;
-
-    // Bloco da madrugada (D+1): CM do restante necessário, depois HE.
-    if (!ultimoDia) {
-      const cmMad = Math.min(saldoCm, capMad);
-      setCm(dia + 1, cmMad);
-      const heMad = Math.min(capMad - cmMad, restanteHe);
-      setHe(dia + 1, heMad);
-    }
+    lancaPorLinhaDoTempo(espacoOrd, restanteHe);
 
     marcaInicioServico(m, dia);
     m.ultimoServico = dia;
