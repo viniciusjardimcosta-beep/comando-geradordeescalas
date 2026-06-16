@@ -76,7 +76,7 @@ export const Route = createFileRoute("/api/asaas/create-checkout")({
             next_due_date: subscription.nextDueDate,
             cycle: subscription.cycle,
             raw_payload: subscription as unknown as Record<string, unknown>,
-          }, { onConflict: "subscription_id" });
+          } as never, { onConflict: "subscription_id" });
 
           // Buscar primeira cobrança para extrair invoiceUrl
           let checkoutUrl: string | null = null;
