@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-context";
-import { Button } from "@/components/ui/button";
+
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Crown, AlertTriangle, Clock } from "lucide-react";
 import { AsaasCheckoutButton } from "@/components/asaas-checkout-button";
