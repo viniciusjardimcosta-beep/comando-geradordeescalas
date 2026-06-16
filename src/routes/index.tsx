@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AsaasCheckoutButton } from "@/components/asaas-checkout-button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
