@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      asaas_subscriptions: {
+        Row: {
+          billing_type: string | null
+          created_at: string
+          customer_id: string | null
+          cycle: string | null
+          id: string
+          next_due_date: string | null
+          payment_id: string | null
+          plan_type: string | null
+          raw_payload: Json
+          status: string | null
+          subscription_id: string | null
+          updated_at: string
+          user_id: string | null
+          value: number | null
+        }
+        Insert: {
+          billing_type?: string | null
+          created_at?: string
+          customer_id?: string | null
+          cycle?: string | null
+          id?: string
+          next_due_date?: string | null
+          payment_id?: string | null
+          plan_type?: string | null
+          raw_payload?: Json
+          status?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          value?: number | null
+        }
+        Update: {
+          billing_type?: string | null
+          created_at?: string
+          customer_id?: string | null
+          cycle?: string | null
+          id?: string
+          next_due_date?: string | null
+          payment_id?: string | null
+          plan_type?: string | null
+          raw_payload?: Json
+          status?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          value?: number | null
+        }
+        Relationships: []
+      }
       billing_events: {
         Row: {
           created_at: string
@@ -476,6 +527,7 @@ export type Database = {
         | "expired"
         | "canceled"
         | "refunded"
+        | "overdue"
       user_status: "pendente" | "aprovado" | "bloqueado"
     }
     CompositeTypes: {
@@ -613,6 +665,7 @@ export const Constants = {
         "expired",
         "canceled",
         "refunded",
+        "overdue",
       ],
       user_status: ["pendente", "aprovado", "bloqueado"],
     },
