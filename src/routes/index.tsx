@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AsaasCheckoutButton } from "@/components/asaas-checkout-button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -253,14 +254,11 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=KY8MOGZ"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-8"
-              >
-                <Button className="w-full" variant="outline">Assinar Plano Mensal</Button>
-              </a>
+              <div className="mt-8">
+                <AsaasCheckoutButton planType="mensal" variant="outline" className="w-full">
+                  Assinar Plano Mensal
+                </AsaasCheckoutButton>
+              </div>
             </div>
 
             {/* Anual destaque */}
@@ -296,14 +294,11 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-8"
-              >
-                <Button className="w-full">Assinar Plano Anual</Button>
-              </a>
+              <div className="mt-8">
+                <AsaasCheckoutButton planType="anual" className="w-full">
+                  Assinar Plano Anual
+                </AsaasCheckoutButton>
+              </div>
             </div>
           </div>
 

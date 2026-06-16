@@ -23,7 +23,9 @@ import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as ApiAsaasCreateCheckoutRouteImport } from './routes/api.asaas.create-checkout'
 import { Route as ApiPublicWebhooksNexanoRouteImport } from './routes/api.public.webhooks.nexano'
+import { Route as ApiPublicWebhooksAsaasRouteImport } from './routes/api.public.webhooks.asaas'
 
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
@@ -95,9 +97,19 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiAsaasCreateCheckoutRoute = ApiAsaasCreateCheckoutRouteImport.update({
+  id: '/api/asaas/create-checkout',
+  path: '/api/asaas/create-checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWebhooksNexanoRoute = ApiPublicWebhooksNexanoRouteImport.update({
   id: '/api/public/webhooks/nexano',
   path: '/api/public/webhooks/nexano',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWebhooksAsaasRoute = ApiPublicWebhooksAsaasRouteImport.update({
+  id: '/api/public/webhooks/asaas',
+  path: '/api/public/webhooks/asaas',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -116,6 +128,8 @@ export interface FileRoutesByFullPath {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
+  '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRoutesByTo {
@@ -132,6 +146,8 @@ export interface FileRoutesByTo {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app': typeof AppIndexRoute
+  '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRoutesById {
@@ -150,6 +166,8 @@ export interface FileRoutesById {
   '/app/militares': typeof AppMilitaresRoute
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
+  '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
 }
 export interface FileRouteTypes {
@@ -169,6 +187,8 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app/'
+    | '/api/asaas/create-checkout'
+    | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -185,6 +205,8 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app'
+    | '/api/asaas/create-checkout'
+    | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
   id:
     | '__root__'
@@ -202,6 +224,8 @@ export interface FileRouteTypes {
     | '/app/militares'
     | '/app/usuarios'
     | '/app/'
+    | '/api/asaas/create-checkout'
+    | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
   fileRoutesById: FileRoutesById
 }
@@ -211,6 +235,8 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
+  ApiAsaasCreateCheckoutRoute: typeof ApiAsaasCreateCheckoutRoute
+  ApiPublicWebhooksAsaasRoute: typeof ApiPublicWebhooksAsaasRoute
   ApiPublicWebhooksNexanoRoute: typeof ApiPublicWebhooksNexanoRoute
 }
 
@@ -314,11 +340,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/asaas/create-checkout': {
+      id: '/api/asaas/create-checkout'
+      path: '/api/asaas/create-checkout'
+      fullPath: '/api/asaas/create-checkout'
+      preLoaderRoute: typeof ApiAsaasCreateCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/nexano': {
       id: '/api/public/webhooks/nexano'
       path: '/api/public/webhooks/nexano'
       fullPath: '/api/public/webhooks/nexano'
       preLoaderRoute: typeof ApiPublicWebhooksNexanoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/asaas': {
+      id: '/api/public/webhooks/asaas'
+      path: '/api/public/webhooks/asaas'
+      fullPath: '/api/public/webhooks/asaas'
+      preLoaderRoute: typeof ApiPublicWebhooksAsaasRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -356,6 +396,8 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
+  ApiAsaasCreateCheckoutRoute: ApiAsaasCreateCheckoutRoute,
+  ApiPublicWebhooksAsaasRoute: ApiPublicWebhooksAsaasRoute,
   ApiPublicWebhooksNexanoRoute: ApiPublicWebhooksNexanoRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,18 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-context";
-import { Button } from "@/components/ui/button";
+
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Crown, AlertTriangle, Clock } from "lucide-react";
+import { AsaasCheckoutButton } from "@/components/asaas-checkout-button";
 
 export const Route = createFileRoute("/app/assinatura")({
   component: AssinaturaPage,
 });
 
 const planos = [
-  { id: "mensal", nome: "Mensal", preco: "49", desc: "Cobrança mensal", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=KY8MOGZ" },
-  { id: "semestral", nome: "Semestral", preco: "39", desc: "Equivalente mensal · cobrança semestral", destaque: false, link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=QG5PAFN" },
-  { id: "anual", nome: "Anual", preco: "25", desc: "Equivalente mensal · cobrança anual", destaque: true, badge: "Melhor custo-benefício", link: "https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC" },
-] as const;
+  { id: "mensal" as const, nome: "Mensal", preco: "29,90", desc: "Cobrança mensal", destaque: false },
+  { id: "anual" as const, nome: "Anual", preco: "197", desc: "Cobrança anual — R$ 16,42/mês", destaque: true, badge: "Melhor custo-benefício" },
+];
 
 function AssinaturaPage() {
   const { profile, hasAccess, isTrial, trialDaysLeft, isAdmin } = useAuth();
@@ -90,9 +90,9 @@ function AssinaturaPage() {
       <div>
         <h2 className="text-xl font-semibold">Escolha seu plano</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Clique em <strong>Contratar</strong> para ser redirecionado ao checkout seguro da Nexano.
+          Clique em <strong>Contratar</strong> para ser redirecionado ao checkout seguro do Asaas.
         </p>
-        <div className="mt-6 grid gap-6 md:grid-cols-3">
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
           {planos.map((p) => (
             <div
               key={p.id}
@@ -110,7 +110,7 @@ function AssinaturaPage() {
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="text-sm text-muted-foreground">R$</span>
                 <span className="text-5xl font-bold tracking-tight">{p.preco}</span>
-                <span className="text-sm text-muted-foreground">/mês</span>
+                <span className="text-sm text-muted-foreground">{p.id === "anual" ? "/ano" : "/mês"}</span>
               </div>
               <ul className="mt-6 space-y-2 text-sm">
                 {["Escalas ilimitadas", "Exportação Excel e PDF", "Suporte por email", "Atualizações inclusas"].map((f) => (
@@ -120,15 +120,16 @@ function AssinaturaPage() {
                   </li>
                 ))}
               </ul>
-              <Button
-                className="mt-8 w-full"
-                variant={p.destaque ? "default" : "outline"}
-                asChild
-              >
-                <a href={p.link} target="_blank" rel="noopener noreferrer">
+              <div className="mt-8">
+                <AsaasCheckoutButton
+                  planType={p.id}
+                  variant={p.destaque ? "default" : "outline"}
+                  className="w-full"
+                  requireLoginRedirect={false}
+                >
                   Contratar
-                </a>
-              </Button>
+                </AsaasCheckoutButton>
+              </div>
             </div>
           ))}
         </div>
