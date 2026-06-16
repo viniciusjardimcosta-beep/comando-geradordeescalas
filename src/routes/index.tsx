@@ -294,14 +294,11 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <a
-                href="https://checkout.nexano.com.br/checkout/cmphcok3806k101tcvdm1yrl0?offer=LBFYJPC"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-8"
-              >
-                <Button className="w-full">Assinar Plano Anual</Button>
-              </a>
+              <div className="mt-8">
+                <AsaasCheckoutButton planType="anual" className="w-full">
+                  Assinar Plano Anual
+                </AsaasCheckoutButton>
+              </div>
             </div>
           </div>
 
