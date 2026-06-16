@@ -32,7 +32,7 @@ export function AsaasCheckoutButton({
 
       if (!accessToken) {
         if (requireLoginRedirect) {
-          navigate({ to: "/auth", search: { plan: planType } as never });
+          navigate({ to: "/auth" });
           return;
         }
         toast.error("Faça login para assinar.");
