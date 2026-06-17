@@ -67,17 +67,35 @@ export async function findOrCreateAsaasCustomer(input: {
   mobilePhone?: string | null;
   externalReference?: string | null;
 }): Promise<AsaasCustomer> {
+  const cpfDigits = input.cpfCnpj ? input.cpfCnpj.replace(/\D/g, "") : "";
+  const phoneDigits = input.mobilePhone ? input.mobilePhone.replace(/\D/g, "") : "";
+
   // Procurar por email
   const search = await asaasFetch(`/customers?email=${encodeURIComponent(input.email)}&limit=1`);
   const found = Array.isArray(search?.data) ? search.data[0] : null;
-  if (found?.id) return found as AsaasCustomer;
+  if (found?.id) {
+    // Se já existe e está sem CPF/CNPJ mas temos CPF no perfil, atualizar.
+    const needsCpf = !found.cpfCnpj && cpfDigits;
+    const needsPhone = !found.mobilePhone && phoneDigits;
+    if (needsCpf || needsPhone) {
+      const update: Record<string, unknown> = {};
+      if (needsCpf) update.cpfCnpj = cpfDigits;
+      if (needsPhone) update.mobilePhone = phoneDigits;
+      const updated = await asaasFetch(`/customers/${encodeURIComponent(found.id)}`, {
+        method: "POST",
+        body: JSON.stringify(update),
+      });
+      return updated as AsaasCustomer;
+    }
+    return found as AsaasCustomer;
+  }
 
   const body: Record<string, unknown> = {
     name: input.name,
     email: input.email,
   };
-  if (input.cpfCnpj) body.cpfCnpj = input.cpfCnpj.replace(/\D/g, "");
-  if (input.mobilePhone) body.mobilePhone = input.mobilePhone.replace(/\D/g, "");
+  if (cpfDigits) body.cpfCnpj = cpfDigits;
+  if (phoneDigits) body.mobilePhone = phoneDigits;
   if (input.externalReference) body.externalReference = input.externalReference;
 
   return await asaasFetch(`/customers`, { method: "POST", body: JSON.stringify(body) }) as AsaasCustomer;

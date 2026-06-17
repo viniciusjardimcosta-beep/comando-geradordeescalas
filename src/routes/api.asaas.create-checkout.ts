@@ -50,10 +50,18 @@ export const Route = createFileRoute("/api/asaas/create-checkout")({
             .eq("id", user.id)
             .maybeSingle();
 
+          const cpfDigits = (profile?.cpf ?? "").replace(/\D/g, "");
+          if (!cpfDigits || (cpfDigits.length !== 11 && cpfDigits.length !== 14)) {
+            return Response.json(
+              { ok: false, error: "Cadastre seu CPF para contratar um plano.", code: "CPF_REQUIRED" },
+              { status: 400 },
+            );
+          }
+
           const customer = await findOrCreateAsaasCustomer({
             name: profile?.nome ?? user.email ?? "Cliente Comando",
             email: profile?.email ?? user.email ?? "",
-            cpfCnpj: profile?.cpf ?? null,
+            cpfCnpj: cpfDigits,
             mobilePhone: profile?.telefone ?? null,
             externalReference: user.id,
           });
