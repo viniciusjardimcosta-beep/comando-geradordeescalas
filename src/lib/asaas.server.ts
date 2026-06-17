@@ -1,13 +1,29 @@
 // Helpers para comunicação com Asaas (server-only).
 // Não importar em código de cliente.
 
-const API_VERSION = (process.env.ASAAS_API_VERSION ?? "v3").trim();
-// Asaas oferece sandbox e produção. Detectamos sandbox por prefixo da chave.
+// Normaliza ASAAS_API_VERSION: aceita "v3", "V3", "3", "/v3", vazio → "v3".
+function normalizeApiVersion(): string {
+  const raw = (process.env.ASAAS_API_VERSION ?? "").trim().replace(/^\/+/, "");
+  if (!raw) return "v3";
+  const m = raw.match(/^v?(\d+)$/i);
+  return m ? `v${m[1]}` : "v3";
+}
+
+function detectEnv(key: string): "sandbox" | "production" {
+  const envOverride = (process.env.ASAAS_ENV ?? "").trim().toLowerCase();
+  if (envOverride === "sandbox") return "sandbox";
+  if (envOverride === "production" || envOverride === "prod") return "production";
+  if (key.startsWith("$aact_hmlg")) return "sandbox";
+  if (key.startsWith("$aact_prod")) return "production";
+  // Qualquer outra chave $aact_ → produção por padrão
+  return "production";
+}
+
 function asaasBaseUrl(): string {
   const key = (process.env.ASAAS_API_KEY ?? "").trim();
-  const isSandbox = key.startsWith("$aact_hmlg") || key.includes("sandbox") || key.startsWith("$aact_YTU5");
-  const host = isSandbox ? "https://api-sandbox.asaas.com" : "https://api.asaas.com";
-  return `${host}/${API_VERSION}`;
+  const env = detectEnv(key);
+  const host = env === "sandbox" ? "https://api-sandbox.asaas.com" : "https://api.asaas.com";
+  return `${host}/${normalizeApiVersion()}`;
 }
 
 function authHeaders(): Record<string, string> {
@@ -22,11 +38,14 @@ function authHeaders(): Record<string, string> {
 
 async function asaasFetch(path: string, init?: RequestInit): Promise<any> {
   const url = `${asaasBaseUrl()}${path}`;
+  const method = (init?.method ?? "GET").toUpperCase();
   const res = await fetch(url, { ...init, headers: { ...authHeaders(), ...(init?.headers ?? {}) } });
   const text = await res.text();
   let json: any = {};
   try { json = text ? JSON.parse(text) : {}; } catch { json = { _raw: text }; }
   if (!res.ok) {
+    // Log seguro: nunca expõe a API key.
+    console.error("[Asaas]", method, url, "status=", res.status, "body=", (text ?? "").slice(0, 500));
     const msg = json?.errors?.[0]?.description ?? json?.message ?? `Asaas ${res.status}`;
     throw new Error(`[Asaas] ${msg}`);
   }
