@@ -113,7 +113,19 @@ export function AsaasCheckoutButton({
       return;
     }
     if (json.checkoutUrl) {
-      window.location.href = json.checkoutUrl;
+      const url = json.checkoutUrl;
+      const inIframe = typeof window !== "undefined" && window.self !== window.top;
+      if (inIframe) {
+        const win = window.open(url, "_blank", "noopener,noreferrer");
+        if (!win) {
+          toast.message("Permita pop-ups para abrir o checkout do Asaas.", {
+            description: "Ou clique para abrir em nova aba.",
+            action: { label: "Abrir", onClick: () => window.open(url, "_blank", "noopener,noreferrer") },
+          });
+        }
+      } else {
+        window.location.href = url;
+      }
     } else {
       toast.success("Assinatura criada. Verifique o e-mail com a fatura.");
     }
