@@ -35,7 +35,10 @@ export const Route = createFileRoute("/api/asaas/create-checkout")({
           }
           const user = userRes.user;
 
-          const body = await request.json().catch(() => ({})) as { plan_type?: string };
+          const body = await request.json().catch(() => ({})) as {
+            plan_type?: string;
+            billing?: { nome?: string; cpf_cnpj?: string; telefone?: string };
+          };
           const planRaw = (body.plan_type ?? "").toLowerCase();
           if (planRaw !== "mensal" && planRaw !== "anual") {
             return Response.json({ ok: false, error: "plan_type inválido" }, { status: 400 });
@@ -50,19 +53,74 @@ export const Route = createFileRoute("/api/asaas/create-checkout")({
             .eq("id", user.id)
             .maybeSingle();
 
-          const cpfDigits = (profile?.cpf ?? "").replace(/\D/g, "");
+          let nome = profile?.nome ?? "";
+          let cpfDigits = (profile?.cpf ?? "").replace(/\D/g, "");
+          let telefone = (profile?.telefone ?? "").replace(/\D/g, "");
+
+          // Aceita dados de cobrança vindos do modal e atualiza o perfil
+          if (body.billing) {
+            const bNome = (body.billing.nome ?? "").trim();
+            const bDoc = (body.billing.cpf_cnpj ?? "").replace(/\D/g, "");
+            const bTel = (body.billing.telefone ?? "").replace(/\D/g, "");
+            if (bNome) nome = bNome;
+            if (bDoc.length === 11 || bDoc.length === 14) cpfDigits = bDoc;
+            if (bTel.length >= 10) telefone = bTel;
+
+            await supabaseAdmin
+              .from("profiles")
+              .update({
+                nome: nome || profile?.nome || user.email,
+                cpf: cpfDigits || profile?.cpf,
+                telefone: telefone || profile?.telefone,
+              })
+              .eq("id", user.id);
+          }
+
           if (!cpfDigits || (cpfDigits.length !== 11 && cpfDigits.length !== 14)) {
             return Response.json(
-              { ok: false, error: "Cadastre seu CPF para contratar um plano.", code: "CPF_REQUIRED" },
+              {
+                ok: false,
+                error: "Informe seus dados de cobrança para contratar um plano.",
+                code: "BILLING_REQUIRED",
+                missing: {
+                  nome: !nome,
+                  cpf_cnpj: true,
+                  telefone: !telefone || telefone.length < 10,
+                },
+              },
+              { status: 400 },
+            );
+          }
+
+          if (!telefone || telefone.length < 10) {
+            return Response.json(
+              {
+                ok: false,
+                error: "Informe seus dados de cobrança para contratar um plano.",
+                code: "BILLING_REQUIRED",
+                missing: { nome: !nome, cpf_cnpj: false, telefone: true },
+              },
+              { status: 400 },
+            );
+          }
+
+          if (!nome) {
+            return Response.json(
+              {
+                ok: false,
+                error: "Informe seus dados de cobrança para contratar um plano.",
+                code: "BILLING_REQUIRED",
+                missing: { nome: true, cpf_cnpj: false, telefone: false },
+              },
               { status: 400 },
             );
           }
 
           const customer = await findOrCreateAsaasCustomer({
-            name: profile?.nome ?? user.email ?? "Cliente Comando",
+            name: nome || user.email || "Cliente Comando",
             email: profile?.email ?? user.email ?? "",
             cpfCnpj: cpfDigits,
-            mobilePhone: profile?.telefone ?? null,
+            mobilePhone: telefone || null,
             externalReference: user.id,
           });
 
