@@ -23,7 +23,10 @@ import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as AppAssinaturaSucessoRouteImport } from './routes/app.assinatura.sucesso'
+import { Route as ApiStripeCreateCheckoutRouteImport } from './routes/api.stripe.create-checkout'
 import { Route as ApiAsaasCreateCheckoutRouteImport } from './routes/api.asaas.create-checkout'
+import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api.public.webhooks.stripe'
 import { Route as ApiPublicWebhooksNexanoRouteImport } from './routes/api.public.webhooks.nexano'
 import { Route as ApiPublicWebhooksAsaasRouteImport } from './routes/api.public.webhooks.asaas'
 
@@ -97,9 +100,24 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAssinaturaSucessoRoute = AppAssinaturaSucessoRouteImport.update({
+  id: '/sucesso',
+  path: '/sucesso',
+  getParentRoute: () => AppAssinaturaRoute,
+} as any)
+const ApiStripeCreateCheckoutRoute = ApiStripeCreateCheckoutRouteImport.update({
+  id: '/api/stripe/create-checkout',
+  path: '/api/stripe/create-checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAsaasCreateCheckoutRoute = ApiAsaasCreateCheckoutRouteImport.update({
   id: '/api/asaas/create-checkout',
   path: '/api/asaas/create-checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWebhooksStripeRoute = ApiPublicWebhooksStripeRouteImport.update({
+  id: '/api/public/webhooks/stripe',
+  path: '/api/public/webhooks/stripe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicWebhooksNexanoRoute = ApiPublicWebhooksNexanoRouteImport.update({
@@ -119,7 +137,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
-  '/app/assinatura': typeof AppAssinaturaRoute
+  '/app/assinatura': typeof AppAssinaturaRouteWithChildren
   '/app/assinaturas': typeof AppAssinaturasRoute
   '/app/auditoria': typeof AppAuditoriaRoute
   '/app/escalas': typeof AppEscalasRoute
@@ -129,15 +147,18 @@ export interface FileRoutesByFullPath {
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/aguardando': typeof AguardandoRoute
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
-  '/app/assinatura': typeof AppAssinaturaRoute
+  '/app/assinatura': typeof AppAssinaturaRouteWithChildren
   '/app/assinaturas': typeof AppAssinaturasRoute
   '/app/auditoria': typeof AppAuditoriaRoute
   '/app/escalas': typeof AppEscalasRoute
@@ -147,8 +168,11 @@ export interface FileRoutesByTo {
   '/app/usuarios': typeof AppUsuariosRoute
   '/app': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -157,7 +181,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
-  '/app/assinatura': typeof AppAssinaturaRoute
+  '/app/assinatura': typeof AppAssinaturaRouteWithChildren
   '/app/assinaturas': typeof AppAssinaturasRoute
   '/app/auditoria': typeof AppAuditoriaRoute
   '/app/escalas': typeof AppEscalasRoute
@@ -167,8 +191,11 @@ export interface FileRoutesById {
   '/app/usuarios': typeof AppUsuariosRoute
   '/app/': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
+  '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
+  '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -188,8 +215,11 @@ export interface FileRouteTypes {
     | '/app/usuarios'
     | '/app/'
     | '/api/asaas/create-checkout'
+    | '/api/stripe/create-checkout'
+    | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
+    | '/api/public/webhooks/stripe'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -206,8 +236,11 @@ export interface FileRouteTypes {
     | '/app/usuarios'
     | '/app'
     | '/api/asaas/create-checkout'
+    | '/api/stripe/create-checkout'
+    | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
+    | '/api/public/webhooks/stripe'
   id:
     | '__root__'
     | '/'
@@ -225,8 +258,11 @@ export interface FileRouteTypes {
     | '/app/usuarios'
     | '/app/'
     | '/api/asaas/create-checkout'
+    | '/api/stripe/create-checkout'
+    | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
+    | '/api/public/webhooks/stripe'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -236,8 +272,10 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   ApiAsaasCreateCheckoutRoute: typeof ApiAsaasCreateCheckoutRoute
+  ApiStripeCreateCheckoutRoute: typeof ApiStripeCreateCheckoutRoute
   ApiPublicWebhooksAsaasRoute: typeof ApiPublicWebhooksAsaasRoute
   ApiPublicWebhooksNexanoRoute: typeof ApiPublicWebhooksNexanoRoute
+  ApiPublicWebhooksStripeRoute: typeof ApiPublicWebhooksStripeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -340,11 +378,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/assinatura/sucesso': {
+      id: '/app/assinatura/sucesso'
+      path: '/sucesso'
+      fullPath: '/app/assinatura/sucesso'
+      preLoaderRoute: typeof AppAssinaturaSucessoRouteImport
+      parentRoute: typeof AppAssinaturaRoute
+    }
+    '/api/stripe/create-checkout': {
+      id: '/api/stripe/create-checkout'
+      path: '/api/stripe/create-checkout'
+      fullPath: '/api/stripe/create-checkout'
+      preLoaderRoute: typeof ApiStripeCreateCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/asaas/create-checkout': {
       id: '/api/asaas/create-checkout'
       path: '/api/asaas/create-checkout'
       fullPath: '/api/asaas/create-checkout'
       preLoaderRoute: typeof ApiAsaasCreateCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/stripe': {
+      id: '/api/public/webhooks/stripe'
+      path: '/api/public/webhooks/stripe'
+      fullPath: '/api/public/webhooks/stripe'
+      preLoaderRoute: typeof ApiPublicWebhooksStripeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/webhooks/nexano': {
@@ -364,8 +423,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAssinaturaRouteChildren {
+  AppAssinaturaSucessoRoute: typeof AppAssinaturaSucessoRoute
+}
+
+const AppAssinaturaRouteChildren: AppAssinaturaRouteChildren = {
+  AppAssinaturaSucessoRoute: AppAssinaturaSucessoRoute,
+}
+
+const AppAssinaturaRouteWithChildren = AppAssinaturaRoute._addFileChildren(
+  AppAssinaturaRouteChildren,
+)
+
 interface AppRouteChildren {
-  AppAssinaturaRoute: typeof AppAssinaturaRoute
+  AppAssinaturaRoute: typeof AppAssinaturaRouteWithChildren
   AppAssinaturasRoute: typeof AppAssinaturasRoute
   AppAuditoriaRoute: typeof AppAuditoriaRoute
   AppEscalasRoute: typeof AppEscalasRoute
@@ -377,7 +448,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAssinaturaRoute: AppAssinaturaRoute,
+  AppAssinaturaRoute: AppAssinaturaRouteWithChildren,
   AppAssinaturasRoute: AppAssinaturasRoute,
   AppAuditoriaRoute: AppAuditoriaRoute,
   AppEscalasRoute: AppEscalasRoute,
@@ -397,18 +468,11 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
   ApiAsaasCreateCheckoutRoute: ApiAsaasCreateCheckoutRoute,
+  ApiStripeCreateCheckoutRoute: ApiStripeCreateCheckoutRoute,
   ApiPublicWebhooksAsaasRoute: ApiPublicWebhooksAsaasRoute,
   ApiPublicWebhooksNexanoRoute: ApiPublicWebhooksNexanoRoute,
+  ApiPublicWebhooksStripeRoute: ApiPublicWebhooksStripeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
