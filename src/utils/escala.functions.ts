@@ -1831,6 +1831,71 @@ function escalar(
     for (const a of alertasHe) alertas.push({ tipo: "warn", msg: a });
   }
 
+  /* 8.6ª ETAPA — LIMITE DIÁRIO DE 16h (ORD + CM/EXP + HE).
+     Exceção única: ORD === "234" sozinho no dia (18h, sem CM/HE).
+     Quando total > 16 fora da exceção: reduz HE do dia até 16 e empurra
+     o excedente para HE do dia seguinte, preservando o total físico. */
+  {
+    const nomePorRow = new Map<number, string>();
+    for (const m of militares) nomePorRow.set(m.rowOrd, m.nome);
+    const correcoes16: string[] = [];
+    const alertas16: string[] = [];
+    const rowsAll = militares.map((m) => m.rowOrd);
+
+    for (let pass = 0; pass < 3; pass++) {
+      let mudou = false;
+      for (let d = 1; d <= dias; d++) {
+        for (const row of rowsAll) {
+          const ordSig = ord.get(d)?.get(row) ?? "";
+          const expSig = expm.get(d)?.get(row) ?? "";
+          const heSig = he.get(d)?.get(row) ?? "";
+          const hOrd = horasOrdSigla(ordSig);
+          const hExp = expSig ? horasExpSigla(expSig) : 0;
+          const mHe = /^HE(\d{1,2})$/i.exec(heSig);
+          const hHe = mHe ? Number(mHe[1]) : 0;
+          const total = hOrd + hExp + hHe;
+          if (total <= 16) continue;
+          // Exceção: 234 puro (18h), sem CM/HE
+          if (ordSig === "234" && hExp === 0 && hHe === 0) continue;
+
+          const nome = nomePorRow.get(row) ?? `row ${row}`;
+          const excesso = total - 16;
+          const reduzHe = Math.min(hHe, excesso);
+          const novoHe = hHe - reduzHe;
+          if (reduzHe > 0) {
+            if (novoHe > 0) he.get(d)!.set(row, `HE${novoHe}`);
+            else he.get(d)!.delete(row);
+            mudou = true;
+            if (d < dias) {
+              const mapNext = he.get(d + 1)!;
+              const sigNext = mapNext.get(row) ?? "";
+              const mn = /^HE(\d{1,2})$/i.exec(sigNext);
+              const hNext = mn ? Number(mn[1]) : 0;
+              const somado = Math.min(24, hNext + reduzHe);
+              const sobra = hNext + reduzHe - somado;
+              mapNext.set(row, `HE${somado}`);
+              correcoes16.push(`${nome} dia ${d}: total ${total}h→16h (HE${hHe}→${novoHe ? `HE${novoHe}` : "—"}, +${reduzHe}h em dia ${d + 1})`);
+              if (sobra > 0) {
+                alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d + 1} (sobra ${sobra}h não realocada).`);
+              }
+            } else {
+              alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d} (sem dia seguinte para realocar ${reduzHe}h).`);
+            }
+          }
+          const restante = excesso - reduzHe;
+          if (restante > 0) {
+            alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d} (excedente ${restante}h em ORD/CM não pôde ser reduzido com segurança).`);
+          }
+        }
+      }
+      if (!mudou) break;
+    }
+    if (correcoes16.length) {
+      alertas.push({ tipo: "info", msg: `Limite diário 16h aplicado: ${correcoes16.join("; ")}.` });
+    }
+    for (const a of alertas16) alertas.push({ tipo: "warn", msg: a });
+  }
+
   return { ord, exp: expm, he };
 }
 
