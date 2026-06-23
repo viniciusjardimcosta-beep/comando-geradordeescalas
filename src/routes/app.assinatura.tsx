@@ -74,6 +74,7 @@ function AssinaturaPage() {
               </p>
             )}
           </div>
+          <StripeCustomerPortalButton />
         </div>
 
         {expirado && !isAdmin && (
