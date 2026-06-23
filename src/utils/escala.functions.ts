@@ -1787,8 +1787,53 @@ function escalar(
     });
   }
 
+  /* 8.5ª ETAPA — VALIDAÇÃO FINAL DE HE: nenhuma célula HE pode exceder HE16.
+     Se HE>16 num dia D, limita D em HE16 e empurra o excedente para D+1
+     (somando com HE existente). Mantém o total de horas inalterado. */
+  {
+    const nomePorRow = new Map<number, string>();
+    for (const m of militares) nomePorRow.set(m.rowOrd, m.nome);
+    const correcoesHe: string[] = [];
+    const alertasHe: string[] = [];
+    for (let d = 1; d <= dias; d++) {
+      const mapDia = he.get(d)!;
+      for (const [row, sigla] of Array.from(mapDia.entries())) {
+        const mt = /^HE(\d{1,2})$/i.exec(sigla);
+        if (!mt) continue;
+        const h = Number(mt[1]);
+        if (h <= 16) continue;
+        const excesso = h - 16;
+        const nome = nomePorRow.get(row) ?? `row ${row}`;
+        if (d >= dias) {
+          alertasHe.push(`HE acima do limite diário: ${nome}, dia ${d}, valor HE${h} (sem dia seguinte para realocar)`);
+          continue;
+        }
+        mapDia.set(row, "HE16");
+        const mapNext = he.get(d + 1)!;
+        const sigNext = mapNext.get(row);
+        let hNext = 0;
+        if (sigNext) {
+          const mn = /^HE(\d{1,2})$/i.exec(sigNext);
+          if (mn) hNext = Number(mn[1]);
+        }
+        const novoNext = Math.min(24, hNext + excesso);
+        const sobra = hNext + excesso - novoNext;
+        mapNext.set(row, `HE${novoNext}`);
+        correcoesHe.push(`${nome} dia ${d}: HE${h}→HE16 + dia ${d + 1}: ${sigNext ?? "vazio"}→HE${novoNext}`);
+        if (sobra > 0) {
+          alertasHe.push(`HE acima do limite diário: ${nome}, dia ${d + 1}, sobra ${sobra}h não realocada`);
+        }
+      }
+    }
+    if (correcoesHe.length) {
+      alertas.push({ tipo: "info", msg: `HE normalizada (limite HE16/dia): ${correcoesHe.join("; ")}.` });
+    }
+    for (const a of alertasHe) alertas.push({ tipo: "warn", msg: a });
+  }
+
   return { ord, exp: expm, he };
 }
+
 
 
 
