@@ -100,9 +100,26 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
               };
               if (userId) payload.user_id = userId;
 
-              await supabaseAdmin
+              const { error: upsertErr } = await supabaseAdmin
                 .from("stripe_subscriptions")
                 .upsert(payload as never, { onConflict: "subscription_id" });
+              if (upsertErr) {
+                console.error("[Stripe] Falha upsert stripe_subscriptions", {
+                  subscription_id: sub.id,
+                  customer_id: customerId,
+                  user_id: userId,
+                  error: upsertErr.message,
+                });
+              } else {
+                console.log("[Stripe] Subscription sincronizada", {
+                  event: event.type,
+                  subscription_id: sub.id,
+                  customer_id: customerId,
+                  user_id: userId,
+                  status,
+                  plan_type: planType,
+                });
+              }
 
               // Reflete em profiles
               if (userId) {
