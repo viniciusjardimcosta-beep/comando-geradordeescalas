@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Crown, AlertTriangle, Clock } from "lucide-react";
 import { StripeCheckoutButton } from "@/components/stripe-checkout-button";
+import { StripeCustomerPortalButton } from "@/components/stripe-customer-portal-button";
 
 export const Route = createFileRoute("/app/assinatura")({
   component: AssinaturaPage,
@@ -73,6 +74,7 @@ function AssinaturaPage() {
               </p>
             )}
           </div>
+          <StripeCustomerPortalButton />
         </div>
 
         {expirado && !isAdmin && (
