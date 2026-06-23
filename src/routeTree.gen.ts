@@ -24,6 +24,7 @@ import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
 import { Route as AppAssinaturaSucessoRouteImport } from './routes/app.assinatura.sucesso'
+import { Route as ApiStripeCustomerPortalRouteImport } from './routes/api.stripe.customer-portal'
 import { Route as ApiStripeCreateCheckoutRouteImport } from './routes/api.stripe.create-checkout'
 import { Route as ApiAsaasCreateCheckoutRouteImport } from './routes/api.asaas.create-checkout'
 import { Route as ApiPublicWebhooksStripeRouteImport } from './routes/api.public.webhooks.stripe'
@@ -105,6 +106,11 @@ const AppAssinaturaSucessoRoute = AppAssinaturaSucessoRouteImport.update({
   path: '/sucesso',
   getParentRoute: () => AppAssinaturaRoute,
 } as any)
+const ApiStripeCustomerPortalRoute = ApiStripeCustomerPortalRouteImport.update({
+  id: '/api/stripe/customer-portal',
+  path: '/api/stripe/customer-portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStripeCreateCheckoutRoute = ApiStripeCreateCheckoutRouteImport.update({
   id: '/api/stripe/create-checkout',
   path: '/api/stripe/create-checkout',
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/api/asaas/create-checkout': typeof ApiAsaasCreateCheckoutRoute
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
+  '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
@@ -216,6 +225,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/asaas/create-checkout'
     | '/api/stripe/create-checkout'
+    | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/api/asaas/create-checkout'
     | '/api/stripe/create-checkout'
+    | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
@@ -259,6 +270,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/api/asaas/create-checkout'
     | '/api/stripe/create-checkout'
+    | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
@@ -273,6 +285,7 @@ export interface RootRouteChildren {
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   ApiAsaasCreateCheckoutRoute: typeof ApiAsaasCreateCheckoutRoute
   ApiStripeCreateCheckoutRoute: typeof ApiStripeCreateCheckoutRoute
+  ApiStripeCustomerPortalRoute: typeof ApiStripeCustomerPortalRoute
   ApiPublicWebhooksAsaasRoute: typeof ApiPublicWebhooksAsaasRoute
   ApiPublicWebhooksNexanoRoute: typeof ApiPublicWebhooksNexanoRoute
   ApiPublicWebhooksStripeRoute: typeof ApiPublicWebhooksStripeRoute
@@ -385,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaSucessoRouteImport
       parentRoute: typeof AppAssinaturaRoute
     }
+    '/api/stripe/customer-portal': {
+      id: '/api/stripe/customer-portal'
+      path: '/api/stripe/customer-portal'
+      fullPath: '/api/stripe/customer-portal'
+      preLoaderRoute: typeof ApiStripeCustomerPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/stripe/create-checkout': {
       id: '/api/stripe/create-checkout'
       path: '/api/stripe/create-checkout'
@@ -469,6 +489,7 @@ const rootRouteChildren: RootRouteChildren = {
   RedefinirSenhaRoute: RedefinirSenhaRoute,
   ApiAsaasCreateCheckoutRoute: ApiAsaasCreateCheckoutRoute,
   ApiStripeCreateCheckoutRoute: ApiStripeCreateCheckoutRoute,
+  ApiStripeCustomerPortalRoute: ApiStripeCustomerPortalRoute,
   ApiPublicWebhooksAsaasRoute: ApiPublicWebhooksAsaasRoute,
   ApiPublicWebhooksNexanoRoute: ApiPublicWebhooksNexanoRoute,
   ApiPublicWebhooksStripeRoute: ApiPublicWebhooksStripeRoute,
