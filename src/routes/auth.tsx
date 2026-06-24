@@ -210,7 +210,7 @@ function AuthPage() {
                 Criar conta
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Sua conta ficará pendente até aprovação do administrador.
+                Você ganha 7 dias de teste gratuito ao criar sua conta.
               </p>
             </form>
           </TabsContent>
