@@ -486,6 +486,7 @@ function escalar(
   ia: InterpretacaoIA,
   alertas: Alerta[],
   falhasCriticas: FalhaCritica[] = [],
+  furos: Furo[] = [],
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
   let iterTotal = 0;
   const tick = (dia: number, etapa: string) => {
