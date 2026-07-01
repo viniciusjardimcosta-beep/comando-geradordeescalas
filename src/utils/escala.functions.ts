@@ -1642,7 +1642,7 @@ function escalar(
   }
 
   /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
-  const furos: string[] = [];
+  const furosMsg: string[] = [];
   const conflitosDescanso: string[] = [];
   for (let dia = 1; dia <= dias; dia++) {
     const ref = reforcoMap.get(dia);
@@ -1655,16 +1655,30 @@ function escalar(
     const cgs = cobertos.filter((m) => m.isCg).length;
     const covs = cobertos.filter((m) => m.isCov).length;
 
-    if (cobertos.length < totalAlvo) {
-      furos.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
+    const faltaEfetivo = cobertos.length < totalAlvo;
+    const faltaCg = cgs < minCg;
+    const faltaCov = covs < minCov;
+
+    if (faltaEfetivo) {
+      furosMsg.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
     }
-    if (cgs < minCg) furos.push(`dia ${dia}: ${cgs}/${minCg} CG`);
-    if (covs < minCov) furos.push(`dia ${dia}: ${covs}/${minCov} COV`);
+    if (faltaCg) furosMsg.push(`dia ${dia}: ${cgs}/${minCg} CG`);
+    if (faltaCov) furosMsg.push(`dia ${dia}: ${covs}/${minCov} COV`);
+
+    if (faltaEfetivo || faltaCg || faltaCov) {
+      furos.push({
+        dia,
+        escalados: cobertos.length,
+        faltantes: Math.max(0, totalAlvo - cobertos.length),
+        cg: cgs,
+        cov: covs,
+      });
+    }
   }
-  if (furos.length) {
+  if (furosMsg.length) {
     alertas.push({
       tipo: "error",
-      msg: `Furos de guarnição (sem efetivo disponível): ${furos.slice(0, 20).join("; ")}${furos.length > 20 ? "..." : ""}.`,
+      msg: `Furos de guarnição (sem efetivo disponível): ${furosMsg.slice(0, 20).join("; ")}${furosMsg.length > 20 ? "..." : ""}.`,
     });
   }
 
