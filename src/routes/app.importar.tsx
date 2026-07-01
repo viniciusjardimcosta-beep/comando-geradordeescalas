@@ -26,6 +26,14 @@ export const Route = createFileRoute("/app/importar")({
   component: ImportarPage,
 });
 
+interface Furo {
+  dia: number;
+  escalados: number;
+  faltantes: number;
+  cg: number;
+  cov: number;
+}
+
 interface HistoricoRow {
   id: string;
   mes: number;
@@ -33,6 +41,7 @@ interface HistoricoRow {
   arquivo_nome: string | null;
   observacoes_texto: string | null;
   alertas: unknown;
+  furos: unknown;
   arquivo_saida_path: string | null;
   status: string;
   created_at: string;
