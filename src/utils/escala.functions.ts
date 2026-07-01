@@ -2330,11 +2330,12 @@ export const gerarEscala = createServerFn({ method: "POST" })
     /* 7) Motor — com proteção contra loop e diagnóstico de "dia impossível" */
     const dias = diasNoMes(data.mes, data.ano);
     const falhasCriticas: FalhaCritica[] = [];
+    const furos: Furo[] = [];
     let ord: Map<number, Map<number, string>>;
     let expm: Map<number, Map<number, string>>;
     let he: Map<number, Map<number, string>>;
     try {
-      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas);
+      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas, furos);
       ord = res.ord; expm = res.exp; he = res.he;
     } catch (e) {
       if (e instanceof EscalaLoopError) {
