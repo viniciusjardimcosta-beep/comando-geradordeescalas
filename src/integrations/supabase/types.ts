@@ -167,6 +167,7 @@ export type Database = {
           created_at: string
           diretrizes: string | null
           exportacoes: Json
+          furos: Json
           id: string
           mes: number
           observacoes_texto: string | null
@@ -182,6 +183,7 @@ export type Database = {
           created_at?: string
           diretrizes?: string | null
           exportacoes?: Json
+          furos?: Json
           id?: string
           mes: number
           observacoes_texto?: string | null
@@ -197,6 +199,7 @@ export type Database = {
           created_at?: string
           diretrizes?: string | null
           exportacoes?: Json
+          furos?: Json
           id?: string
           mes?: number
           observacoes_texto?: string | null
