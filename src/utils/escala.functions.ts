@@ -2476,6 +2476,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       arquivo_saida_path: path,
       status: "concluida",
       alertas,
+      furos,
       exportacoes: [],
     };
     const { data: row, error: insErr } = await (supabase as unknown as {
