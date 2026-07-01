@@ -132,7 +132,7 @@ function ImportarPage() {
     setLoadingHist(true);
     const { data, error } = await supabase
       .from("escalas_geradas")
-      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, arquivo_saida_path, status, created_at")
+      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, furos, arquivo_saida_path, status, created_at")
       .order("created_at", { ascending: false })
       .limit(20);
     if (!error) setHistorico((data ?? []) as HistoricoRow[]);
