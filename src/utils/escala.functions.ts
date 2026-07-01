@@ -48,6 +48,7 @@ const InputSchema = z.object({
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
 type FalhaCritica = { dia: number; etapa: string; motivo: string };
+type Furo = { dia: number; escalados: number; faltantes: number; cg: number; cov: number };
 
 /** Tetos de segurança contra loops degenerados no motor. Cada iteração interna
  *  acrescenta no máximo 1 militar/HE — 200 por dia é muito acima do alvo
