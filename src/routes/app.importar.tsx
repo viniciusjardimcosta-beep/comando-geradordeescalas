@@ -514,11 +514,23 @@ function ImportarPage() {
                         </ul>
                       </details>
                     )}
-                    {h.arquivo_saida_path && (
-                      <Button size="sm" variant="outline" className="mt-2" onClick={() => baixar(h.arquivo_saida_path)}>
-                        <Download className="mr-1 h-3 w-3" /> Baixar
-                      </Button>
-                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {h.arquivo_saida_path && (
+                        <Button size="sm" variant="outline" onClick={() => baixar(h.arquivo_saida_path)}>
+                          <Download className="mr-1 h-3 w-3" /> Baixar Escala
+                        </Button>
+                      )}
+                      {Array.isArray(h.furos) && (h.furos as Furo[]).length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-warning text-warning hover:bg-warning/10"
+                          onClick={() => baixarRelatorioFuros(h)}
+                        >
+                          <Download className="mr-1 h-3 w-3" /> Baixar Relatório de Furos
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 );
               })}
