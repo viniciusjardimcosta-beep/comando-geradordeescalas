@@ -48,6 +48,7 @@ const InputSchema = z.object({
 
 type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
 type FalhaCritica = { dia: number; etapa: string; motivo: string };
+type Furo = { dia: number; escalados: number; faltantes: number; cg: number; cov: number };
 
 /** Tetos de segurança contra loops degenerados no motor. Cada iteração interna
  *  acrescenta no máximo 1 militar/HE — 200 por dia é muito acima do alvo
@@ -485,6 +486,7 @@ function escalar(
   ia: InterpretacaoIA,
   alertas: Alerta[],
   falhasCriticas: FalhaCritica[] = [],
+  furos: Furo[] = [],
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
   let iterTotal = 0;
   const tick = (dia: number, etapa: string) => {
@@ -1640,7 +1642,7 @@ function escalar(
   }
 
   /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
-  const furos: string[] = [];
+  const furosMsg: string[] = [];
   const conflitosDescanso: string[] = [];
   for (let dia = 1; dia <= dias; dia++) {
     const ref = reforcoMap.get(dia);
@@ -1653,16 +1655,30 @@ function escalar(
     const cgs = cobertos.filter((m) => m.isCg).length;
     const covs = cobertos.filter((m) => m.isCov).length;
 
-    if (cobertos.length < totalAlvo) {
-      furos.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
+    const faltaEfetivo = cobertos.length < totalAlvo;
+    const faltaCg = cgs < minCg;
+    const faltaCov = covs < minCov;
+
+    if (faltaEfetivo) {
+      furosMsg.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
     }
-    if (cgs < minCg) furos.push(`dia ${dia}: ${cgs}/${minCg} CG`);
-    if (covs < minCov) furos.push(`dia ${dia}: ${covs}/${minCov} COV`);
+    if (faltaCg) furosMsg.push(`dia ${dia}: ${cgs}/${minCg} CG`);
+    if (faltaCov) furosMsg.push(`dia ${dia}: ${covs}/${minCov} COV`);
+
+    if (faltaEfetivo || faltaCg || faltaCov) {
+      furos.push({
+        dia,
+        escalados: cobertos.length,
+        faltantes: Math.max(0, totalAlvo - cobertos.length),
+        cg: cgs,
+        cov: covs,
+      });
+    }
   }
-  if (furos.length) {
+  if (furosMsg.length) {
     alertas.push({
       tipo: "error",
-      msg: `Furos de guarnição (sem efetivo disponível): ${furos.slice(0, 20).join("; ")}${furos.length > 20 ? "..." : ""}.`,
+      msg: `Furos de guarnição (sem efetivo disponível): ${furosMsg.slice(0, 20).join("; ")}${furosMsg.length > 20 ? "..." : ""}.`,
     });
   }
 
@@ -2314,11 +2330,12 @@ export const gerarEscala = createServerFn({ method: "POST" })
     /* 7) Motor — com proteção contra loop e diagnóstico de "dia impossível" */
     const dias = diasNoMes(data.mes, data.ano);
     const falhasCriticas: FalhaCritica[] = [];
+    const furos: Furo[] = [];
     let ord: Map<number, Map<number, string>>;
     let expm: Map<number, Map<number, string>>;
     let he: Map<number, Map<number, string>>;
     try {
-      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas);
+      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas, furos);
       ord = res.ord; expm = res.exp; he = res.he;
     } catch (e) {
       if (e instanceof EscalaLoopError) {
@@ -2459,6 +2476,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       arquivo_saida_path: path,
       status: "concluida",
       alertas,
+      furos,
       exportacoes: [],
     };
     const { data: row, error: insErr } = await (supabase as unknown as {
@@ -2484,6 +2502,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       downloadUrl: signed?.signedUrl ?? null,
       escritas,
       alertas,
+      furos,
       iaResumo: {
         afastamentos: ia.afastamentos.length,
         lancamentos: ia.lancamentos.length,

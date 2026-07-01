@@ -26,6 +26,14 @@ export const Route = createFileRoute("/app/importar")({
   component: ImportarPage,
 });
 
+interface Furo {
+  dia: number;
+  escalados: number;
+  faltantes: number;
+  cg: number;
+  cov: number;
+}
+
 interface HistoricoRow {
   id: string;
   mes: number;
@@ -33,6 +41,7 @@ interface HistoricoRow {
   arquivo_nome: string | null;
   observacoes_texto: string | null;
   alertas: unknown;
+  furos: unknown;
   arquivo_saida_path: string | null;
   status: string;
   created_at: string;
@@ -123,7 +132,7 @@ function ImportarPage() {
     setLoadingHist(true);
     const { data, error } = await supabase
       .from("escalas_geradas")
-      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, arquivo_saida_path, status, created_at")
+      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, furos, arquivo_saida_path, status, created_at")
       .order("created_at", { ascending: false })
       .limit(20);
     if (!error) setHistorico((data ?? []) as HistoricoRow[]);
@@ -221,6 +230,74 @@ function ImportarPage() {
     if (error || !data?.signedUrl) { toast.error("Não foi possível gerar link."); return; }
     window.open(data.signedUrl, "_blank");
   };
+
+  const baixarRelatorioFuros = async (h: HistoricoRow) => {
+    const lista = Array.isArray(h.furos) ? (h.furos as Furo[]) : [];
+    if (!lista.length) {
+      toast.info("Esta escala não possui furos.");
+      return;
+    }
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const marginX = 15;
+    let y = 18;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Relatório de Furos de Efetivo", marginX, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(`Escala: ${meses[h.mes - 1]} / ${h.ano}`, marginX, y);
+    y += 6;
+    doc.text(`Gerada em: ${new Date(h.created_at).toLocaleString("pt-BR")}`, marginX, y);
+    y += 4;
+    doc.setDrawColor(180);
+    doc.line(marginX, y, 210 - marginX, y);
+    y += 8;
+
+    const ordenados = [...lista].sort((a, b) => a.dia - b.dia);
+    const totalFaltantes = ordenados.reduce((s, f) => s + (f.faltantes || 0), 0);
+    const diasSemCg = ordenados.filter((f) => f.cg === 0).length;
+    const diasSemCov = ordenados.filter((f) => f.cov === 0).length;
+
+    doc.setFontSize(12);
+    for (const f of ordenados) {
+      if (y > 275) {
+        doc.addPage();
+        y = 18;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text(`Dia ${String(f.dia).padStart(2, "0")}`, marginX, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(`Militares escalados: ${f.escalados}`, marginX + 4, y); y += 5;
+      doc.text(`Faltantes: ${f.faltantes}`, marginX + 4, y); y += 5;
+      doc.text(`CG: ${f.cg}`, marginX + 4, y); y += 5;
+      doc.text(`COV: ${f.cov}`, marginX + 4, y); y += 7;
+      doc.setFontSize(12);
+    }
+
+    if (y > 250) { doc.addPage(); y = 18; }
+    doc.setDrawColor(180);
+    doc.line(marginX, y, 210 - marginX, y);
+    y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text("Resumo", marginX, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(`Total de dias com furos: ${ordenados.length}`, marginX, y); y += 5;
+    doc.text(`Total de militares faltantes no mês: ${totalFaltantes}`, marginX, y); y += 5;
+    doc.text(`Dias com falta de CG: ${diasSemCg}`, marginX, y); y += 5;
+    doc.text(`Dias com falta de COV: ${diasSemCov}`, marginX, y);
+
+    doc.save(`relatorio-furos-${h.ano}-${String(h.mes).padStart(2, "0")}.pdf`);
+  };
+
 
   const gerar = async () => {
     if (!file || !user || !session) return;
@@ -437,11 +514,23 @@ function ImportarPage() {
                         </ul>
                       </details>
                     )}
-                    {h.arquivo_saida_path && (
-                      <Button size="sm" variant="outline" className="mt-2" onClick={() => baixar(h.arquivo_saida_path)}>
-                        <Download className="mr-1 h-3 w-3" /> Baixar
-                      </Button>
-                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {h.arquivo_saida_path && (
+                        <Button size="sm" variant="outline" onClick={() => baixar(h.arquivo_saida_path)}>
+                          <Download className="mr-1 h-3 w-3" /> Baixar Escala
+                        </Button>
+                      )}
+                      {Array.isArray(h.furos) && (h.furos as Furo[]).length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-warning text-warning hover:bg-warning/10"
+                          onClick={() => baixarRelatorioFuros(h)}
+                        >
+                          <Download className="mr-1 h-3 w-3" /> Baixar Relatório de Furos
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 );
               })}
