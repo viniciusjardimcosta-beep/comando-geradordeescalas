@@ -2502,6 +2502,7 @@ export const gerarEscala = createServerFn({ method: "POST" })
       downloadUrl: signed?.signedUrl ?? null,
       escritas,
       alertas,
+      furos,
       iaResumo: {
         afastamentos: ia.afastamentos.length,
         lancamentos: ia.lancamentos.length,
