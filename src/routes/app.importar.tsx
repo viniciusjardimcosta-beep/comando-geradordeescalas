@@ -238,62 +238,151 @@ function ImportarPage() {
       return;
     }
     const { jsPDF } = await import("jspdf");
+    const autoTableMod = await import("jspdf-autotable");
+    const autoTable = autoTableMod.default;
+
     const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
     const marginX = 15;
-    let y = 18;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("Relatório de Furos de Efetivo", marginX, y);
-    y += 8;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`Escala: ${meses[h.mes - 1]} / ${h.ano}`, marginX, y);
-    y += 6;
-    doc.text(`Gerada em: ${new Date(h.created_at).toLocaleString("pt-BR")}`, marginX, y);
-    y += 4;
-    doc.setDrawColor(180);
-    doc.line(marginX, y, 210 - marginX, y);
-    y += 8;
 
     const ordenados = [...lista].sort((a, b) => a.dia - b.dia);
     const totalFaltantes = ordenados.reduce((s, f) => s + (f.faltantes || 0), 0);
     const diasSemCg = ordenados.filter((f) => f.cg === 0).length;
     const diasSemCov = ordenados.filter((f) => f.cov === 0).length;
 
-    doc.setFontSize(12);
-    for (const f of ordenados) {
-      if (y > 275) {
-        doc.addPage();
-        y = 18;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.text(`Dia ${String(f.dia).padStart(2, "0")}`, marginX, y);
-      y += 5;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      doc.text(`Militares escalados: ${f.escalados}`, marginX + 4, y); y += 5;
-      doc.text(`Faltantes: ${f.faltantes}`, marginX + 4, y); y += 5;
-      doc.text(`CG: ${f.cg}`, marginX + 4, y); y += 5;
-      doc.text(`COV: ${f.cov}`, marginX + 4, y); y += 7;
-      doc.setFontSize(12);
-    }
+    // Cor primária (aprox. do design system)
+    const brand: [number, number, number] = [37, 99, 235];
+    const brandDark: [number, number, number] = [17, 24, 39];
 
-    if (y > 250) { doc.addPage(); y = 18; }
-    doc.setDrawColor(180);
-    doc.line(marginX, y, 210 - marginX, y);
-    y += 7;
+    // ===== Cabeçalho =====
+    // Faixa superior
+    doc.setFillColor(...brand);
+    doc.rect(0, 0, pageW, 26, "F");
+
+    // Logo simbólico (raio dentro de círculo) — sem brasões nem referências institucionais
+    doc.setFillColor(255, 255, 255);
+    doc.circle(marginX + 6, 13, 6, "F");
+    doc.setDrawColor(...brand);
+    doc.setFillColor(...brand);
+    doc.setLineWidth(0.4);
+    // símbolo raio
     doc.setFont("helvetica", "bold");
+    doc.setTextColor(...brand);
     doc.setFontSize(13);
-    doc.text("Resumo", marginX, y);
-    y += 6;
+    doc.text("⚡", marginX + 6, 15.5, { align: "center" });
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("COMANDO GERADOR DE ESCALAS", marginX + 16, 12);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text("Gestão inteligente de escalas operacionais", marginX + 16, 18);
+
+    // Título
+    let y = 38;
+    doc.setTextColor(...brandDark);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Relatório de Furos de Efetivo", marginX, y);
+
+    y += 7;
+    doc.setDrawColor(...brand);
+    doc.setLineWidth(0.8);
+    doc.line(marginX, y, marginX + 40, y);
+
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Escala: ${meses[h.mes - 1]} / ${h.ano}`, marginX, y);
+    y += 5;
+    doc.text(`Gerado em: ${new Date(h.created_at).toLocaleString("pt-BR")}`, marginX, y);
+    y += 10;
+
+    // ===== Quadro Resumo =====
+    const boxH = 30;
+    doc.setFillColor(245, 247, 250);
+    doc.setDrawColor(220, 225, 232);
+    doc.roundedRect(marginX, y, pageW - marginX * 2, boxH, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.text(`Total de dias com furos: ${ordenados.length}`, marginX, y); y += 5;
-    doc.text(`Total de militares faltantes no mês: ${totalFaltantes}`, marginX, y); y += 5;
-    doc.text(`Dias com falta de CG: ${diasSemCg}`, marginX, y); y += 5;
-    doc.text(`Dias com falta de COV: ${diasSemCov}`, marginX, y);
+    doc.setTextColor(...brandDark);
+    doc.text("RESUMO", marginX + 4, y + 6);
+
+    const colW = (pageW - marginX * 2) / 4;
+    const items = [
+      { label: "Dias com furos", value: ordenados.length },
+      { label: "Militares faltantes", value: totalFaltantes },
+      { label: "Dias sem CG", value: diasSemCg },
+      { label: "Dias sem COV", value: diasSemCov },
+    ];
+    items.forEach((it, i) => {
+      const cx = marginX + colW * i + colW / 2;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(...brand);
+      doc.text(String(it.value), cx, y + 18, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(it.label, cx, y + 24, { align: "center" });
+    });
+
+    y += boxH + 8;
+
+    // ===== Tabela de dias com furos =====
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(...brandDark);
+    doc.text("Dias com furos", marginX, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y + 2,
+      head: [["Dia", "Escalados", "Faltantes", "CG", "COV"]],
+      body: ordenados.map((f) => [
+        String(f.dia).padStart(2, "0"),
+        String(f.escalados),
+        String(f.faltantes),
+        String(f.cg),
+        String(f.cov),
+      ]),
+      theme: "grid",
+      styles: {
+        font: "helvetica",
+        fontSize: 10,
+        halign: "center",
+        cellPadding: 2.5,
+        lineColor: [225, 228, 235],
+        lineWidth: 0.1,
+      },
+      headStyles: {
+        fillColor: brand,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "center",
+      },
+      alternateRowStyles: { fillColor: [247, 249, 252] },
+      margin: { left: marginX, right: marginX, bottom: 20 },
+    });
+
+    // ===== Rodapé (todas as páginas) =====
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.2);
+      doc.line(marginX, pageH - 15, pageW - marginX, pageH - 15);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(130, 130, 130);
+      doc.text("Documento gerado automaticamente pelo Comando Gerador de Escalas", marginX, pageH - 10);
+      doc.text("www.comandogeradordeescalas.com.br", marginX, pageH - 6);
+      doc.text(`Página ${i} de ${pageCount}`, pageW - marginX, pageH - 6, { align: "right" });
+    }
 
     doc.save(`relatorio-furos-${h.ano}-${String(h.mes).padStart(2, "0")}.pdf`);
   };
