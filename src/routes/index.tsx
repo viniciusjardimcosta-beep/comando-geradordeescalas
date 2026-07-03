@@ -221,6 +221,208 @@ function Landing() {
         </div>
       </section>
 
+      {/* ENTREGAS DO SISTEMA */}
+      <section id="entregas" className="border-t border-border/60 py-20">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Entregas do sistema
+            </div>
+            <h2 className="mt-5 text-3xl font-bold tracking-tight md:text-4xl">
+              Veja o que o sistema entrega em poucos segundos
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Muito mais do que gerar uma escala. O sistema identifica automaticamente os dias com efetivo
+              incompleto e entrega relatórios profissionais para facilitar o trabalho do escalante.
+            </p>
+          </div>
+
+          {/* Fluxo de entregas */}
+          <div className="mt-14 grid gap-6 lg:grid-cols-3">
+            {/* 1 — Excel */}
+            <div className="panel group relative flex flex-col overflow-hidden p-6 transition-all hover:border-primary/40">
+              <div className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</div>
+              {/* Mockup notebook */}
+              <div className="relative mx-auto mt-2 w-full max-w-sm">
+                <div className="rounded-t-xl border border-border bg-[#1c1f2a] p-2 shadow-2xl">
+                  <div className="mb-1.5 flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive/70" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-warning/70" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-success/70" />
+                  </div>
+                  <div className="rounded-md bg-white p-2">
+                    <div className="mb-1 flex items-center gap-1 text-[8px] font-mono text-slate-500">
+                      <FileSpreadsheet className="h-2.5 w-2.5 text-emerald-600" />
+                      escala_dezembro.xlsx
+                    </div>
+                    <div className="grid grid-cols-8 gap-[1px] bg-slate-200">
+                      {Array.from({ length: 48 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`aspect-[2/1] text-[6px] font-mono flex items-center justify-center ${
+                            i < 8 ? "bg-emerald-600 text-white font-bold" :
+                            i % 8 === 0 ? "bg-slate-100 text-slate-700" :
+                            "bg-white text-slate-600"
+                          }`}
+                        >
+                          {i < 8 ? ["D","M","T","Q","Q","S","S","T"][i] : ((i * 7) % 24).toString().padStart(2, "0")}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {/* base do notebook */}
+                <div className="mx-auto h-2 w-[110%] -translate-x-[5%] rounded-b-xl bg-[#0f1218]" />
+              </div>
+              <h3 className="mt-6 text-center text-lg font-semibold">Escala completa em Excel</h3>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                Escala pronta para utilização, impressão e distribuição.
+              </p>
+            </div>
+
+            {/* 2 — PDF Furos */}
+            <div className="panel group relative flex flex-col overflow-hidden p-6 transition-all hover:border-primary/40">
+              <div className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</div>
+              {/* Mockup tablet */}
+              <div className="relative mx-auto mt-2 w-full max-w-[240px]">
+                <div className="rounded-2xl border-4 border-[#1c1f2a] bg-white shadow-2xl">
+                  <div className="rounded-lg bg-white p-2">
+                    <div className="rounded-t-sm bg-primary px-2 py-1.5">
+                      <div className="text-[7px] font-bold text-primary-foreground">COMANDO GERADOR DE ESCALAS</div>
+                    </div>
+                    <div className="mt-1.5 px-1">
+                      <div className="text-[8px] font-bold text-slate-800">Relatório de Furos de Efetivo</div>
+                      <div className="mt-0.5 h-0.5 w-8 bg-primary" />
+                      <div className="mt-1 text-[6px] text-slate-500">Escala: Dezembro / 2026</div>
+                    </div>
+                    <div className="mt-1.5 rounded bg-slate-50 p-1.5">
+                      <div className="grid grid-cols-4 gap-1 text-center">
+                        {["17","17","0","0"].map((n, i) => (
+                          <div key={i}>
+                            <div className="text-[9px] font-bold text-primary">{n}</div>
+                            <div className="text-[5px] text-slate-500">{["Dias","Falt.","CG","COV"][i]}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-1.5 space-y-[1px]">
+                      <div className="grid grid-cols-5 gap-[1px] bg-primary text-[5px] font-bold text-primary-foreground">
+                        {["Dia","Esc.","Falt.","CG","COV"].map((h) => (
+                          <div key={h} className="px-1 py-0.5 text-center">{h}</div>
+                        ))}
+                      </div>
+                      {[["02","3","1","1","2"],["03","3","1","2","2"],["08","3","1","1","1"]].map((r, i) => (
+                        <div key={i} className={`grid grid-cols-5 gap-[1px] text-[5px] ${i % 2 ? "bg-slate-50" : "bg-white"}`}>
+                          {r.map((c, j) => (
+                            <div key={j} className="px-1 py-0.5 text-center text-slate-700">{c}</div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <h3 className="mt-6 text-center text-lg font-semibold">Relatório de Furos de Efetivo</h3>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                Identifique rapidamente os dias que precisam de ajustes.
+              </p>
+            </div>
+
+            {/* 3 — Resumo */}
+            <div className="panel group relative flex flex-col overflow-hidden p-6 transition-all hover:border-primary/40">
+              <div className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</div>
+              {/* Mockup monitor */}
+              <div className="relative mx-auto mt-2 w-full max-w-sm">
+                <div className="rounded-lg border-2 border-[#1c1f2a] bg-white p-3 shadow-2xl">
+                  <div className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-slate-500">Resumo inteligente</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { n: "17", l: "Dias com furos", c: "warning" },
+                      { n: "17", l: "Militares faltantes", c: "warning" },
+                      { n: "0", l: "Dias sem CG", c: "success" },
+                      { n: "0", l: "Dias sem COV", c: "success" },
+                    ].map((it) => (
+                      <div key={it.l} className={`rounded-md p-2 ${it.c === "success" ? "bg-success/10" : "bg-warning/10"}`}>
+                        <div className={`text-2xl font-bold ${it.c === "success" ? "text-success" : "text-warning"}`}>{it.n}</div>
+                        <div className="text-[9px] text-slate-600">{it.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mx-auto mt-1 h-1.5 w-16 rounded-b-md bg-[#0f1218]" />
+              </div>
+              <h3 className="mt-6 text-center text-lg font-semibold">Resumo Inteligente</h3>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                O sistema resume automaticamente todas as pendências da escala.
+              </p>
+            </div>
+          </div>
+
+          {/* Comparativo */}
+          <div className="mt-16 grid gap-6 md:grid-cols-2">
+            <div className="panel border-destructive/30 p-6">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-destructive">Antes</div>
+              <h3 className="text-lg font-bold">Fluxo manual</h3>
+              <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                {[
+                  "Conferir toda a planilha manualmente",
+                  "Procurar onde faltou militar",
+                  "Identificar dias sem CG",
+                  "Identificar dias sem COV",
+                  "Fazer anotações manuais",
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2">
+                    <span className="mt-0.5 text-destructive">✕</span> {t}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm">
+                <Clock className="h-4 w-4 text-destructive" />
+                <span className="text-muted-foreground">Tempo médio:</span>
+                <strong className="text-destructive">2 a 3 horas</strong>
+              </div>
+            </div>
+
+            <div className="panel border-success/40 bg-gradient-to-br from-success/5 to-transparent p-6">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Depois</div>
+              <h3 className="text-lg font-bold">Com o Comando</h3>
+              <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                {[
+                  "Gerar a escala",
+                  "Baixar o Excel",
+                  "Baixar o Relatório de Furos",
+                  "Ajustar apenas os dias indicados",
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" /> {t}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 flex items-center gap-2 rounded-md bg-success/10 px-3 py-2 text-sm">
+                <Zap className="h-4 w-4 text-success" />
+                <span className="text-muted-foreground">Tempo médio:</span>
+                <strong className="text-success">Menos de 5 minutos</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <div className="mt-16 rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/15 via-transparent to-[oklch(0.55_0.18_240)]/15 p-10 text-center">
+            <h3 className="text-2xl font-bold tracking-tight md:text-3xl">Gere sua escala em minutos</h3>
+            <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
+              Deixe que o sistema identifique automaticamente tudo o que precisa de atenção para que você concentre
+              seu tempo apenas nos ajustes necessários.
+            </p>
+            <div className="mt-6">
+              <Link to="/auth">
+                <Button size="lg" className="px-8">Começar agora</Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* PLANOS */}
       <section id="planos" className="border-t border-border/60 py-20">
         <div className="mx-auto max-w-6xl px-4">
