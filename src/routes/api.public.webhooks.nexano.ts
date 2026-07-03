@@ -235,10 +235,13 @@ async function handleActivation(a: ActivationArgs) {
 
   // 2) Criar usuário se não existir
   if (!userId) {
+    // Senha temporária criptograficamente aleatória (32 bytes → 64 hex chars).
+    // Nunca derivada de CPF/CNPJ/e-mail; o usuário define a própria senha via /redefinir-senha.
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
     const tempPassword =
-      stripDigits(a.customerCpf) ??
-      stripDigits(a.customerCnpj) ??
-      `Nexano!${Math.random().toString(36).slice(2, 10)}`;
+      "Nx!" +
+      Array.from(randomBytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
