@@ -111,10 +111,10 @@ function Landing() {
               administrativo.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/auth">
-                <Button size="lg">Criar conta</Button>
+              <Link to="/auth" search={{ tab: "signup" }}>
+                <Button size="lg">Começar agora</Button>
               </Link>
-              <Link to="/auth">
+              <Link to="/auth" search={{ tab: "login" }}>
                 <Button size="lg" variant="outline">Entrar</Button>
               </Link>
             </div>
