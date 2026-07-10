@@ -80,11 +80,11 @@ function Landing() {
             <a href="#planos" className="transition-colors hover:text-foreground">Planos</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link to="/auth">
+            <Link to="/auth" search={{ tab: "login" }}>
               <Button variant="ghost" size="sm">Entrar</Button>
             </Link>
-            <Link to="/auth">
-              <Button size="sm">Criar conta</Button>
+            <Link to="/auth" search={{ tab: "signup" }}>
+              <Button size="sm">Começar agora</Button>
             </Link>
           </div>
         </div>
