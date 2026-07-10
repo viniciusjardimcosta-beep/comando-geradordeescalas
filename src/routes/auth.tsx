@@ -26,7 +26,8 @@ const nomeSchema = z.string().trim().min(2, "Informe o nome").max(100);
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState("login");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<string>(search.tab ?? "login");
   const [busy, setBusy] = useState(false);
 
   // Login
