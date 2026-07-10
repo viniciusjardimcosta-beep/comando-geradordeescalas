@@ -12,6 +12,11 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: (search.tab === "signup" || search.tab === "reset" || search.tab === "login"
+      ? search.tab
+      : undefined) as "login" | "signup" | "reset" | undefined,
+  }),
 });
 
 const emailSchema = z.string().trim().email("Email inválido").max(255);
@@ -21,7 +26,8 @@ const nomeSchema = z.string().trim().min(2, "Informe o nome").max(100);
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState("login");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<string>(search.tab ?? "login");
   const [busy, setBusy] = useState(false);
 
   // Login

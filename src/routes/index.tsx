@@ -80,11 +80,11 @@ function Landing() {
             <a href="#planos" className="transition-colors hover:text-foreground">Planos</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link to="/auth">
+            <Link to="/auth" search={{ tab: "login" }}>
               <Button variant="ghost" size="sm">Entrar</Button>
             </Link>
-            <Link to="/auth">
-              <Button size="sm">Criar conta</Button>
+            <Link to="/auth" search={{ tab: "signup" }}>
+              <Button size="sm">Começar agora</Button>
             </Link>
           </div>
         </div>
@@ -111,10 +111,10 @@ function Landing() {
               administrativo.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/auth">
-                <Button size="lg">Criar conta</Button>
+              <Link to="/auth" search={{ tab: "signup" }}>
+                <Button size="lg">Começar agora</Button>
               </Link>
-              <Link to="/auth">
+              <Link to="/auth" search={{ tab: "login" }}>
                 <Button size="lg" variant="outline">Entrar</Button>
               </Link>
             </div>
@@ -415,7 +415,7 @@ function Landing() {
               seu tempo apenas nos ajustes necessários.
             </p>
             <div className="mt-6">
-              <Link to="/auth">
+              <Link to="/auth" search={{ tab: "signup" }}>
                 <Button size="lg" className="px-8">Começar agora</Button>
               </Link>
             </div>
