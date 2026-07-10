@@ -415,7 +415,7 @@ function Landing() {
               seu tempo apenas nos ajustes necessários.
             </p>
             <div className="mt-6">
-              <Link to="/auth">
+              <Link to="/auth" search={{ tab: "signup" }}>
                 <Button size="lg" className="px-8">Começar agora</Button>
               </Link>
             </div>
