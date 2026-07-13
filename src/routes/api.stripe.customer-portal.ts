@@ -66,9 +66,11 @@ export const Route = createFileRoute("/api/stripe/customer-portal")({
 
           return Response.json({ url: session.url });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error("[Stripe] Portal erro", msg);
-          return Response.json({ error: msg }, { status: 500 });
+          console.error("[Stripe/customer-portal]", err);
+          return Response.json(
+            { error: "Erro interno. Tente novamente em instantes." },
+            { status: 500 },
+          );
         }
       },
     },

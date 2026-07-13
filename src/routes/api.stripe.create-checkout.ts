@@ -88,9 +88,11 @@ export const Route = createFileRoute("/api/stripe/create-checkout")({
 
           return Response.json({ url: session.url });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error("[Stripe/create-checkout]", msg);
-          return Response.json({ error: msg }, { status: 500 });
+          console.error("[Stripe/create-checkout]", err);
+          return Response.json(
+            { error: "Erro interno. Tente novamente em instantes." },
+            { status: 500 },
+          );
         }
       },
     },
