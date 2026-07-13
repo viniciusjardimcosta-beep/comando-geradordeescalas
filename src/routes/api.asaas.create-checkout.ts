@@ -173,9 +173,11 @@ export const Route = createFileRoute("/api/asaas/create-checkout")({
             paymentId,
           });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error("[Asaas/create-checkout]", msg);
-          return Response.json({ ok: false, error: msg }, { status: 500 });
+          console.error("[Asaas/create-checkout]", err);
+          return Response.json(
+            { ok: false, error: "Erro interno. Tente novamente em instantes." },
+            { status: 500 },
+          );
         }
       },
     },
