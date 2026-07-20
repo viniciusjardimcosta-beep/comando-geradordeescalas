@@ -41,23 +41,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function computeAccess(profile: Profile | null, isAdmin: boolean): { hasAccess: boolean; daysLeft: number | null; isTrial: boolean } {
-  if (!profile) return { hasAccess: false, daysLeft: null, isTrial: false };
-  if (isAdmin) return { hasAccess: true, daysLeft: null, isTrial: false };
+function computeAccess(profile: Profile | null, isAdmin: boolean): { hasAccess: boolean; daysLeft: number | null; isTrial: boolean; isComplimentary: boolean } {
+  if (!profile) return { hasAccess: false, daysLeft: null, isTrial: false, isComplimentary: false };
+  if (isAdmin) return { hasAccess: true, daysLeft: null, isTrial: false, isComplimentary: false };
   const now = Date.now();
+  if (profile.complimentary_access) {
+    if (!profile.complimentary_access_expires_at || new Date(profile.complimentary_access_expires_at).getTime() > now) {
+      return { hasAccess: true, daysLeft: null, isTrial: false, isComplimentary: true };
+    }
+  }
   if (profile.subscription_status === "active") {
     if (!profile.subscription_end_date || new Date(profile.subscription_end_date).getTime() > now) {
-      return { hasAccess: true, daysLeft: null, isTrial: false };
+      return { hasAccess: true, daysLeft: null, isTrial: false, isComplimentary: false };
     }
   }
   if (profile.subscription_status === "trial" && profile.trial_end_date) {
     const end = new Date(profile.trial_end_date).getTime();
     const ms = end - now;
     if (ms > 0) {
-      return { hasAccess: true, daysLeft: Math.ceil(ms / (1000 * 60 * 60 * 24)), isTrial: true };
+      return { hasAccess: true, daysLeft: Math.ceil(ms / (1000 * 60 * 60 * 24)), isTrial: true, isComplimentary: false };
     }
   }
-  return { hasAccess: false, daysLeft: 0, isTrial: profile.subscription_status === "trial" };
+  return { hasAccess: false, daysLeft: 0, isTrial: profile.subscription_status === "trial", isComplimentary: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
