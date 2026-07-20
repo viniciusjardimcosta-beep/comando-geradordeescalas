@@ -328,9 +328,12 @@ function Assinantes() {
                     <div className="font-medium">{u.nome ?? "—"}</div>
                     <div className="font-mono text-xs text-muted-foreground">{u.email}</div>
                     {u.cpf && <div className="font-mono text-xs text-muted-foreground">CPF {u.cpf}</div>}
+                    {u.complimentary_access && (
+                      <Badge variant="secondary" className="mt-1 text-[10px]">Acesso gratuito — Parceiro</Badge>
+                    )}
                   </TableCell>
-                  <TableCell>{u.plano_nome ?? "—"}</TableCell>
-                  <TableCell><StatusBadge status={u.subscription_status} /></TableCell>
+                  <TableCell>{u.plano_nome ?? (u.complimentary_access ? "Parceiro" : "—")}</TableCell>
+                  <TableCell>{u.complimentary_access ? <Badge variant="outline">Cortesia</Badge> : <StatusBadge status={u.subscription_status} />}</TableCell>
                   <TableCell className="text-xs">{fmtDateShort(u.subscription_start_date)}</TableCell>
                   <TableCell className="text-xs">{fmtDateShort(u.subscription_end_date ?? u.trial_end_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{u.subscription_identifier ?? "—"}</TableCell>
