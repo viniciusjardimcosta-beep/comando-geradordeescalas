@@ -420,6 +420,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          complimentary_access: boolean
+          complimentary_access_expires_at: string | null
+          complimentary_access_reason: string | null
           cpf: string | null
           created_at: string
           email: string
@@ -440,6 +443,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          complimentary_access?: boolean
+          complimentary_access_expires_at?: string | null
+          complimentary_access_reason?: string | null
           cpf?: string | null
           created_at?: string
           email: string
@@ -460,6 +466,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          complimentary_access?: boolean
+          complimentary_access_expires_at?: string | null
+          complimentary_access_reason?: string | null
           cpf?: string | null
           created_at?: string
           email?: string

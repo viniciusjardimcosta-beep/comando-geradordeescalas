@@ -34,6 +34,8 @@ type ProfileRow = {
   subscription_end_date: string | null;
   trial_end_date: string | null;
   created_at: string;
+  complimentary_access?: boolean | null;
+  complimentary_access_reason?: string | null;
 };
 
 type NexanoRow = {
@@ -238,7 +240,7 @@ function Assinantes() {
     setLoading(true);
     let q = supabase
       .from("profiles")
-      .select("id,email,nome,cpf,telefone,plano_nome,subscription_status,subscription_identifier,subscription_provider,subscription_start_date,subscription_end_date,trial_end_date,created_at", { count: "exact" })
+      .select("id,email,nome,cpf,telefone,plano_nome,subscription_status,subscription_identifier,subscription_provider,subscription_start_date,subscription_end_date,trial_end_date,created_at,complimentary_access,complimentary_access_reason", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (filtro === "ativos") q = q.eq("subscription_status", "active");
@@ -326,9 +328,12 @@ function Assinantes() {
                     <div className="font-medium">{u.nome ?? "—"}</div>
                     <div className="font-mono text-xs text-muted-foreground">{u.email}</div>
                     {u.cpf && <div className="font-mono text-xs text-muted-foreground">CPF {u.cpf}</div>}
+                    {u.complimentary_access && (
+                      <Badge variant="secondary" className="mt-1 text-[10px]">Acesso gratuito — Parceiro</Badge>
+                    )}
                   </TableCell>
-                  <TableCell>{u.plano_nome ?? "—"}</TableCell>
-                  <TableCell><StatusBadge status={u.subscription_status} /></TableCell>
+                  <TableCell>{u.plano_nome ?? (u.complimentary_access ? "Parceiro" : "—")}</TableCell>
+                  <TableCell>{u.complimentary_access ? <Badge variant="outline">Cortesia</Badge> : <StatusBadge status={u.subscription_status} />}</TableCell>
                   <TableCell className="text-xs">{fmtDateShort(u.subscription_start_date)}</TableCell>
                   <TableCell className="text-xs">{fmtDateShort(u.subscription_end_date ?? u.trial_end_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{u.subscription_identifier ?? "—"}</TableCell>
