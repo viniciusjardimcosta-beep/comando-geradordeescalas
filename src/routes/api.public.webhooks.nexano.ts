@@ -31,6 +31,28 @@ const REFUND_EVENTS = new Set(["TRANSACTION_REFUNDED", "CHARGEBACK"]);
 
 type Json = Record<string, unknown>;
 
+const SENSITIVE_PAYLOAD_KEYS = new Set([
+  "token",
+  "secret",
+  "validation_token",
+  "webhook_token",
+  "webhookSecret",
+  "webhook_secret",
+  "authentication_token",
+]);
+
+function sanitizePayload(input: unknown): unknown {
+  if (Array.isArray(input)) return input.map(sanitizePayload);
+  if (input && typeof input === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      out[k] = SENSITIVE_PAYLOAD_KEYS.has(k) ? "[REDACTED]" : sanitizePayload(v);
+    }
+    return out;
+  }
+  return input;
+}
+
 function pickString(obj: unknown, key: string): string | null {
   if (!obj || typeof obj !== "object") return null;
   const val = (obj as Record<string, unknown>)[key];
@@ -89,6 +111,8 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         const authorized =
           !!secret && (headerToken === secret || bodyToken === secret);
 
+        const persistedPayload = sanitizePayload(payload) as Json;
+
         if (!authorized) {
           await supabaseAdmin.from("billing_events").insert([{
             provider: "nexano",
@@ -97,7 +121,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
             error_message: "Token inválido",
             source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
-            payload,
+            payload: persistedPayload,
           }]);
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
@@ -145,7 +169,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
             customer_email: customerEmail,
             source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
-            payload,
+            payload: persistedPayload,
           }])
           .select("id")
           .single();
