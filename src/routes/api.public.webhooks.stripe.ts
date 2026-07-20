@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Stripe] Assinatura inválida:", msg);
-          return new Response(`Webhook signature error: ${msg}`, { status: 400 });
+          return Response.json({ error: "Webhook inválido." }, { status: 400 });
         }
 
         console.log("[Stripe] Webhook recebido", { type: event.type, id: event.id });
@@ -234,7 +234,7 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Stripe] Erro processando evento", event.type, msg);
-          return new Response(`Erro: ${msg}`, { status: 500 });
+          return Response.json({ error: "Erro interno." }, { status: 500 });
         }
 
         return Response.json({ received: true });
