@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
         if (!webhookSecret) {
           console.error("[Stripe] STRIPE_WEBHOOK_SECRET ausente");
-          return new Response("Webhook secret não configurado", { status: 500 });
+          return Response.json({ error: "Erro interno." }, { status: 500 });
         }
 
         const rawBody = await request.text();
