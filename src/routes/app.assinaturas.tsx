@@ -240,7 +240,7 @@ function Assinantes() {
     setLoading(true);
     let q = supabase
       .from("profiles")
-      .select("id,email,nome,cpf,telefone,plano_nome,subscription_status,subscription_identifier,subscription_provider,subscription_start_date,subscription_end_date,trial_end_date,created_at", { count: "exact" })
+      .select("id,email,nome,cpf,telefone,plano_nome,subscription_status,subscription_identifier,subscription_provider,subscription_start_date,subscription_end_date,trial_end_date,created_at,complimentary_access,complimentary_access_reason", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (filtro === "ativos") q = q.eq("subscription_status", "active");
