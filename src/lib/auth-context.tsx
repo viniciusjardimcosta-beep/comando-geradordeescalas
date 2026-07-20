@@ -18,6 +18,9 @@ export interface Profile {
   subscription_end_date: string | null;
   plan_type: PlanType;
   password_temporary?: boolean;
+  complimentary_access?: boolean;
+  complimentary_access_reason?: string | null;
+  complimentary_access_expires_at?: string | null;
 }
 
 
