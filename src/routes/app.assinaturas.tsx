@@ -34,6 +34,8 @@ type ProfileRow = {
   subscription_end_date: string | null;
   trial_end_date: string | null;
   created_at: string;
+  complimentary_access?: boolean | null;
+  complimentary_access_reason?: string | null;
 };
 
 type NexanoRow = {
