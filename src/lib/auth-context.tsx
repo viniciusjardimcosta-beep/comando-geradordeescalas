@@ -138,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasAccess: access.hasAccess,
     trialDaysLeft: access.daysLeft,
     isTrial: access.isTrial,
+    isComplimentary: access.isComplimentary,
     refresh,
     signOut,
   };
