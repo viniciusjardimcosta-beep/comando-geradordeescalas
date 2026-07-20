@@ -111,6 +111,8 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         const authorized =
           !!secret && (headerToken === secret || bodyToken === secret);
 
+        const persistedPayload = sanitizePayload(payload) as Json;
+
         if (!authorized) {
           await supabaseAdmin.from("billing_events").insert([{
             provider: "nexano",
@@ -119,7 +121,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
             error_message: "Token inválido",
             source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
-            payload,
+            payload: persistedPayload,
           }]);
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
