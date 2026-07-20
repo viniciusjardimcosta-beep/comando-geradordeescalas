@@ -16,9 +16,9 @@ const planos = [
 ];
 
 function AssinaturaPage() {
-  const { profile, hasAccess, isTrial, trialDaysLeft, isAdmin } = useAuth();
+  const { profile, hasAccess, isTrial, trialDaysLeft, isAdmin, isComplimentary } = useAuth();
 
-  const expirado = !hasAccess && profile?.subscription_status !== "active";
+  const expirado = !hasAccess && profile?.subscription_status !== "active" && !isComplimentary;
   const statusLabel: Record<string, string> = {
     trial: "Em teste gratuito",
     active: "Assinatura ativa",
@@ -40,7 +40,29 @@ function AssinaturaPage() {
         </div>
       </div>
 
+      {isComplimentary && !isAdmin && (
+        <div className="panel p-6 border-primary/40">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/15 text-primary">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Acesso de parceiro</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Sua conta possui acesso gratuito ao sistema como parceiro de pré-lançamento.
+              </p>
+              {profile?.complimentary_access_reason && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Motivo: {profile.complimentary_access_reason}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status atual */}
+      {!isComplimentary && (
       <div className={`panel p-6 ${expirado ? "border-destructive/40" : ""}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -87,6 +109,7 @@ function AssinaturaPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Planos */}
       <div>
