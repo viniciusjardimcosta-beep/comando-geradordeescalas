@@ -35,6 +35,7 @@ interface AuthContextValue {
   hasAccess: boolean;
   trialDaysLeft: number | null;
   isTrial: boolean;
+  isComplimentary: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
