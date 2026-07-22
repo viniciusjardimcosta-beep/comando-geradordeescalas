@@ -291,15 +291,20 @@ export type Database = {
           ativo: boolean
           created_at: string
           funcao: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_atual: string | null
+          genero_gramatical: string | null
           id: string
           is_adm: boolean
           is_cg: boolean
           is_cov: boolean
+          lotacao_nbi: string | null
           matricula: string | null
           matricula_norm: string | null
           nome: string
+          nome_guerra: string | null
           observacoes: string | null
           posto_graduacao: string | null
+          quadro: string | null
           tipo_escala: string
           updated_at: string
           user_id: string
@@ -308,15 +313,20 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_atual?: string | null
+          genero_gramatical?: string | null
           id?: string
           is_adm?: boolean
           is_cg?: boolean
           is_cov?: boolean
+          lotacao_nbi?: string | null
           matricula?: string | null
           matricula_norm?: string | null
           nome: string
+          nome_guerra?: string | null
           observacoes?: string | null
           posto_graduacao?: string | null
+          quadro?: string | null
           tipo_escala?: string
           updated_at?: string
           user_id: string
@@ -325,18 +335,230 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_atual?: string | null
+          genero_gramatical?: string | null
           id?: string
           is_adm?: boolean
           is_cg?: boolean
           is_cov?: boolean
+          lotacao_nbi?: string | null
           matricula?: string | null
           matricula_norm?: string | null
           nome?: string
+          nome_guerra?: string | null
           observacoes?: string | null
           posto_graduacao?: string | null
+          quadro?: string | null
           tipo_escala?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      nbi_documents: {
+        Row: {
+          ano: number | null
+          assuntos: Json
+          created_at: string
+          data_documento: string
+          id: string
+          numero: string | null
+          responsaveis: Json
+          snapshot: Json
+          status: string
+          storage_path: string | null
+          titulo: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ano?: number | null
+          assuntos?: Json
+          created_at?: string
+          data_documento?: string
+          id?: string
+          numero?: string | null
+          responsaveis?: Json
+          snapshot?: Json
+          status?: string
+          storage_path?: string | null
+          titulo?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ano?: number | null
+          assuntos?: Json
+          created_at?: string
+          data_documento?: string
+          id?: string
+          numero?: string | null
+          responsaveis?: Json
+          snapshot?: Json
+          status?: string
+          storage_path?: string | null
+          titulo?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nbi_settings: {
+        Row: {
+          autoridade_funcao: string | null
+          autoridade_lotacao: string | null
+          autoridade_militar_id: string | null
+          autoridade_nome: string | null
+          comandante_funcao: string | null
+          comandante_lotacao: string | null
+          comandante_militar_id: string | null
+          comandante_nome: string | null
+          created_at: string
+          digitador_funcao: string | null
+          digitador_lotacao: string | null
+          digitador_militar_id: string | null
+          digitador_nome: string | null
+          id: string
+          unidade_nome: string | null
+          unidade_sigla: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          autoridade_funcao?: string | null
+          autoridade_lotacao?: string | null
+          autoridade_militar_id?: string | null
+          autoridade_nome?: string | null
+          comandante_funcao?: string | null
+          comandante_lotacao?: string | null
+          comandante_militar_id?: string | null
+          comandante_nome?: string | null
+          created_at?: string
+          digitador_funcao?: string | null
+          digitador_lotacao?: string | null
+          digitador_militar_id?: string | null
+          digitador_nome?: string | null
+          id?: string
+          unidade_nome?: string | null
+          unidade_sigla?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          autoridade_funcao?: string | null
+          autoridade_lotacao?: string | null
+          autoridade_militar_id?: string | null
+          autoridade_nome?: string | null
+          comandante_funcao?: string | null
+          comandante_lotacao?: string | null
+          comandante_militar_id?: string | null
+          comandante_nome?: string | null
+          created_at?: string
+          digitador_funcao?: string | null
+          digitador_lotacao?: string | null
+          digitador_militar_id?: string | null
+          digitador_nome?: string | null
+          id?: string
+          unidade_nome?: string | null
+          unidade_sigla?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nbi_settings_autoridade_militar_id_fkey"
+            columns: ["autoridade_militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nbi_settings_comandante_militar_id_fkey"
+            columns: ["comandante_militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nbi_settings_digitador_militar_id_fkey"
+            columns: ["digitador_militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nbi_template_versions: {
+        Row: {
+          created_at: string
+          id: string
+          observacao: string | null
+          template_id: string
+          texto_modelo: string
+          versao: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          observacao?: string | null
+          template_id: string
+          texto_modelo: string
+          versao: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          observacao?: string | null
+          template_id?: string
+          texto_modelo?: string
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nbi_template_versions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "nbi_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nbi_templates: {
+        Row: {
+          campos: Json
+          codigo: string
+          created_at: string
+          descricao: string | null
+          disponivel: boolean
+          id: string
+          ordem: number
+          texto_modelo: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          campos?: Json
+          codigo: string
+          created_at?: string
+          descricao?: string | null
+          disponivel?: boolean
+          id?: string
+          ordem?: number
+          texto_modelo: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          campos?: Json
+          codigo?: string
+          created_at?: string
+          descricao?: string | null
+          disponivel?: boolean
+          id?: string
+          ordem?: number
+          texto_modelo?: string
+          titulo?: string
+          updated_at?: string
         }
         Relationships: []
       }
