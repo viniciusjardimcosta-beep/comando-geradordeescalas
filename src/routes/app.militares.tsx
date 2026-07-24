@@ -144,6 +144,11 @@ function MilitaresPage() {
       ativo: m.ativo,
       observacoes: m.observacoes ?? "",
       tipo_escala: m.tipo_escala ?? "24h",
+      quadro: m.quadro ?? "",
+      lotacao_nbi: m.lotacao_nbi ?? "",
+      funcao_atual: m.funcao_atual ?? "",
+      genero_gramatical: (m.genero_gramatical === "M" || m.genero_gramatical === "F") ? m.genero_gramatical : "",
+      nome_guerra: m.nome_guerra ?? "",
     });
     setDialogOpen(true);
   }
