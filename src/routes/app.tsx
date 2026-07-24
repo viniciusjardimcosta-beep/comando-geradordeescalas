@@ -32,6 +32,7 @@ function AppLayout() {
     { to: "/app/escalas", label: "Escalas Ordinárias", icon: ListOrdered, show: true },
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
     { to: "/app/auditoria", label: "Auditoria", icon: ClipboardCheck, show: true },
+    { to: "/app/nbi/nova", label: "NBI · Nova", icon: FileText, show: true },
     { to: "/app/nbi/configuracoes", label: "NBI · Config", icon: FileText, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
