@@ -990,13 +990,30 @@ function Etapa3({
       toast.error("Salve o rascunho antes de gerar.");
       return;
     }
-    if (transicaoAno && !confirmarAno) {
+    if (rascunho.modo_numeracao === "manual") {
+      const n = parseInt(rascunho.numero.replace(/\D/g, ""), 10);
+      if (!Number.isFinite(n) || n < 1) {
+        toast.error("Informe o número manual da NBI na Etapa 1.");
+        return;
+      }
+    }
+    if (transicaoAno && !confirmarAno && rascunho.modo_numeracao === "automatico") {
       toast.error(`Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`);
       return;
     }
     setGerando(true);
     try {
-      const r = await gerar({ data: { documento_id: documentoId, confirmar_novo_ano: confirmarAno } });
+      const r = await gerar({
+        data: {
+          documento_id: documentoId,
+          confirmar_novo_ano: confirmarAno,
+          modo_numeracao: rascunho.modo_numeracao,
+          numero_manual: rascunho.modo_numeracao === "manual"
+            ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
+            : null,
+          ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
+        },
+      });
       if (!r.ok) {
         toast.error("Falha ao gerar NBI", { description: r.code });
       } else {
