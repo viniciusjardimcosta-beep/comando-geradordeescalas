@@ -1,0 +1,134 @@
+// Utilitários do módulo NBI — sem dependência do motor de escalas.
+// Todas as chaves de placeholder são SEM acento (LOTACAO, MISSAO, FUNCAO_*).
+
+export type AssuntoTipo = "ferias" | "apresentacao" | "viagem" | "assuncao" | "dispensa";
+
+export interface MilitarNbi {
+  id: string;
+  nome: string;
+  nome_guerra: string | null;
+  posto_graduacao: string | null;
+  matricula: string | null;
+  quadro: string | null;
+  lotacao_nbi: string | null;
+  funcao_atual: string | null;
+  genero_gramatical: string | null;
+}
+
+export interface FeriasReg {
+  id: string;
+  militar_id: string;
+  ano: number;
+  periodo: number;
+  data_inicio: string; // yyyy-mm-dd
+  data_fim: string;
+}
+
+const UNIDADES: Record<number, string> = {
+  0: "zero", 1: "um", 2: "dois", 3: "três", 4: "quatro", 5: "cinco",
+  6: "seis", 7: "sete", 8: "oito", 9: "nove", 10: "dez", 11: "onze",
+  12: "doze", 13: "treze", 14: "quatorze", 15: "quinze", 16: "dezesseis",
+  17: "dezessete", 18: "dezoito", 19: "dezenove",
+};
+const DEZENAS: Record<number, string> = {
+  20: "vinte", 30: "trinta", 40: "quarenta", 50: "cinquenta",
+  60: "sessenta", 70: "setenta", 80: "oitenta", 90: "noventa",
+};
+const CENTENAS: Record<number, string> = {
+  100: "cem", 200: "duzentos", 300: "trezentos", 400: "quatrocentos",
+  500: "quinhentos", 600: "seiscentos", 700: "setecentos", 800: "oitocentos", 900: "novecentos",
+};
+
+export function numeroPorExtenso(n: number): string {
+  if (n < 0) return `menos ${numeroPorExtenso(-n)}`;
+  if (n < 20) return UNIDADES[n];
+  if (n < 100) {
+    const d = Math.floor(n / 10) * 10;
+    const u = n % 10;
+    return u === 0 ? DEZENAS[d] : `${DEZENAS[d]} e ${UNIDADES[u]}`;
+  }
+  if (n === 100) return "cem";
+  if (n < 1000) {
+    const c = Math.floor(n / 100) * 100;
+    const r = n % 100;
+    const base = c === 100 ? "cento" : CENTENAS[c];
+    return r === 0 ? base : `${base} e ${numeroPorExtenso(r)}`;
+  }
+  return String(n);
+}
+
+const ORDINAIS: Record<string, number> = {
+  primeiro: 1, "1": 1, "1o": 1, "1º": 1,
+  segundo: 2, "2": 2, "2o": 2, "2º": 2,
+  terceiro: 3, "3": 3, "3o": 3, "3º": 3,
+  quarto: 4, "4": 4,
+};
+
+export function periodoOrdinal(p: number): string {
+  return p === 1 ? "1º" : p === 2 ? "2º" : p === 3 ? "3º" : `${p}º`;
+}
+
+export function extrairPeriodoENome(frase: string): { periodo: number | null; nome: string | null } {
+  const norm = frase.trim().toLowerCase();
+  let periodo: number | null = null;
+  for (const key of Object.keys(ORDINAIS)) {
+    const re = new RegExp(`\\b${key}\\b`);
+    if (re.test(norm)) {
+      periodo = ORDINAIS[key];
+      break;
+    }
+  }
+  const m = norm.match(/\bde\s+([\wçãáéíóúâêôàü'\- ]+)$/i);
+  const nome = m ? m[1].trim() : null;
+  return { periodo, nome };
+}
+
+export function montarPostoQuadro(posto: string | null, quadro: string | null): string {
+  const p = (posto ?? "").trim();
+  const q = (quadro ?? "").trim();
+  if (p && q) return `${p} ${q}`;
+  return p || q;
+}
+
+export function artigoO(genero: string | null | undefined): string {
+  return (genero ?? "").toUpperCase() === "F" ? "a" : "o";
+}
+export function artigoAo(genero: string | null | undefined): string {
+  return (genero ?? "").toUpperCase() === "F" ? "à" : "ao";
+}
+
+export function somarDiasISO(iso: string, dias: number): string {
+  const [y, m, d] = iso.split("-").map((v) => parseInt(v, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias);
+  return dt.toISOString().slice(0, 10);
+}
+
+export function diasEntreISO(inicioISO: string, fimISO: string): number {
+  const a = new Date(inicioISO + "T00:00:00Z").getTime();
+  const b = new Date(fimISO + "T00:00:00Z").getTime();
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+export function formatarDataBR(iso: string): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// Substituição textual — nunca altera o modelo, apenas troca {{CHAVE}} pelo valor.
+export function interpolarTexto(
+  texto: string,
+  valores: Record<string, string | number | boolean | null | undefined>,
+): { texto: string; ausentes: string[] } {
+  const ausentes: string[] = [];
+  const out = texto.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_, chave: string) => {
+    const v = valores[chave];
+    if (v === undefined || v === null || v === "") {
+      ausentes.push(chave);
+      return `{{${chave}}}`;
+    }
+    return String(v);
+  });
+  return { texto: out, ausentes };
+}
