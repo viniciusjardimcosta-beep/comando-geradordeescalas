@@ -634,15 +634,10 @@ function Etapa2({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          {TIPOS_ORDEM.map((tipo) => {
-            const t = templates.find((x) => x.codigo === tipo);
-            if (!t) return null;
-            return (
-              <Button key={tipo} size="sm" variant="outline" onClick={() => adicionar(tipo)}>
-                <Plus className="mr-1 h-4 w-4" /> {t.titulo}
-              </Button>
-            );
-          })}
+          <AssuntoPicker
+            templates={templates as TemplatePickable[]}
+            onEscolher={(codigo) => adicionar(codigo)}
+          />
           <span className="ml-auto text-xs text-muted-foreground">
             {total === 0 ? "Nenhum assunto adicionado" : total === 1 ? "1 assunto adicionado" : `${total} assuntos adicionados`}
           </span>
@@ -650,7 +645,10 @@ function Etapa2({
 
         {rascunho.assuntos.length === 0 && (
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Nenhum assunto adicionado. Escolha um tipo acima para começar.
+            Nenhum assunto adicionado. Clique em <strong>Adicionar assunto</strong> para começar.
+            <div className="mt-1 text-[11px]">
+              Ex.: <em>Férias</em>, <em>Viagem</em>, <em>Assunção de função</em>.
+            </div>
           </div>
         )}
 
@@ -676,23 +674,19 @@ function Etapa2({
         })}
 
         {rascunho.assuntos.length > 0 && (
-          <div className="rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
-              + Adicionar outro assunto
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {TIPOS_ORDEM.map((tipo) => {
-                const t = templates.find((x) => x.codigo === tipo);
-                if (!t) return null;
-                return (
-                  <Button key={`add-${tipo}`} size="sm" variant="secondary" onClick={() => adicionar(tipo)}>
-                    <Plus className="mr-1 h-4 w-4" /> {t.titulo}
-                  </Button>
-                );
-              })}
-            </div>
+          <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
+            <AssuntoPicker
+              templates={templates as TemplatePickable[]}
+              onEscolher={(codigo) => adicionar(codigo)}
+              label="Adicionar outro assunto"
+              size="sm"
+            />
+            <span className="text-xs text-muted-foreground">
+              Pesquise por nome, título oficial ou categoria.
+            </span>
           </div>
         )}
+
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
