@@ -439,3 +439,144 @@ function ResponsavelSection({ titulo, campo, militares, valor, onAplicar, onChan
     </div>
   );
 }
+
+function NumeracaoCard() {
+  const { session } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [anoVigente, setAnoVigente] = useState<number>(new Date().getFullYear());
+  const [ultimaNota, setUltimaNota] = useState<number>(0);
+  const [reiniciarAnualmente, setReiniciarAnualmente] = useState(true);
+  const [prefixo, setPrefixo] = useState<string>("");
+  const [maiorEmitido, setMaiorEmitido] = useState<number>(0);
+  const [inputUltima, setInputUltima] = useState<string>("0");
+  const [logs, setLogs] = useState<Array<{ id: string; acao: string; created_at: string; detalhe: string | null }>>([]);
+
+  useEffect(() => {
+    if (!session?.user.id) return;
+    void (async () => {
+      setLoading(true);
+      const uid = session.user.id;
+      const [num, docs, log] = await Promise.all([
+        supabase.from("nbi_numeracao").select("*").eq("user_id", uid).maybeSingle(),
+        supabase.from("nbi_documents").select("numero_int").eq("user_id", uid).eq("numero_ano_local", new Date().getFullYear()),
+        supabase.from("nbi_numeracao_log").select("id,acao,antes,depois,detalhe,created_at").eq("user_id", uid).order("created_at", { ascending: false }).limit(30),
+      ]);
+      if (num.data) {
+        setAnoVigente(num.data.ano_vigente);
+        setUltimaNota(num.data.ultima_nota);
+        setInputUltima(String(num.data.ultima_nota));
+        setReiniciarAnualmente(num.data.reiniciar_anualmente);
+        setPrefixo(num.data.prefixo ?? "");
+      }
+      if (docs.data) {
+        const max = docs.data.reduce((m, d) => Math.max(m, d.numero_int ?? 0), 0);
+        setMaiorEmitido(max);
+      }
+      if (log.data) {
+        setLogs(log.data.map((l) => ({
+          id: l.id,
+          acao: l.acao,
+          created_at: l.created_at,
+          detalhe: `${JSON.stringify(l.antes ?? {})} → ${JSON.stringify(l.depois ?? {})}${l.detalhe ? " · " + l.detalhe : ""}`,
+        })));
+      }
+      setLoading(false);
+    })();
+  }, [session?.user.id]);
+
+  async function salvar() {
+    if (!session?.user.id) return;
+    const nova = parseInt(inputUltima, 10);
+    if (Number.isNaN(nova) || nova < 0) {
+      toast.error("Número inválido");
+      return;
+    }
+    setSaving(true);
+    const payload = {
+      user_id: session.user.id,
+      ano_vigente: anoVigente,
+      ultima_nota: nova,
+      reiniciar_anualmente: reiniciarAnualmente,
+      prefixo: prefixo.trim() || null,
+    };
+    const { error } = await supabase.from("nbi_numeracao").upsert(payload, { onConflict: "user_id" });
+    setSaving(false);
+    if (error) toast.error("Erro ao salvar numeração", { description: error.message });
+    else {
+      toast.success("Numeração atualizada");
+      setUltimaNota(nova);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-primary" />
+          <CardTitle className="text-base">Numeração das NBIs</CardTitle>
+        </div>
+        <CardDescription>
+          Controla a numeração automática. O próximo número previsto só é reservado
+          quando você gera efetivamente uma NBI. Não é possível definir um número
+          menor que o maior já emitido ({maiorEmitido}) no ano {anoVigente}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin" /></div>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label>Ano vigente</Label>
+                <Input type="number" value={anoVigente} onChange={(e) => setAnoVigente(parseInt(e.target.value, 10) || anoVigente)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Última nota emitida</Label>
+                <Input type="number" value={inputUltima} onChange={(e) => setInputUltima(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Próximo número previsto: <strong>{(parseInt(inputUltima, 10) || 0) + 1}</strong></p>
+              </div>
+              <div className="grid gap-2">
+                <Label>Prefixo (opcional)</Label>
+                <Input value={prefixo} onChange={(e) => setPrefixo(e.target.value)} placeholder="Ex.: NBI" />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={reiniciarAnualmente} onChange={(e) => setReiniciarAnualmente(e.target.checked)} />
+              Reiniciar numeração no início de cada ano
+            </label>
+            {reiniciarAnualmente && (
+              <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning">
+                Ao virar o ano, será exigida confirmação visual antes de emitir a primeira NBI do novo ano.
+              </p>
+            )}
+            <div className="flex justify-end">
+              <Button onClick={salvar} disabled={saving}>
+                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar numeração
+              </Button>
+            </div>
+            {logs.length > 0 && (
+              <div className="mt-4 rounded-md border">
+                <div className="border-b p-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Histórico de alterações (últimas 30)</div>
+                <div className="max-h-64 divide-y overflow-y-auto text-xs">
+                  {logs.map((l) => (
+                    <div key={l.id} className="p-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium">{l.acao}</span>
+                        <span className="text-muted-foreground">{new Date(l.created_at).toLocaleString("pt-BR")}</span>
+                      </div>
+                      <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">{l.detalhe}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
