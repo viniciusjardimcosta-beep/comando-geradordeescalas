@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { gerarNbi, baixarNbi, proximoNumeroPrevisto } from "@/lib/nbi.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -467,6 +469,7 @@ function NovaNbiPage() {
           onBack={() => setEtapa(2)}
           onSalvar={salvarRascunho}
           salvando={salvando}
+          documentoId={documentoId}
         />
       )}
     </div>
@@ -809,6 +812,7 @@ function AssuntoCard({
 
 function Etapa3({
   rascunho, templates, militares, textoFinal, pendencias, onBack, onSalvar, salvando,
+  documentoId,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -816,10 +820,23 @@ function Etapa3({
   textoFinal: (a: AssuntoLocal) => { texto: string; ausentes: string[] };
   pendencias: (a: AssuntoLocal) => string[];
   onBack: () => void;
-  onSalvar: () => void;
+  onSalvar: () => Promise<void> | void;
   salvando: boolean;
+  documentoId: string | null;
 }) {
-  const [finalizado, setFinalizado] = useState(false);
+  const gerar = useServerFn(gerarNbi);
+  const baixar = useServerFn(baixarNbi);
+  const prox = useServerFn(proximoNumeroPrevisto);
+
+  const [gerando, setGerando] = useState(false);
+  const [gerado, setGerado] = useState<{ numero: number; ano: number } | null>(null);
+  const [confirmarAno, setConfirmarAno] = useState(false);
+  const [previsto, setPrevisto] = useState<{ proximo: number; ano_vigente: number; reiniciar_anualmente: boolean } | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState<string | null>(null);
+
+  useEffect(() => {
+    void prox().then((p) => setPrevisto(p));
+  }, []);
 
   const resumoPend = rascunho.assuntos.map((a) => {
     const t = templates.find((x) => x.codigo === a.tipo);
@@ -835,17 +852,77 @@ function Etapa3({
   const semAssuntos = rascunho.assuntos.length === 0;
   const bloqueado = semAssuntos || totalPend > 0;
 
+  const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
+  const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
+
+  async function handleGerar() {
+    if (!documentoId) {
+      toast.error("Salve o rascunho antes de gerar.");
+      return;
+    }
+    if (transicaoAno && !confirmarAno) {
+      toast.error(`Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`);
+      return;
+    }
+    setGerando(true);
+    try {
+      const r = await gerar({ data: { documento_id: documentoId, confirmar_novo_ano: confirmarAno } });
+      if (!r.ok) {
+        toast.error("Falha ao gerar NBI", { description: r.code });
+      } else {
+        setGerado({ numero: r.numero ?? 0, ano: r.ano ?? new Date().getFullYear() });
+        toast.success(`NBI nº ${String(r.numero ?? 0).padStart(3, "0")}/${r.ano} gerada`);
+      }
+    } catch (e) {
+      toast.error("Falha ao gerar NBI", { description: (e as Error).message });
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  async function handleBaixar() {
+    if (!documentoId) return;
+    try {
+      const r = await baixar({ data: { documento_id: documentoId } });
+      if (r.ok) window.open(r.url, "_blank");
+    } catch (e) {
+      toast.error("Erro ao baixar", { description: (e as Error).message });
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Conferência</CardTitle>
-        <CardDescription>Revise cada assunto antes de salvar. Nenhum documento Word é gerado nesta etapa.</CardDescription>
+        <CardDescription>Revise cada assunto. A reserva do número ocorre apenas ao gerar.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-md border p-3 text-sm">
-          <div className="font-semibold">NBI nº {rascunho.numero || "s/nº"} · {formatarDataBR(rascunho.data_documento)}</div>
+          <div className="font-semibold">
+            {gerado
+              ? `NBI nº ${String(gerado.numero).padStart(3, "0")}/${gerado.ano}`
+              : `NBI nº (previsto: ${previsto ? String(previsto.proximo).padStart(3, "0") + "/" + previsto.ano_vigente : "…"})`}
+            {" · "}{formatarDataBR(rascunho.data_documento)}
+          </div>
           <div className="text-muted-foreground">{rascunho.unidade.nome} {rascunho.unidade.sigla && `(${rascunho.unidade.sigla})`}</div>
         </div>
+
+        {transicaoAno && !gerado && (
+          <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              Transição de ano detectada
+            </div>
+            <p className="text-xs">
+              O ano do documento é <strong>{anoDoc}</strong> e o ano vigente da numeração é <strong>{previsto?.ano_vigente}</strong>.
+              {previsto?.reiniciar_anualmente ? " A próxima nota reiniciará em 001." : " A próxima nota manterá a sequência atual."}
+            </p>
+            <label className="mt-2 flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={confirmarAno} onChange={(e) => setConfirmarAno(e.target.checked)} />
+              Confirmo a transição de ano.
+            </label>
+          </div>
+        )}
 
         {rascunho.assuntos.map((a, idx) => {
           const t = templates.find((x) => x.codigo === a.tipo);
@@ -866,11 +943,8 @@ function Etapa3({
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{texto}</p>
               <Separator className="my-3" />
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p><strong>Militar:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "não selecionado"} <span className="italic">(fonte: Cadastro de Militares)</span></p>
-                {usaFerias && a.ferias_id && (
-                  <p><strong>Datas:</strong> preenchidas a partir do <span className="italic">Banco de Férias</span></p>
-                )}
-                <p><strong>Texto:</strong> <span className="italic">Modelo oficial NBI</span> (interpolação literal de placeholders)</p>
+                <p><strong>Militar:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "não selecionado"}</p>
+                {usaFerias && a.ferias_id && (<p><strong>Datas:</strong> preenchidas a partir do Banco de Férias</p>)}
                 {ausentes.length > 0 && (
                   <p className="text-amber-600 dark:text-amber-400">Placeholders não substituídos: {ausentes.join(", ")}</p>
                 )}
@@ -887,42 +961,46 @@ function Etapa3({
         {bloqueado && !semAssuntos && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             <div className="mb-2 flex items-center gap-2 font-semibold">
-              <AlertTriangle className="h-4 w-4" />
-              Não é possível finalizar. Existem {totalPend} campo(s) obrigatório(s) pendente(s).
+              <AlertTriangle className="h-4 w-4" /> {totalPend} pendência(s) — corrija antes de gerar.
             </div>
-            <ul className="space-y-2 pl-1">
-              {resumoPend.filter((r) => r.lista.length > 0).map((r) => (
-                <li key={r.id}>
-                  <div className="font-medium">{r.titulo}{r.militar ? ` — ${r.militar}` : ""}:</div>
-                  <ul className="ml-4 list-disc">
-                    {r.lista.map((m, i) => <li key={i}>{m}</li>)}
-                  </ul>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
 
-        {finalizado && (
+        {gerado && (
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="mr-1 inline h-4 w-4" />
-            Conferência finalizada. A geração do documento Word será liberada na próxima fase.
+            NBI gerada e armazenada com sucesso.
           </div>
         )}
 
         <div className="flex flex-wrap justify-between gap-2">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar e corrigir</Button>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={onSalvar} disabled={salvando}>
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar rascunho
             </Button>
-            <Button onClick={() => setFinalizado(true)} disabled={bloqueado}>
-              Finalizar conferência
-            </Button>
+            {!gerado ? (
+              <Button
+                onClick={handleGerar}
+                disabled={bloqueado || gerando || !documentoId || (transicaoAno && !confirmarAno)}
+              >
+                {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                Gerar NBI (.docx)
+              </Button>
+            ) : (
+              <Button onClick={handleBaixar}>
+                <FileText className="mr-2 h-4 w-4" /> Baixar NBI (.docx)
+              </Button>
+            )}
           </div>
         </div>
+        {!documentoId && (
+          <p className="text-xs text-muted-foreground">Salve o rascunho ao menos uma vez para habilitar a geração.</p>
+        )}
+        {motivoCancelamento && <p className="text-xs">{motivoCancelamento}</p>}
       </CardContent>
     </Card>
   );
 }
+

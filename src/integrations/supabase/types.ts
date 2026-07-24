@@ -355,14 +355,55 @@ export type Database = {
         }
         Relationships: []
       }
+      nbi_auditoria: {
+        Row: {
+          acao: string
+          created_at: string
+          detalhe: Json | null
+          documento_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          detalhe?: Json | null
+          documento_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          detalhe?: Json | null
+          documento_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nbi_auditoria_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "nbi_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nbi_documents: {
         Row: {
           ano: number | null
           assuntos: Json
+          cancel_reason: string | null
+          canceled_at: string | null
           created_at: string
           data_documento: string
+          generated_at: string | null
           id: string
           numero: string | null
+          numero_ano_local: number | null
+          numero_int: number | null
+          reserved_at: string | null
           responsaveis: Json
           snapshot: Json
           status: string
@@ -374,10 +415,16 @@ export type Database = {
         Insert: {
           ano?: number | null
           assuntos?: Json
+          cancel_reason?: string | null
+          canceled_at?: string | null
           created_at?: string
           data_documento?: string
+          generated_at?: string | null
           id?: string
           numero?: string | null
+          numero_ano_local?: number | null
+          numero_int?: number | null
+          reserved_at?: string | null
           responsaveis?: Json
           snapshot?: Json
           status?: string
@@ -389,16 +436,85 @@ export type Database = {
         Update: {
           ano?: number | null
           assuntos?: Json
+          cancel_reason?: string | null
+          canceled_at?: string | null
           created_at?: string
           data_documento?: string
+          generated_at?: string | null
           id?: string
           numero?: string | null
+          numero_ano_local?: number | null
+          numero_int?: number | null
+          reserved_at?: string | null
           responsaveis?: Json
           snapshot?: Json
           status?: string
           storage_path?: string | null
           titulo?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nbi_numeracao: {
+        Row: {
+          ano_vigente: number
+          created_at: string
+          id: string
+          prefixo: string | null
+          reiniciar_anualmente: boolean
+          ultima_nota: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ano_vigente?: number
+          created_at?: string
+          id?: string
+          prefixo?: string | null
+          reiniciar_anualmente?: boolean
+          ultima_nota?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ano_vigente?: number
+          created_at?: string
+          id?: string
+          prefixo?: string | null
+          reiniciar_anualmente?: boolean
+          ultima_nota?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nbi_numeracao_log: {
+        Row: {
+          acao: string
+          antes: Json | null
+          created_at: string
+          depois: Json | null
+          detalhe: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          acao: string
+          antes?: Json | null
+          created_at?: string
+          depois?: Json | null
+          detalhe?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          acao?: string
+          antes?: Json | null
+          created_at?: string
+          depois?: Json | null
+          detalhe?: string | null
+          id?: string
           user_id?: string
         }
         Relationships: []
@@ -803,6 +919,19 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      nbi_reservar_numero: {
+        Args: {
+          _ano_local: number
+          _confirmar_novo_ano?: boolean
+          _documento_id: string
+        }
+        Returns: {
+          ano: number
+          motivo: string
+          numero: number
+          reservado: boolean
+        }[]
       }
     }
     Enums: {
