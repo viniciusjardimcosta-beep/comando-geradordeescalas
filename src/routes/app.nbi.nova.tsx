@@ -269,6 +269,10 @@ function NovaNbiPage() {
       const n = diasEntreISO(v.DATA_INICIO, v.DATA_FIM);
       v.QTD_DIAS = String(n);
     }
+    if (v.DATA_INICIO && !v.DATA_FIM && v.QTD_DIAS) {
+      const n = parseInt(v.QTD_DIAS, 10);
+      if (!Number.isNaN(n) && n > 0) v.DATA_FIM = somarDiasISO(v.DATA_INICIO, n - 1);
+    }
     if (v.QTD_DIAS && !v.QTD_DIAS_EXTENSO) {
       const n = parseInt(v.QTD_DIAS, 10);
       if (!Number.isNaN(n)) v.QTD_DIAS_EXTENSO = numeroPorExtenso(n);
