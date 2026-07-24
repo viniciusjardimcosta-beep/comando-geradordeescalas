@@ -28,7 +28,6 @@ async function carregarSpellchecker(): Promise<Spellchecker> {
       fetch((dicMod as { default: string }).default),
     ]);
     const [aff, dic] = await Promise.all([affRes.text(), dicRes.text()]);
-    // @ts-expect-error nspell aceita strings em ambos.
     const spell = nspell({ aff, dic });
     cache = spell as Spellchecker;
     return cache;
