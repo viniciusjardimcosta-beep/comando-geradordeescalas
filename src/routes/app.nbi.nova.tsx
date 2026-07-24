@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -26,6 +26,9 @@ import {
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
+  validateSearch: (s: Record<string, unknown>): { rascunho?: string } => ({
+    rascunho: typeof s.rascunho === "string" ? s.rascunho : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Nova NBI — Comando" },
@@ -91,10 +94,13 @@ function uid() {
 function NovaNbiPage() {
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
+  const search = useSearch({ from: "/app/nbi/nova" });
+  const rascunhoId = search.rascunho ?? null;
 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
+  const [documentoId, setDocumentoId] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
@@ -113,10 +119,10 @@ function NovaNbiPage() {
 
   useEffect(() => {
     if (!userId) return;
-    void carregar(userId);
-  }, [userId]);
+    void carregar(userId, rascunhoId);
+  }, [userId, rascunhoId]);
 
-  async function carregar(uid: string) {
+  async function carregar(uid: string, rascId: string | null) {
     setLoading(true);
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
@@ -152,6 +158,20 @@ function NovaNbiPage() {
             lotacao: d.autoridade_lotacao ?? "",
           },
         }));
+      }
+      if (rascId) {
+        const { data: doc } = await supabase
+          .from("nbi_documents")
+          .select("id,snapshot,status")
+          .eq("id", rascId).eq("user_id", uid).maybeSingle();
+        const snap = (doc?.snapshot as { rascunho?: Rascunho } | null)?.rascunho;
+        if (snap && Array.isArray(snap.assuntos)) {
+          setRascunho(snap);
+          setDocumentoId(doc!.id);
+          toast.success("Rascunho restaurado");
+        } else if (doc) {
+          toast.error("Rascunho sem dados estruturados");
+        }
       }
     } catch (e) {
       console.error("Erro ao carregar dados NBI", e);
@@ -279,6 +299,67 @@ function NovaNbiPage() {
     return interpolarTexto(t.texto_modelo, resolverValores(a));
   }
 
+  // Pendências bloqueantes por assunto — verifica campos cadastrais do militar
+  // e campos do próprio assunto. Retorna motivos legíveis, em português.
+  function pendencias(a: AssuntoLocal): string[] {
+    const t = templatePor.get(a.tipo);
+    if (!t) return ["template não encontrado"];
+    const out: string[] = [];
+    const militar = militares.find((m) => m.id === a.militar_id) ?? null;
+    const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
+
+    // exige seleção de militar sempre
+    if (!militar) out.push("militar não selecionado");
+    if (a.tipo === "dispensa" && !titular) out.push("titular não selecionado");
+
+    // dados cadastrais NBI do militar (obrigatórios em todos os templates)
+    if (militar) {
+      if (!militar.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${militar.nome}`);
+      if (!militar.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${militar.nome}`);
+      if (!militar.quadro) out.push(`quadro ausente no cadastro NBI de ${militar.nome}`);
+      if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
+      if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
+    }
+    if (a.tipo === "dispensa" && titular) {
+      if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
+      if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
+      if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
+      if (!titular.lotacao_nbi) out.push(`lotação NBI do titular ${titular.nome} ausente`);
+      if (!titular.genero_gramatical) out.push(`gênero gramatical do titular ${titular.nome} ausente`);
+    }
+
+    // campos do template
+    const auto = new Set(["QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR"]);
+    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR"]);
+    for (const c of t.campos) {
+      if (auto.has(c.chave) || derivadosMilitar.has(c.chave)) continue;
+      const val = a.campos[c.chave];
+      // regras especiais
+      if (c.chave === "DATA_RETORNO") {
+        const mesmoDia = Boolean(a.campos.retorno_no_mesmo_dia);
+        if (!mesmoDia && (!val || val === "")) out.push(`${c.label}: obrigatório quando não há retorno no mesmo dia`);
+        continue;
+      }
+      if (c.tipo === "boolean") continue;
+      if (c.obrigatorio && (val === undefined || val === null || val === "")) {
+        out.push(`${c.label} ausente`);
+      }
+    }
+
+    // férias/apresentação: precisa ter datas coerentes
+    if ((a.tipo === "ferias" || a.tipo === "apresentacao")) {
+      const ini = a.campos.DATA_INICIO as string | undefined;
+      const fim = a.campos.DATA_FIM as string | undefined;
+      if (a.tipo === "ferias" && (!ini || !fim)) {
+        if (!fim) out.push("data fim do período de férias ausente");
+      }
+      if (a.tipo === "apresentacao" && !a.campos.DATA_APRESENTACAO && !fim) {
+        out.push("data de apresentação ausente");
+      }
+    }
+    return out;
+  }
+
   async function salvarRascunho() {
     if (!userId) return;
     setSalvando(true);
@@ -295,9 +376,10 @@ function NovaNbiPage() {
           campos: a.campos,
           texto_final: texto,
           campos_ausentes: ausentes,
+          pendencias: pendencias(a),
         };
       });
-      const { error } = await supabase.from("nbi_documents").insert([{
+      const payload = {
         user_id: userId,
         numero: rascunho.numero || null,
         ano: rascunho.ano,
@@ -312,9 +394,17 @@ function NovaNbiPage() {
         })),
         snapshot: JSON.parse(JSON.stringify({ rascunho })),
         status: "rascunho",
-      }]);
-      if (error) throw error;
-      toast.success("Rascunho salvo com sucesso");
+      };
+      if (documentoId) {
+        const { error } = await supabase.from("nbi_documents").update(payload).eq("id", documentoId);
+        if (error) throw error;
+        toast.success("Rascunho atualizado");
+      } else {
+        const { data, error } = await supabase.from("nbi_documents").insert([payload]).select("id").single();
+        if (error) throw error;
+        if (data?.id) setDocumentoId(data.id);
+        toast.success("Rascunho salvo com sucesso");
+      }
     } catch (e) {
       console.error(e);
       toast.error("Erro ao salvar rascunho");
@@ -373,6 +463,7 @@ function NovaNbiPage() {
           templates={templates}
           militares={militares}
           textoFinal={textoFinal}
+          pendencias={pendencias}
           onBack={() => setEtapa(2)}
           onSalvar={salvarRascunho}
           salvando={salvando}
@@ -717,17 +808,32 @@ function AssuntoCard({
 // ============ ETAPA 3 ============
 
 function Etapa3({
-  rascunho, templates, militares, textoFinal, onBack, onSalvar, salvando,
+  rascunho, templates, militares, textoFinal, pendencias, onBack, onSalvar, salvando,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
   militares: MilitarNbi[];
   textoFinal: (a: AssuntoLocal) => { texto: string; ausentes: string[] };
+  pendencias: (a: AssuntoLocal) => string[];
   onBack: () => void;
   onSalvar: () => void;
   salvando: boolean;
 }) {
   const [finalizado, setFinalizado] = useState(false);
+
+  const resumoPend = rascunho.assuntos.map((a) => {
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const militar = militares.find((m) => m.id === a.militar_id);
+    return {
+      id: a.id,
+      titulo: t?.titulo ?? a.tipo,
+      militar: militar?.nome ?? null,
+      lista: pendencias(a),
+    };
+  });
+  const totalPend = resumoPend.reduce((acc, r) => acc + r.lista.length, 0);
+  const semAssuntos = rascunho.assuntos.length === 0;
+  const bloqueado = semAssuntos || totalPend > 0;
 
   return (
     <Card>
@@ -746,26 +852,56 @@ function Etapa3({
           if (!t) return null;
           const { texto, ausentes } = textoFinal(a);
           const militar = militares.find((m) => m.id === a.militar_id);
+          const pend = pendencias(a);
+          const usaFerias = a.tipo === "ferias" || a.tipo === "apresentacao";
           return (
             <div key={a.id} className="rounded-md border p-4">
               <div className="mb-2 flex items-center gap-2">
                 <Badge>#{idx + 1}</Badge>
                 <span className="font-semibold">{t.titulo}</span>
-                {ausentes.length === 0
+                {pend.length === 0
                   ? <Badge variant="secondary" className="ml-auto"><CheckCircle2 className="mr-1 h-3 w-3" /> Completo</Badge>
-                  : <Badge variant="destructive" className="ml-auto"><AlertTriangle className="mr-1 h-3 w-3" /> {ausentes.length} campo(s) ausente(s)</Badge>}
+                  : <Badge variant="destructive" className="ml-auto"><AlertTriangle className="mr-1 h-3 w-3" /> {pend.length} pendência(s)</Badge>}
               </div>
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{texto}</p>
               <Separator className="my-3" />
-              <div className="text-xs text-muted-foreground">
-                <p><strong>Origem:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "militar não selecionado"}</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p><strong>Militar:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "não selecionado"} <span className="italic">(fonte: Cadastro de Militares)</span></p>
+                {usaFerias && a.ferias_id && (
+                  <p><strong>Datas:</strong> preenchidas a partir do <span className="italic">Banco de Férias</span></p>
+                )}
+                <p><strong>Texto:</strong> <span className="italic">Modelo oficial NBI</span> (interpolação literal de placeholders)</p>
                 {ausentes.length > 0 && (
-                  <p className="mt-1 text-destructive">Campos pendentes: {ausentes.join(", ")}</p>
+                  <p className="text-amber-600 dark:text-amber-400">Placeholders não substituídos: {ausentes.join(", ")}</p>
+                )}
+                {pend.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5 text-destructive">
+                    {pend.map((p, i) => <li key={i}>{p}</li>)}
+                  </ul>
                 )}
               </div>
             </div>
           );
         })}
+
+        {bloqueado && !semAssuntos && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-2 flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" />
+              Não é possível finalizar. Existem {totalPend} campo(s) obrigatório(s) pendente(s).
+            </div>
+            <ul className="space-y-2 pl-1">
+              {resumoPend.filter((r) => r.lista.length > 0).map((r) => (
+                <li key={r.id}>
+                  <div className="font-medium">{r.titulo}{r.militar ? ` — ${r.militar}` : ""}:</div>
+                  <ul className="ml-4 list-disc">
+                    {r.lista.map((m, i) => <li key={i}>{m}</li>)}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {finalizado && (
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
@@ -781,7 +917,7 @@ function Etapa3({
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar rascunho
             </Button>
-            <Button onClick={() => setFinalizado(true)} disabled={rascunho.assuntos.length === 0}>
+            <Button onClick={() => setFinalizado(true)} disabled={bloqueado}>
               Finalizar conferência
             </Button>
           </div>
