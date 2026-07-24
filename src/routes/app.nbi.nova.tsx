@@ -21,7 +21,8 @@ import {
 } from "lucide-react";
 import {
   type AssuntoTipo, type MilitarNbi, type FeriasReg,
-  numeroPorExtenso, periodoOrdinal, extrairPeriodoENome,
+  numeroPorExtenso, periodoOrdinal, analisarFraseNbi, postoMilitarCombina,
+  normalizarTextoNbi,
   montarPostoQuadro, artigoO, artigoAo,
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
