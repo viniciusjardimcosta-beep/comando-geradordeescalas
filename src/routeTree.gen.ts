@@ -23,6 +23,7 @@ import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as AppNbiNovaRouteImport } from './routes/app.nbi.nova'
 import { Route as AppNbiConfiguracoesRouteImport } from './routes/app.nbi.configuracoes'
 import { Route as AppAssinaturaSucessoRouteImport } from './routes/app.assinatura.sucesso'
 import { Route as ApiStripeCustomerPortalRouteImport } from './routes/api.stripe.customer-portal'
@@ -102,6 +103,11 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNbiNovaRoute = AppNbiNovaRouteImport.update({
+  id: '/nbi/nova',
+  path: '/nbi/nova',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppNbiConfiguracoesRoute = AppNbiConfiguracoesRouteImport.update({
   id: '/nbi/configuracoes',
   path: '/nbi/configuracoes',
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
+  '/app/nbi/nova': typeof AppNbiNovaRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByTo {
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
+  '/app/nbi/nova': typeof AppNbiNovaRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
+  '/app/nbi/nova': typeof AppNbiNovaRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/app/nbi/configuracoes'
+    | '/app/nbi/nova'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/app/nbi/configuracoes'
+    | '/app/nbi/nova'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
     | '/app/nbi/configuracoes'
+    | '/app/nbi/nova'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -403,6 +415,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/nbi/nova': {
+      id: '/app/nbi/nova'
+      path: '/nbi/nova'
+      fullPath: '/app/nbi/nova'
+      preLoaderRoute: typeof AppNbiNovaRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/nbi/configuracoes': {
       id: '/app/nbi/configuracoes'
       path: '/nbi/configuracoes'
@@ -485,6 +504,7 @@ interface AppRouteChildren {
   AppUsuariosRoute: typeof AppUsuariosRoute
   AppIndexRoute: typeof AppIndexRoute
   AppNbiConfiguracoesRoute: typeof AppNbiConfiguracoesRoute
+  AppNbiNovaRoute: typeof AppNbiNovaRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -498,6 +518,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppUsuariosRoute: AppUsuariosRoute,
   AppIndexRoute: AppIndexRoute,
   AppNbiConfiguracoesRoute: AppNbiConfiguracoesRoute,
+  AppNbiNovaRoute: AppNbiNovaRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

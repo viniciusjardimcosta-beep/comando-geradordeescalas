@@ -1,0 +1,792 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import {
+  Loader2, Save, ArrowLeft, ArrowRight, Plus, Trash2, ChevronUp, ChevronDown,
+  Wand2, AlertTriangle, CheckCircle2, FileText,
+} from "lucide-react";
+import {
+  type AssuntoTipo, type MilitarNbi, type FeriasReg,
+  numeroPorExtenso, periodoOrdinal, extrairPeriodoENome,
+  montarPostoQuadro, artigoO, artigoAo,
+  somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
+} from "@/utils/nbi";
+
+export const Route = createFileRoute("/app/nbi/nova")({
+  component: NovaNbiPage,
+  head: () => ({
+    meta: [
+      { title: "Nova NBI — Comando" },
+      { name: "description", content: "Assistente de criação de Nota para Boletim Interno." },
+    ],
+  }),
+});
+
+interface TemplateRow {
+  id: string;
+  codigo: AssuntoTipo;
+  titulo: string;
+  ordem: number;
+  texto_modelo: string;
+  campos: Array<{
+    chave: string;
+    label: string;
+    tipo: string;
+    obrigatorio?: boolean;
+    obrigatorio_se?: string;
+    origem?: string;
+    auto?: string;
+    default?: unknown;
+  }>;
+}
+
+interface AssuntoLocal {
+  id: string;
+  tipo: AssuntoTipo;
+  militar_id: string | null;
+  militar_titular_id: string | null;
+  ferias_id: string | null;
+  campos: Record<string, string | boolean>;
+}
+
+interface ResponsavelSnap {
+  nome: string;
+  posto_quadro: string;
+  funcao: string;
+  lotacao: string;
+}
+
+interface Rascunho {
+  numero: string;
+  ano: number;
+  data_documento: string;
+  unidade: { nome: string; sigla: string };
+  digitador: ResponsavelSnap;
+  comandante: ResponsavelSnap;
+  autoridade: ResponsavelSnap;
+  assuntos: AssuntoLocal[];
+}
+
+const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao", "dispensa"];
+const RESP_VAZIO: ResponsavelSnap = { nome: "", posto_quadro: "", funcao: "", lotacao: "" };
+
+function uid() {
+  return (typeof crypto !== "undefined" && "randomUUID" in crypto)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
+
+function NovaNbiPage() {
+  const { session } = useAuth();
+  const userId = session?.user?.id ?? null;
+
+  const [loading, setLoading] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
+
+  const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [militares, setMilitares] = useState<MilitarNbi[]>([]);
+  const [ferias, setFerias] = useState<FeriasReg[]>([]);
+
+  const [rascunho, setRascunho] = useState<Rascunho>({
+    numero: "",
+    ano: new Date().getFullYear(),
+    data_documento: new Date().toISOString().slice(0, 10),
+    unidade: { nome: "", sigla: "" },
+    digitador: { ...RESP_VAZIO },
+    comandante: { ...RESP_VAZIO },
+    autoridade: { ...RESP_VAZIO },
+    assuntos: [],
+  });
+
+  useEffect(() => {
+    if (!userId) return;
+    void carregar(userId);
+  }, [userId]);
+
+  async function carregar(uid: string) {
+    setLoading(true);
+    try {
+      const [tpl, mil, fer, cfg] = await Promise.all([
+        supabase.from("nbi_templates").select("id,codigo,titulo,ordem,texto_modelo,campos").eq("disponivel", true).order("ordem"),
+        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
+        supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
+        supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
+      ]);
+      if (tpl.data) setTemplates(tpl.data as unknown as TemplateRow[]);
+      if (mil.data) setMilitares(mil.data as MilitarNbi[]);
+      if (fer.data) setFerias(fer.data as FeriasReg[]);
+      if (cfg.data) {
+        const d = cfg.data;
+        setRascunho((r) => ({
+          ...r,
+          unidade: { nome: d.unidade_nome ?? "", sigla: d.unidade_sigla ?? "" },
+          digitador: {
+            nome: d.digitador_nome ?? "",
+            posto_quadro: d.digitador_posto_quadro ?? "",
+            funcao: d.digitador_funcao ?? "",
+            lotacao: d.digitador_lotacao ?? "",
+          },
+          comandante: {
+            nome: d.comandante_nome ?? "",
+            posto_quadro: d.comandante_posto_quadro ?? "",
+            funcao: d.comandante_funcao ?? "",
+            lotacao: d.comandante_lotacao ?? "",
+          },
+          autoridade: {
+            nome: d.autoridade_nome ?? "",
+            posto_quadro: d.autoridade_posto_quadro ?? "",
+            funcao: d.autoridade_funcao ?? "",
+            lotacao: d.autoridade_lotacao ?? "",
+          },
+        }));
+      }
+    } catch (e) {
+      console.error("Erro ao carregar dados NBI", e);
+      toast.error("Falha ao carregar dados do módulo NBI");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const templatePor = useMemo(() => {
+    const m = new Map<AssuntoTipo, TemplateRow>();
+    for (const t of templates) m.set(t.codigo, t);
+    return m;
+  }, [templates]);
+
+  function adicionarAssunto(tipo: AssuntoTipo) {
+    const t = templatePor.get(tipo);
+    if (!t) return;
+    const campos: Record<string, string | boolean> = {};
+    for (const c of t.campos) {
+      if (c.tipo === "boolean") campos[c.chave] = Boolean(c.default ?? false);
+    }
+    setRascunho((r) => ({
+      ...r,
+      assuntos: [...r.assuntos, {
+        id: uid(),
+        tipo,
+        militar_id: null,
+        militar_titular_id: null,
+        ferias_id: null,
+        campos,
+      }],
+    }));
+  }
+
+  function atualizarAssunto(id: string, patch: Partial<AssuntoLocal>) {
+    setRascunho((r) => ({
+      ...r,
+      assuntos: r.assuntos.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+    }));
+  }
+  function atualizarCampo(id: string, chave: string, valor: string | boolean) {
+    setRascunho((r) => ({
+      ...r,
+      assuntos: r.assuntos.map((a) => (a.id === id ? { ...a, campos: { ...a.campos, [chave]: valor } } : a)),
+    }));
+  }
+  function removerAssunto(id: string) {
+    setRascunho((r) => ({ ...r, assuntos: r.assuntos.filter((a) => a.id !== id) }));
+  }
+  function moverAssunto(id: string, dir: -1 | 1) {
+    setRascunho((r) => {
+      const idx = r.assuntos.findIndex((a) => a.id === id);
+      const alvo = idx + dir;
+      if (idx < 0 || alvo < 0 || alvo >= r.assuntos.length) return r;
+      const arr = [...r.assuntos];
+      [arr[idx], arr[alvo]] = [arr[alvo], arr[idx]];
+      return { ...r, assuntos: arr };
+    });
+  }
+
+  // Resolve valores finais do assunto (apenas em memória, não altera texto oficial).
+  function resolverValores(a: AssuntoLocal): Record<string, string> {
+    const t = templatePor.get(a.tipo);
+    if (!t) return {};
+    const militar = militares.find((m) => m.id === a.militar_id) ?? null;
+    const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
+    const v: Record<string, string> = {};
+    for (const c of t.campos) {
+      const bruto = a.campos[c.chave];
+      if (bruto !== undefined && bruto !== "" && typeof bruto !== "boolean") {
+        v[c.chave] = String(bruto);
+      }
+    }
+    if (militar) {
+      if (!v.NOME) v.NOME = militar.nome;
+      if (!v.ID_FUNC) v.ID_FUNC = militar.matricula ?? "";
+      if (!v.LOTACAO) v.LOTACAO = militar.lotacao_nbi ?? "";
+      if (!v.POSTO_QUADRO) v.POSTO_QUADRO = montarPostoQuadro(militar.posto_graduacao, militar.quadro);
+      v.ARTIGO_O_A = artigoO(militar.genero_gramatical);
+      v.ARTIGO_AO_A = artigoAo(militar.genero_gramatical);
+    }
+    if (titular) {
+      v.NOME_TITULAR = titular.nome;
+      v.ID_FUNC_TITULAR = titular.matricula ?? "";
+      v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
+      v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
+      v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
+    }
+    // autos
+    if (v.DATA_INICIO && v.DATA_FIM && !v.QTD_DIAS) {
+      const n = diasEntreISO(v.DATA_INICIO, v.DATA_FIM);
+      v.QTD_DIAS = String(n);
+    }
+    if (v.QTD_DIAS && !v.QTD_DIAS_EXTENSO) {
+      const n = parseInt(v.QTD_DIAS, 10);
+      if (!Number.isNaN(n)) v.QTD_DIAS_EXTENSO = numeroPorExtenso(n);
+    }
+    if (v.DATA_FIM && !v.DATA_APRESENTACAO) {
+      v.DATA_APRESENTACAO = somarDiasISO(v.DATA_FIM, 1);
+    }
+    if (v.DATA_INICIO && !v.ANO) {
+      v.ANO = v.DATA_INICIO.slice(0, 4);
+    }
+    if (v.PERIODO && /^\d+$/.test(v.PERIODO)) {
+      v.PERIODO = periodoOrdinal(parseInt(v.PERIODO, 10));
+    }
+    // viagem
+    if (a.tipo === "viagem") {
+      const mesmoDia = Boolean(a.campos.retorno_no_mesmo_dia);
+      v.TERMINACAO_RETORNO = mesmoDia
+        ? "retornando no mesmo dia"
+        : (v.DATA_RETORNO ? `retornando em ${formatarDataBR(v.DATA_RETORNO)}` : "");
+    }
+    // formatação de datas visíveis
+    for (const k of ["DATA_INICIO", "DATA_FIM", "DATA_APRESENTACAO", "DATA_RETORNO"]) {
+      if (v[k] && /^\d{4}-\d{2}-\d{2}$/.test(v[k])) v[k] = formatarDataBR(v[k]);
+    }
+    return v;
+  }
+
+  function textoFinal(a: AssuntoLocal): { texto: string; ausentes: string[] } {
+    const t = templatePor.get(a.tipo);
+    if (!t) return { texto: "", ausentes: [] };
+    return interpolarTexto(t.texto_modelo, resolverValores(a));
+  }
+
+  async function salvarRascunho() {
+    if (!userId) return;
+    setSalvando(true);
+    try {
+      const snapshot = rascunho.assuntos.map((a) => {
+        const t = templatePor.get(a.tipo);
+        const { texto, ausentes } = textoFinal(a);
+        return {
+          tipo: a.tipo,
+          titulo: t?.titulo ?? a.tipo,
+          militar_id: a.militar_id,
+          militar_titular_id: a.militar_titular_id,
+          ferias_id: a.ferias_id,
+          campos: a.campos,
+          texto_final: texto,
+          campos_ausentes: ausentes,
+        };
+      });
+      const { error } = await supabase.from("nbi_documents").insert([{
+        user_id: userId,
+        numero: rascunho.numero || null,
+        ano: rascunho.ano,
+        data_documento: rascunho.data_documento,
+        titulo: `NBI ${rascunho.numero || "s/nº"} — ${formatarDataBR(rascunho.data_documento)}`,
+        assuntos: snapshot,
+        responsaveis: JSON.parse(JSON.stringify({
+          unidade: rascunho.unidade,
+          digitador: rascunho.digitador,
+          comandante: rascunho.comandante,
+          autoridade: rascunho.autoridade,
+        })),
+        snapshot: JSON.parse(JSON.stringify({ rascunho })),
+        status: "rascunho",
+      }]);
+      if (error) throw error;
+      toast.success("Rascunho salvo com sucesso");
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao salvar rascunho");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold"><FileText className="h-6 w-6" /> Nova NBI</h1>
+          <p className="text-sm text-muted-foreground">Assistente em 3 etapas · dados → assuntos → conferência</p>
+        </div>
+        <Link to="/app/nbi/configuracoes"><Button variant="outline" size="sm">Configurações</Button></Link>
+      </header>
+
+      <div className="mb-6 flex gap-2">
+        {[1, 2, 3].map((n) => (
+          <div key={n} className={`flex-1 rounded-md border p-2 text-center text-xs ${etapa === n ? "border-primary bg-primary/10 font-semibold" : "border-border text-muted-foreground"}`}>
+            Etapa {n} — {n === 1 ? "Dados da nota" : n === 2 ? "Assuntos" : "Conferência"}
+          </div>
+        ))}
+      </div>
+
+      {etapa === 1 && (
+        <Etapa1
+          rascunho={rascunho}
+          setRascunho={setRascunho}
+          onNext={() => setEtapa(2)}
+        />
+      )}
+      {etapa === 2 && (
+        <Etapa2
+          rascunho={rascunho}
+          templates={templates}
+          militares={militares}
+          ferias={ferias}
+          adicionar={adicionarAssunto}
+          atualizar={atualizarAssunto}
+          atualizarCampo={atualizarCampo}
+          remover={removerAssunto}
+          mover={moverAssunto}
+          onBack={() => setEtapa(1)}
+          onNext={() => setEtapa(3)}
+        />
+      )}
+      {etapa === 3 && (
+        <Etapa3
+          rascunho={rascunho}
+          templates={templates}
+          militares={militares}
+          textoFinal={textoFinal}
+          onBack={() => setEtapa(2)}
+          onSalvar={salvarRascunho}
+          salvando={salvando}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============ ETAPA 1 ============
+
+function Etapa1({
+  rascunho, setRascunho, onNext,
+}: {
+  rascunho: Rascunho;
+  setRascunho: React.Dispatch<React.SetStateAction<Rascunho>>;
+  onNext: () => void;
+}) {
+  const podeAvancar = rascunho.data_documento && rascunho.unidade.nome && rascunho.comandante.nome;
+
+  function editarResp(chave: "digitador" | "comandante" | "autoridade", campo: keyof ResponsavelSnap, valor: string) {
+    setRascunho((r) => ({ ...r, [chave]: { ...r[chave], [campo]: valor } }));
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Dados gerais da NBI</CardTitle>
+        <CardDescription>Estes valores vêm das Configurações; edite se necessário para esta nota.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <Label>Número</Label>
+            <Input value={rascunho.numero} onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })} placeholder="Ex: 020" />
+          </div>
+          <div>
+            <Label>Ano</Label>
+            <Input type="number" value={rascunho.ano} onChange={(e) => setRascunho({ ...rascunho, ano: parseInt(e.target.value, 10) || new Date().getFullYear() })} />
+          </div>
+          <div>
+            <Label>Data do documento</Label>
+            <Input type="date" value={rascunho.data_documento} onChange={(e) => setRascunho({ ...rascunho, data_documento: e.target.value })} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label>Unidade — nome</Label>
+            <Input value={rascunho.unidade.nome} onChange={(e) => setRascunho({ ...rascunho, unidade: { ...rascunho.unidade, nome: e.target.value } })} />
+          </div>
+          <div>
+            <Label>Unidade — sigla</Label>
+            <Input value={rascunho.unidade.sigla} onChange={(e) => setRascunho({ ...rascunho, unidade: { ...rascunho.unidade, sigla: e.target.value } })} />
+          </div>
+        </div>
+
+        {(["digitador", "comandante", "autoridade"] as const).map((k) => (
+          <div key={k} className="rounded-md border p-4">
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {k === "digitador" ? "Digitador" : k === "comandante" ? "Comandante" : "Autoridade publicadora"}
+            </h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Nome</Label><Input value={rascunho[k].nome} onChange={(e) => editarResp(k, "nome", e.target.value)} /></div>
+              <div><Label>Posto / Quadro</Label><Input value={rascunho[k].posto_quadro} onChange={(e) => editarResp(k, "posto_quadro", e.target.value)} /></div>
+              <div><Label>Função</Label><Input value={rascunho[k].funcao} onChange={(e) => editarResp(k, "funcao", e.target.value)} /></div>
+              <div><Label>Lotação</Label><Input value={rascunho[k].lotacao} onChange={(e) => editarResp(k, "lotacao", e.target.value)} /></div>
+            </div>
+          </div>
+        ))}
+
+        <div className="flex justify-end">
+          <Button onClick={onNext} disabled={!podeAvancar}>Avançar <ArrowRight className="ml-2 h-4 w-4" /></Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============ ETAPA 2 ============
+
+function Etapa2({
+  rascunho, templates, militares, ferias,
+  adicionar, atualizar, atualizarCampo, remover, mover,
+  onBack, onNext,
+}: {
+  rascunho: Rascunho;
+  templates: TemplateRow[];
+  militares: MilitarNbi[];
+  ferias: FeriasReg[];
+  adicionar: (t: AssuntoTipo) => void;
+  atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
+  atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
+  remover: (id: string) => void;
+  mover: (id: string, dir: -1 | 1) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assuntos</CardTitle>
+        <CardDescription>Adicione um ou mais assuntos. Você pode reordenar, editar e remover livremente.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {TIPOS_ORDEM.map((tipo) => {
+            const t = templates.find((x) => x.codigo === tipo);
+            if (!t) return null;
+            return (
+              <Button key={tipo} size="sm" variant="outline" onClick={() => adicionar(tipo)}>
+                <Plus className="mr-1 h-4 w-4" /> {t.titulo}
+              </Button>
+            );
+          })}
+        </div>
+
+        {rascunho.assuntos.length === 0 && (
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            Nenhum assunto adicionado. Escolha um tipo acima para começar.
+          </div>
+        )}
+
+        {rascunho.assuntos.map((a, idx) => {
+          const t = templates.find((x) => x.codigo === a.tipo);
+          if (!t) return null;
+          return (
+            <AssuntoCard
+              key={a.id}
+              index={idx + 1}
+              assunto={a}
+              template={t}
+              militares={militares}
+              ferias={ferias}
+              onChange={(patch) => atualizar(a.id, patch)}
+              onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
+              onRemove={() => remover(a.id)}
+              onUp={() => mover(a.id, -1)}
+              onDown={() => mover(a.id, 1)}
+            />
+          );
+        })}
+
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
+          <Button onClick={onNext} disabled={rascunho.assuntos.length === 0}>Ir para conferência <ArrowRight className="ml-2 h-4 w-4" /></Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssuntoCard({
+  index, assunto, template, militares, ferias,
+  onChange, onCampo, onRemove, onUp, onDown,
+}: {
+  index: number;
+  assunto: AssuntoLocal;
+  template: TemplateRow;
+  militares: MilitarNbi[];
+  ferias: FeriasReg[];
+  onChange: (patch: Partial<AssuntoLocal>) => void;
+  onCampo: (chave: string, v: string | boolean) => void;
+  onRemove: () => void;
+  onUp: () => void;
+  onDown: () => void;
+}) {
+  const [frase, setFrase] = useState("");
+  const [sugestoes, setSugestoes] = useState<Array<{ militar: MilitarNbi; ferias?: FeriasReg }>>([]);
+  const [avisoSugestao, setAvisoSugestao] = useState<string | null>(null);
+
+  const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
+
+  function interpretarFrase() {
+    setSugestoes([]);
+    setAvisoSugestao(null);
+    const { periodo, nome } = extrairPeriodoENome(frase);
+    if (!nome) {
+      setAvisoSugestao("Não consegui identificar o nome. Ex.: “segundo período de férias de Ademir”.");
+      return;
+    }
+    const candidatos = militares.filter((m) =>
+      (m.nome || "").toLowerCase().includes(nome) ||
+      (m.nome_guerra || "").toLowerCase().includes(nome),
+    );
+    if (candidatos.length === 0) {
+      setAvisoSugestao(`Nenhum militar encontrado com “${nome}”.`);
+      return;
+    }
+    if (usaFerias) {
+      const anoAtual = new Date().getFullYear();
+      const combos: Array<{ militar: MilitarNbi; ferias?: FeriasReg }> = [];
+      for (const m of candidatos) {
+        const filhas = ferias.filter((f) =>
+          f.militar_id === m.id &&
+          f.ano === anoAtual &&
+          (periodo == null || f.periodo === periodo),
+        );
+        if (filhas.length === 0) combos.push({ militar: m });
+        else for (const f of filhas) combos.push({ militar: m, ferias: f });
+      }
+      setSugestoes(combos);
+      if (combos.length > 1) setAvisoSugestao("Ambiguidade: escolha manualmente o militar/período correto.");
+    } else {
+      setSugestoes(candidatos.map((m) => ({ militar: m })));
+      if (candidatos.length > 1) setAvisoSugestao("Mais de um militar encontrado — confirme a seleção.");
+    }
+  }
+
+  function aplicarSugestao(s: { militar: MilitarNbi; ferias?: FeriasReg }) {
+    onChange({ militar_id: s.militar.id, ferias_id: s.ferias?.id ?? null });
+    if (s.ferias) {
+      onCampo("DATA_INICIO", s.ferias.data_inicio);
+      onCampo("DATA_FIM", s.ferias.data_fim);
+      onCampo("PERIODO", String(s.ferias.periodo));
+      onCampo("ANO", String(s.ferias.ano));
+    }
+    setSugestoes([]);
+    setAvisoSugestao("Sugestão aplicada — confirme os demais campos.");
+  }
+
+  return (
+    <div className="rounded-md border border-border p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">#{index}</Badge>
+          <span className="font-semibold">{template.titulo}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" onClick={onUp}><ChevronUp className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" onClick={onDown}><ChevronDown className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" onClick={onRemove}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+        </div>
+      </div>
+
+      <div className="mb-4 space-y-2 rounded-md bg-muted/40 p-3">
+        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sugestão por frase (opcional)</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder='Ex.: "segundo período de férias de Ademir"'
+            value={frase}
+            onChange={(e) => setFrase(e.target.value)}
+          />
+          <Button variant="outline" size="sm" onClick={interpretarFrase}><Wand2 className="mr-1 h-4 w-4" /> Interpretar</Button>
+        </div>
+        {avisoSugestao && (
+          <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3 w-3" /> {avisoSugestao}
+          </p>
+        )}
+        {sugestoes.length > 0 && (
+          <div className="space-y-1">
+            {sugestoes.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => aplicarSugestao(s)}
+                className="w-full rounded border border-border bg-background p-2 text-left text-xs hover:bg-accent"
+              >
+                <span className="font-medium">{s.militar.nome}</span>
+                {s.militar.matricula && <span className="ml-2 text-muted-foreground">ID {s.militar.matricula}</span>}
+                {s.ferias && (
+                  <span className="ml-2">
+                    · {periodoOrdinal(s.ferias.periodo)} período/{s.ferias.ano} — {formatarDataBR(s.ferias.data_inicio)} a {formatarDataBR(s.ferias.data_fim)}
+                  </span>
+                )}
+                {!s.ferias && usaFerias && <span className="ml-2 text-amber-600">sem registro de férias no ano</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-3">
+        <Label>Militar</Label>
+        <Select value={assunto.militar_id ?? ""} onValueChange={(v) => onChange({ militar_id: v || null })}>
+          <SelectTrigger><SelectValue placeholder="Selecionar militar" /></SelectTrigger>
+          <SelectContent>
+            {militares.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {assunto.tipo === "dispensa" && (
+        <div className="mb-3">
+          <Label>Militar titular (que retornou)</Label>
+          <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
+            <SelectTrigger><SelectValue placeholder="Selecionar titular" /></SelectTrigger>
+            <SelectContent>
+              {militares.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {template.campos
+          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO"].includes(c.chave))
+          .map((c) => {
+            const val = assunto.campos[c.chave];
+            if (c.tipo === "boolean") {
+              return (
+                <label key={c.chave} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(val)}
+                    onChange={(e) => onCampo(c.chave, e.target.checked)}
+                  />
+                  {c.label}
+                </label>
+              );
+            }
+            const inputType = c.tipo === "data" ? "date" : c.tipo === "inteiro" ? "number" : "text";
+            if (c.tipo === "texto_longo") {
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <Label>{c.label}</Label>
+                  <Textarea value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} rows={2} />
+                </div>
+              );
+            }
+            return (
+              <div key={c.chave}>
+                <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
+// ============ ETAPA 3 ============
+
+function Etapa3({
+  rascunho, templates, militares, textoFinal, onBack, onSalvar, salvando,
+}: {
+  rascunho: Rascunho;
+  templates: TemplateRow[];
+  militares: MilitarNbi[];
+  textoFinal: (a: AssuntoLocal) => { texto: string; ausentes: string[] };
+  onBack: () => void;
+  onSalvar: () => void;
+  salvando: boolean;
+}) {
+  const [finalizado, setFinalizado] = useState(false);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Conferência</CardTitle>
+        <CardDescription>Revise cada assunto antes de salvar. Nenhum documento Word é gerado nesta etapa.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border p-3 text-sm">
+          <div className="font-semibold">NBI nº {rascunho.numero || "s/nº"} · {formatarDataBR(rascunho.data_documento)}</div>
+          <div className="text-muted-foreground">{rascunho.unidade.nome} {rascunho.unidade.sigla && `(${rascunho.unidade.sigla})`}</div>
+        </div>
+
+        {rascunho.assuntos.map((a, idx) => {
+          const t = templates.find((x) => x.codigo === a.tipo);
+          if (!t) return null;
+          const { texto, ausentes } = textoFinal(a);
+          const militar = militares.find((m) => m.id === a.militar_id);
+          return (
+            <div key={a.id} className="rounded-md border p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Badge>#{idx + 1}</Badge>
+                <span className="font-semibold">{t.titulo}</span>
+                {ausentes.length === 0
+                  ? <Badge variant="secondary" className="ml-auto"><CheckCircle2 className="mr-1 h-3 w-3" /> Completo</Badge>
+                  : <Badge variant="destructive" className="ml-auto"><AlertTriangle className="mr-1 h-3 w-3" /> {ausentes.length} campo(s) ausente(s)</Badge>}
+              </div>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{texto}</p>
+              <Separator className="my-3" />
+              <div className="text-xs text-muted-foreground">
+                <p><strong>Origem:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "militar não selecionado"}</p>
+                {ausentes.length > 0 && (
+                  <p className="mt-1 text-destructive">Campos pendentes: {ausentes.join(", ")}</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {finalizado && (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="mr-1 inline h-4 w-4" />
+            Conferência finalizada. A geração do documento Word será liberada na próxima fase.
+          </div>
+        )}
+
+        <div className="flex flex-wrap justify-between gap-2">
+          <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar e corrigir</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onSalvar} disabled={salvando}>
+              {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar rascunho
+            </Button>
+            <Button onClick={() => setFinalizado(true)} disabled={rascunho.assuntos.length === 0}>
+              Finalizar conferência
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
