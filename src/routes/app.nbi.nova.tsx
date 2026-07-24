@@ -111,6 +111,7 @@ function NovaNbiPage() {
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
 
   const [rascunho, setRascunho] = useState<Rascunho>({
+    modo_numeracao: "automatico",
     numero: "",
     ano: new Date().getFullYear(),
     data_documento: new Date().toISOString().slice(0, 10),
