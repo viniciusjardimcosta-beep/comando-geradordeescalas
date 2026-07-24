@@ -129,26 +129,27 @@ function NovaNbiPage() {
       if (mil.data) setMilitares(mil.data as MilitarNbi[]);
       if (fer.data) setFerias(fer.data as FeriasReg[]);
       if (cfg.data) {
+        const d = cfg.data;
         setRascunho((r) => ({
           ...r,
-          unidade: { nome: cfg.data.unidade_nome ?? "", sigla: cfg.data.unidade_sigla ?? "" },
+          unidade: { nome: d.unidade_nome ?? "", sigla: d.unidade_sigla ?? "" },
           digitador: {
-            nome: cfg.data.digitador_nome ?? "",
-            posto_quadro: cfg.data.digitador_posto_quadro ?? "",
-            funcao: cfg.data.digitador_funcao ?? "",
-            lotacao: cfg.data.digitador_lotacao ?? "",
+            nome: d.digitador_nome ?? "",
+            posto_quadro: d.digitador_posto_quadro ?? "",
+            funcao: d.digitador_funcao ?? "",
+            lotacao: d.digitador_lotacao ?? "",
           },
           comandante: {
-            nome: cfg.data.comandante_nome ?? "",
-            posto_quadro: cfg.data.comandante_posto_quadro ?? "",
-            funcao: cfg.data.comandante_funcao ?? "",
-            lotacao: cfg.data.comandante_lotacao ?? "",
+            nome: d.comandante_nome ?? "",
+            posto_quadro: d.comandante_posto_quadro ?? "",
+            funcao: d.comandante_funcao ?? "",
+            lotacao: d.comandante_lotacao ?? "",
           },
           autoridade: {
-            nome: cfg.data.autoridade_nome ?? "",
-            posto_quadro: cfg.data.autoridade_posto_quadro ?? "",
-            funcao: cfg.data.autoridade_funcao ?? "",
-            lotacao: cfg.data.autoridade_lotacao ?? "",
+            nome: d.autoridade_nome ?? "",
+            posto_quadro: d.autoridade_posto_quadro ?? "",
+            funcao: d.autoridade_funcao ?? "",
+            lotacao: d.autoridade_lotacao ?? "",
           },
         }));
       }
@@ -296,7 +297,7 @@ function NovaNbiPage() {
           campos_ausentes: ausentes,
         };
       });
-      const { error } = await supabase.from("nbi_documents").insert({
+      const { error } = await supabase.from("nbi_documents").insert([{
         user_id: userId,
         numero: rascunho.numero || null,
         ano: rascunho.ano,
