@@ -301,7 +301,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
     // Objeto explícito enviado ao docxtemplater. Nomes de chaves fixos
     // acordados com o modelo mestre (sem acentos, sempre maiúsculo).
     const placeholders: Record<string, string> = {
-      NUMERO_NOTA: `${numeroFmt}/${ano}`,
+      NUMERO_NOTA: numeroFmt,
       DATA_NOTA: dataNota,
       // Compatibilidade com chaves antigas do modelo mestre (caso ainda existam)
       NUMERO_NBI: numeroFmt,
