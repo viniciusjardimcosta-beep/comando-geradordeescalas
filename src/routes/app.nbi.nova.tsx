@@ -319,7 +319,7 @@ function NovaNbiPage() {
 
     // exige seleção de militar sempre
     if (!militar) out.push("militar não selecionado");
-    if (a.tipo === "dispensa" && !titular) out.push("titular não selecionado");
+    if (a.tipo === "dispensa_funcao" && !titular) out.push("titular não selecionado");
 
     // dados cadastrais NBI do militar (obrigatórios em todos os templates)
     if (militar) {
@@ -329,7 +329,7 @@ function NovaNbiPage() {
       if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
       if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
     }
-    if (a.tipo === "dispensa" && titular) {
+    if (a.tipo === "dispensa_funcao" && titular) {
       if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
       if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
       if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
@@ -884,7 +884,7 @@ function AssuntoCard({
         </Select>
       </div>
 
-      {assunto.tipo === "dispensa" && (
+      {assunto.tipo === "dispensa_funcao" && (
         <div className="mb-3">
           <Label>Militar titular (que retornou)</Label>
           <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
