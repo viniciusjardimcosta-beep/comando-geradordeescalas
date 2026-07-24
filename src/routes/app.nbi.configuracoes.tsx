@@ -355,6 +355,8 @@ function NbiConfiguracoesPage() {
             </CardContent>
           </Card>
 
+          <NumeracaoCard />
+
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -364,7 +366,7 @@ function NbiConfiguracoesPage() {
               <CardDescription>
                 Os textos oficiais dos cinco modelos disponíveis (Férias, Apresentação após férias,
                 Viagem, Assunção e Dispensa de função) são versionados e somente leitura nesta
-                etapa. A edição dos textos será liberada em uma fase posterior.
+                etapa.
               </CardDescription>
             </CardHeader>
           </Card>
