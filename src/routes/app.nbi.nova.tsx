@@ -845,7 +845,7 @@ function AssuntoCard({
         <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sugestão por frase (opcional)</Label>
         <div className="flex gap-2">
           <Input
-            placeholder='Ex.: "segundo período de férias de Ademir"'
+            placeholder='Ex.: "segundo período de férias do Soldado Silva"'
             value={frase}
             onChange={(e) => setFrase(e.target.value)}
           />
