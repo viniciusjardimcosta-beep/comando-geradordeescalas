@@ -469,6 +469,7 @@ function NovaNbiPage() {
           onBack={() => setEtapa(2)}
           onSalvar={salvarRascunho}
           salvando={salvando}
+          documentoId={documentoId}
         />
       )}
     </div>
