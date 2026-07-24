@@ -23,6 +23,7 @@ import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as AppNbiConfiguracoesRouteImport } from './routes/app.nbi.configuracoes'
 import { Route as AppAssinaturaSucessoRouteImport } from './routes/app.assinatura.sucesso'
 import { Route as ApiStripeCustomerPortalRouteImport } from './routes/api.stripe.customer-portal'
 import { Route as ApiStripeCreateCheckoutRouteImport } from './routes/api.stripe.create-checkout'
@@ -101,6 +102,11 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNbiConfiguracoesRoute = AppNbiConfiguracoesRouteImport.update({
+  id: '/nbi/configuracoes',
+  path: '/nbi/configuracoes',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAssinaturaSucessoRoute = AppAssinaturaSucessoRouteImport.update({
   id: '/sucesso',
   path: '/sucesso',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
+  '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
+  '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/api/stripe/create-checkout': typeof ApiStripeCreateCheckoutRoute
   '/api/stripe/customer-portal': typeof ApiStripeCustomerPortalRoute
   '/app/assinatura/sucesso': typeof AppAssinaturaSucessoRoute
+  '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/api/stripe/create-checkout'
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
+    | '/app/nbi/configuracoes'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/api/stripe/create-checkout'
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
+    | '/app/nbi/configuracoes'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -272,6 +283,7 @@ export interface FileRouteTypes {
     | '/api/stripe/create-checkout'
     | '/api/stripe/customer-portal'
     | '/app/assinatura/sucesso'
+    | '/app/nbi/configuracoes'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -391,6 +403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/nbi/configuracoes': {
+      id: '/app/nbi/configuracoes'
+      path: '/nbi/configuracoes'
+      fullPath: '/app/nbi/configuracoes'
+      preLoaderRoute: typeof AppNbiConfiguracoesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/assinatura/sucesso': {
       id: '/app/assinatura/sucesso'
       path: '/sucesso'
@@ -465,6 +484,7 @@ interface AppRouteChildren {
   AppMilitaresRoute: typeof AppMilitaresRoute
   AppUsuariosRoute: typeof AppUsuariosRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppNbiConfiguracoesRoute: typeof AppNbiConfiguracoesRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -477,6 +497,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppMilitaresRoute: AppMilitaresRoute,
   AppUsuariosRoute: AppUsuariosRoute,
   AppIndexRoute: AppIndexRoute,
+  AppNbiConfiguracoesRoute: AppNbiConfiguracoesRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -497,12 +518,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

@@ -28,6 +28,7 @@ export const Route = createFileRoute("/app/militares")({
 });
 
 type TipoEscala = "24h" | "parcial";
+type Genero = "" | "M" | "F";
 
 interface Militar {
   id: string;
@@ -41,6 +42,11 @@ interface Militar {
   observacoes: string | null;
   created_at: string;
   tipo_escala: TipoEscala;
+  quadro: string | null;
+  lotacao_nbi: string | null;
+  funcao_atual: string | null;
+  genero_gramatical: string | null;
+  nome_guerra: string | null;
 }
 
 interface FormState {
@@ -53,6 +59,11 @@ interface FormState {
   ativo: boolean;
   observacoes: string;
   tipo_escala: TipoEscala;
+  quadro: string;
+  lotacao_nbi: string;
+  funcao_atual: string;
+  genero_gramatical: Genero;
+  nome_guerra: string;
 }
 
 const emptyForm: FormState = {
@@ -65,7 +76,15 @@ const emptyForm: FormState = {
   ativo: true,
   observacoes: "",
   tipo_escala: "24h",
+  quadro: "",
+  lotacao_nbi: "",
+  funcao_atual: "",
+  genero_gramatical: "",
+  nome_guerra: "",
 };
+
+const QUADROS_SUGERIDOS = ["QPBM", "QTBM", "QOEM", "QOBM", "PME"];
+
 
 type Filter = "todos" | "cov" | "cg" | "adm" | "bm";
 
@@ -125,6 +144,11 @@ function MilitaresPage() {
       ativo: m.ativo,
       observacoes: m.observacoes ?? "",
       tipo_escala: m.tipo_escala ?? "24h",
+      quadro: m.quadro ?? "",
+      lotacao_nbi: m.lotacao_nbi ?? "",
+      funcao_atual: m.funcao_atual ?? "",
+      genero_gramatical: (m.genero_gramatical === "M" || m.genero_gramatical === "F") ? m.genero_gramatical : "",
+      nome_guerra: m.nome_guerra ?? "",
     });
     setDialogOpen(true);
   }
@@ -149,6 +173,11 @@ function MilitaresPage() {
       ativo: form.ativo,
       observacoes: form.observacoes.trim() || null,
       tipo_escala: form.tipo_escala,
+      quadro: form.quadro.trim() || null,
+      lotacao_nbi: form.lotacao_nbi.trim() || null,
+      funcao_atual: form.funcao_atual.trim() || null,
+      genero_gramatical: form.genero_gramatical || null,
+      nome_guerra: form.nome_guerra.trim() || null,
     } as never;
     let error;
     if (editing) {
@@ -360,6 +389,78 @@ function MilitaresPage() {
                 (recebem apenas turnos parciais durante o expediente).
               </p>
             </div>
+
+            <div className="grid gap-3 rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold text-primary">Dados para NBI</Label>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Opcional · não afeta escala</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Utilizados apenas na geração de Notas para Boletim Interno. Não interferem no motor
+                de escalas nem nas funções operacionais (CG/COV/ADM).
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="quadro">Quadro</Label>
+                  <Input
+                    id="quadro"
+                    list="quadros-sugeridos"
+                    value={form.quadro}
+                    onChange={(e) => setForm({ ...form, quadro: e.target.value })}
+                    placeholder="Ex.: QPBM, QOEM"
+                  />
+                  <datalist id="quadros-sugeridos">
+                    {QUADROS_SUGERIDOS.map((q) => <option key={q} value={q} />)}
+                  </datalist>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="genero">Gênero gramatical</Label>
+                  <Select
+                    value={form.genero_gramatical || "__none__"}
+                    onValueChange={(v) => setForm({ ...form, genero_gramatical: (v === "__none__" ? "" : v) as Genero })}
+                  >
+                    <SelectTrigger id="genero"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Não informado —</SelectItem>
+                      <SelectItem value="M">Masculino (o / ao)</SelectItem>
+                      <SelectItem value="F">Feminino (a / à)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="lotacao_nbi">Lotação para NBI</Label>
+                <Input
+                  id="lotacao_nbi"
+                  value={form.lotacao_nbi}
+                  onChange={(e) => setForm({ ...form, lotacao_nbi: e.target.value })}
+                  placeholder="Ex.: 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="funcao_atual">Função administrativa atual</Label>
+                <Input
+                  id="funcao_atual"
+                  value={form.funcao_atual}
+                  onChange={(e) => setForm({ ...form, funcao_atual: e.target.value })}
+                  placeholder="Ex.: Sgte do 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Cargo/função administrativa — diferente do papel operacional CG/COV.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="nome_guerra">Nome de guerra</Label>
+                <Input
+                  id="nome_guerra"
+                  value={form.nome_guerra}
+                  onChange={(e) => setForm({ ...form, nome_guerra: e.target.value })}
+                  placeholder="Uso interno · o Word sempre usa o nome completo"
+                />
+              </div>
+            </div>
+
+
 
             <div className="flex items-center justify-between rounded-md border border-border p-3">
               <div>

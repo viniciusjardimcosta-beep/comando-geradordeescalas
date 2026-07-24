@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, Navigate, useLocation } from "@tanstack/
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock, CreditCard, ClipboardCheck } from "lucide-react";
+import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock, CreditCard, ClipboardCheck, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
@@ -32,6 +32,7 @@ function AppLayout() {
     { to: "/app/escalas", label: "Escalas Ordinárias", icon: ListOrdered, show: true },
     { to: "/app/ferias", label: "Plano de Férias", icon: Plane, show: true },
     { to: "/app/auditoria", label: "Auditoria", icon: ClipboardCheck, show: true },
+    { to: "/app/nbi/configuracoes", label: "NBI · Config", icon: FileText, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
     { to: "/app/assinaturas", label: "Assinaturas", icon: CreditCard, show: isAdmin },
