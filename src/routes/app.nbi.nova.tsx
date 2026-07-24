@@ -75,6 +75,7 @@ interface ResponsavelSnap {
 }
 
 interface Rascunho {
+  modo_numeracao: "manual" | "automatico";
   numero: string;
   ano: number;
   data_documento: string;
@@ -110,6 +111,7 @@ function NovaNbiPage() {
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
 
   const [rascunho, setRascunho] = useState<Rascunho>({
+    modo_numeracao: "automatico",
     numero: "",
     ano: new Date().getFullYear(),
     data_documento: new Date().toISOString().slice(0, 10),
@@ -492,7 +494,9 @@ function Etapa1({
   setRascunho: React.Dispatch<React.SetStateAction<Rascunho>>;
   onNext: () => void;
 }) {
-  const podeAvancar = rascunho.data_documento && rascunho.unidade.nome && rascunho.comandante.nome;
+  const modoManual = rascunho.modo_numeracao === "manual";
+  const numeroManualOk = !modoManual || (rascunho.numero.trim() !== "" && rascunho.ano > 1900);
+  const podeAvancar = rascunho.data_documento && rascunho.unidade.nome && rascunho.comandante.nome && numeroManualOk;
 
   function editarResp(chave: "digitador" | "comandante" | "autoridade", campo: keyof ResponsavelSnap, valor: string) {
     setRascunho((r) => ({ ...r, [chave]: { ...r[chave], [campo]: valor } }));
@@ -505,10 +509,44 @@ function Etapa1({
         <CardDescription>Estes valores vêm das Configurações; edite se necessário para esta nota.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="rounded-md border p-4">
+          <Label className="mb-2 block text-sm font-semibold">Modo de numeração</Label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="modo_numeracao"
+                checked={rascunho.modo_numeracao === "automatico"}
+                onChange={() => setRascunho({ ...rascunho, modo_numeracao: "automatico", numero: "" })}
+              />
+              Usar próximo número automático
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="modo_numeracao"
+                checked={rascunho.modo_numeracao === "manual"}
+                onChange={() => setRascunho({ ...rascunho, modo_numeracao: "manual" })}
+              />
+              Informar número manualmente
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {modoManual
+              ? "O número informado será usado exatamente como digitado, após verificação de colisão."
+              : "O próximo número da sequência será reservado no momento da geração."}
+          </p>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
           <div>
-            <Label>Número</Label>
-            <Input value={rascunho.numero} onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })} placeholder="Ex: 020" />
+            <Label>Número {modoManual && <span className="text-destructive">*</span>}</Label>
+            <Input
+              value={rascunho.numero}
+              onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })}
+              placeholder={modoManual ? "Ex: 018" : "(automático)"}
+              disabled={!modoManual}
+            />
           </div>
           <div>
             <Label>Ano</Label>
@@ -519,6 +557,7 @@ function Etapa1({
             <Input type="date" value={rascunho.data_documento} onChange={(e) => setRascunho({ ...rascunho, data_documento: e.target.value })} />
           </div>
         </div>
+
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
@@ -612,6 +651,7 @@ function Etapa2({
               template={t}
               militares={militares}
               ferias={ferias}
+              anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
               onRemove={() => remover(a.id)}
@@ -650,7 +690,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias,
+  index, assunto, template, militares, ferias, anoNbi,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -658,6 +698,7 @@ function AssuntoCard({
   template: TemplateRow;
   militares: MilitarNbi[];
   ferias: FeriasReg[];
+  anoNbi: number;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
   onRemove: () => void;
@@ -682,6 +723,10 @@ function AssuntoCard({
       );
       return;
     }
+
+    // Extrai ano explícito da frase (4 dígitos entre 2000 e 2100), se houver.
+    const anoMatch = frase.match(/\b(20\d{2})\b/);
+    const anoAlvo = anoMatch ? parseInt(anoMatch[1], 10) : anoNbi;
 
     let candidatos = militares.slice();
 
@@ -714,22 +759,39 @@ function AssuntoCard({
     }
 
     if (usaFerias) {
-      const anoAtual = new Date().getFullYear();
       const combos: Array<{ militar: MilitarNbi; ferias?: FeriasReg }> = [];
+      const naoEncontrado: string[] = [];
       for (const m of candidatos) {
+        // Consulta EXATA: militar_id + ano_alvo + periodo (quando informado).
+        // Nunca faz fallback silencioso para o primeiro registro.
         const filhas = ferias.filter((f) =>
           f.militar_id === m.id &&
-          f.ano === anoAtual &&
+          f.ano === anoAlvo &&
           (info.periodo == null || f.periodo === info.periodo),
         );
-        if (filhas.length === 0) combos.push({ militar: m });
-        else for (const f of filhas) combos.push({ militar: m, ferias: f });
+        if (filhas.length === 0) {
+          if (info.periodo != null) {
+            naoEncontrado.push(
+              `Não foi encontrado o ${periodoOrdinal(info.periodo)} período de férias de ${m.nome} no ano de ${anoAlvo}.`,
+            );
+          } else {
+            combos.push({ militar: m });
+          }
+        } else {
+          for (const f of filhas) combos.push({ militar: m, ferias: f });
+        }
       }
       setSugestoes(combos);
-      if (combos.length > 1) {
+      if (combos.length === 0 && naoEncontrado.length > 0) {
+        setAvisoSugestao(naoEncontrado.join(" "));
+      } else if (combos.length > 1) {
         setAvisoSugestao(`Foram encontrados ${combos.length} candidatos. Selecione o correto.`);
-      } else {
-        setAvisoSugestao("1 candidato encontrado — confirme antes de aplicar.");
+      } else if (combos.length === 1) {
+        setAvisoSugestao(
+          naoEncontrado.length > 0
+            ? `${naoEncontrado.join(" ")} 1 candidato encontrado — confirme antes de aplicar.`
+            : "1 candidato encontrado — confirme antes de aplicar.",
+        );
       }
     } else {
       setSugestoes(candidatos.map((m) => ({ militar: m })));
@@ -928,13 +990,30 @@ function Etapa3({
       toast.error("Salve o rascunho antes de gerar.");
       return;
     }
-    if (transicaoAno && !confirmarAno) {
+    if (rascunho.modo_numeracao === "manual") {
+      const n = parseInt(rascunho.numero.replace(/\D/g, ""), 10);
+      if (!Number.isFinite(n) || n < 1) {
+        toast.error("Informe o número manual da NBI na Etapa 1.");
+        return;
+      }
+    }
+    if (transicaoAno && !confirmarAno && rascunho.modo_numeracao === "automatico") {
       toast.error(`Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`);
       return;
     }
     setGerando(true);
     try {
-      const r = await gerar({ data: { documento_id: documentoId, confirmar_novo_ano: confirmarAno } });
+      const r = await gerar({
+        data: {
+          documento_id: documentoId,
+          confirmar_novo_ano: confirmarAno,
+          modo_numeracao: rascunho.modo_numeracao,
+          numero_manual: rascunho.modo_numeracao === "manual"
+            ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
+            : null,
+          ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
+        },
+      });
       if (!r.ok) {
         toast.error("Falha ao gerar NBI", { description: r.code });
       } else {
@@ -969,7 +1048,9 @@ function Etapa3({
           <div className="font-semibold">
             {gerado
               ? `NBI nº ${String(gerado.numero).padStart(3, "0")}/${gerado.ano}`
-              : `NBI nº (previsto: ${previsto ? String(previsto.proximo).padStart(3, "0") + "/" + previsto.ano_vigente : "…"})`}
+              : rascunho.modo_numeracao === "manual"
+                ? `NBI nº ${(rascunho.numero || "—").padStart(3, "0")}/${anoDoc} (manual)`
+                : `NBI nº (previsto: ${previsto ? String(previsto.proximo).padStart(3, "0") + "/" + previsto.ano_vigente : "…"})`}
             {" · "}{formatarDataBR(rascunho.data_documento)}
           </div>
           <div className="text-muted-foreground">{rascunho.unidade.nome} {rascunho.unidade.sigla && `(${rascunho.unidade.sigla})`}</div>

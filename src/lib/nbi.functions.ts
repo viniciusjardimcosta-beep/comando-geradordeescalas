@@ -149,9 +149,18 @@ function dedupPostoQuadro(v: string | null | undefined): string {
 
 export const gerarNbi = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { documento_id: string; confirmar_novo_ano?: boolean }) => ({
+  .inputValidator((input: {
+    documento_id: string;
+    confirmar_novo_ano?: boolean;
+    modo_numeracao?: "manual" | "automatico";
+    numero_manual?: number | null;
+    ano_manual?: number | null;
+  }) => ({
     documento_id: asUuid(input.documento_id),
     confirmar_novo_ano: Boolean(input.confirmar_novo_ano),
+    modo_numeracao: input.modo_numeracao === "manual" ? "manual" as const : "automatico" as const,
+    numero_manual: input.numero_manual != null ? Number(input.numero_manual) : null,
+    ano_manual: input.ano_manual != null ? Number(input.ano_manual) : null,
   }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -167,23 +176,89 @@ export const gerarNbi = createServerFn({ method: "POST" })
 
     const anoLocal = new Date(doc.data_documento + "T00:00:00Z").getUTCFullYear();
 
-    // 2. Reserva número se ainda não reservado
+    // 2. Reserva número — modo manual ou automático
     let numero = doc.numero_int as number | null;
     let ano = doc.numero_ano_local as number | null;
+
     if (!numero) {
-      const { data: rpc, error: eR } = await supabase.rpc("nbi_reservar_numero", {
-        _documento_id: data.documento_id,
-        _ano_local: anoLocal,
-        _confirmar_novo_ano: data.confirmar_novo_ano,
-      });
-      if (eR) {
-        return { ok: false as const, code: eR.message };
-      }
-      const row = Array.isArray(rpc) ? rpc[0] : rpc;
-      numero = row?.numero as number;
-      ano = row?.ano as number;
-      if (row?.reservado) {
-        await auditar(data.documento_id, userId, "reservou", { numero, ano });
+      if (data.modo_numeracao === "manual") {
+        // Modo manual: validar entradas e checar colisão
+        const n = data.numero_manual;
+        const a = data.ano_manual ?? anoLocal;
+        if (!n || !Number.isFinite(n) || n < 1 || n > 9999) {
+          return { ok: false as const, code: "Número manual inválido (1–9999)." };
+        }
+        if (a !== anoLocal) {
+          return { ok: false as const, code: `Ano informado (${a}) diverge do ano da data do documento (${anoLocal}).` };
+        }
+        // Colisão: mesmo user_id + ano + numero já emitido (mesmo cancelado — número não reutilizado)
+        const { data: existente } = await supabase
+          .from("nbi_documents")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("numero_ano_local", a)
+          .eq("numero_int", n)
+          .neq("id", data.documento_id)
+          .limit(1)
+          .maybeSingle();
+        if (existente) {
+          return { ok: false as const, code: `Número ${String(n).padStart(3, "0")}/${a} já foi utilizado nesta unidade.` };
+        }
+        // Aplica número manual no documento
+        const { supabaseAdmin: sa } = await import("@/integrations/supabase/client.server");
+        const { error: eMan } = await sa
+          .from("nbi_documents")
+          .update({
+            numero_int: n,
+            numero_ano_local: a,
+            numero: String(n).padStart(3, "0"),
+            ano: a,
+            reserved_at: new Date().toISOString(),
+            status: "reservado",
+          })
+          .eq("id", data.documento_id)
+          .eq("user_id", userId);
+        if (eMan) return { ok: false as const, code: "Falha ao aplicar número manual." };
+
+        // Atualiza nbi_numeracao se avançou a sequência (mesmo ano_vigente) ou novo ano
+        const { data: numRow } = await sa
+          .from("nbi_numeracao")
+          .select("id,ano_vigente,ultima_nota")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (!numRow) {
+          await sa.from("nbi_numeracao").insert({
+            user_id: userId, ano_vigente: a, ultima_nota: n, reiniciar_anualmente: true,
+          });
+        } else if (a > numRow.ano_vigente) {
+          await sa.from("nbi_numeracao").update({ ano_vigente: a, ultima_nota: n }).eq("id", numRow.id);
+        } else if (a === numRow.ano_vigente && n > numRow.ultima_nota) {
+          await sa.from("nbi_numeracao").update({ ultima_nota: n }).eq("id", numRow.id);
+        }
+        await sa.from("nbi_numeracao_log").insert({
+          user_id: userId,
+          acao: "manual",
+          antes: { ano_vigente: numRow?.ano_vigente ?? null, ultima_nota: numRow?.ultima_nota ?? null },
+          depois: { ano_vigente: a, ultima_nota: Math.max(n, numRow?.ultima_nota ?? 0) },
+          detalhe: `manual documento ${data.documento_id}`,
+        });
+        numero = n; ano = a;
+        await auditar(data.documento_id, userId, "reservou", { numero, ano, modo: "manual" });
+      } else {
+        const { data: rpc, error: eR } = await supabase.rpc("nbi_reservar_numero", {
+          _documento_id: data.documento_id,
+          _ano_local: anoLocal,
+          _confirmar_novo_ano: data.confirmar_novo_ano,
+        });
+        if (eR) {
+          return { ok: false as const, code: eR.message };
+        }
+        const row = Array.isArray(rpc) ? rpc[0] : rpc;
+        numero = row?.numero as number;
+        ano = row?.ano as number;
+        if (row?.reservado) {
+          await auditar(data.documento_id, userId, "reservou", { numero, ano, modo: "automatico" });
+        }
       }
     }
 
@@ -203,13 +278,22 @@ export const gerarNbi = createServerFn({ method: "POST" })
     // 4. Monta payload de placeholders + seções
     const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
     const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
-    const secoes = assuntosRaw.map((a) => ({
-      TITULO_SECAO: (a.titulo ?? "").toUpperCase(),
-      ITENS: (a.texto_final ?? "")
+    // Agrupamento por blocos consecutivos do mesmo título — evita repetição de título.
+    const secoes: Array<{ TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }> = [];
+    for (const a of assuntosRaw) {
+      const titulo = (a.titulo ?? "").toUpperCase();
+      const itens = (a.texto_final ?? "")
         .split(/\n{2,}/)
         .map((t) => ({ TEXTO_ITEM: t.trim() }))
-        .filter((x) => x.TEXTO_ITEM.length > 0),
-    }));
+        .filter((x) => x.TEXTO_ITEM.length > 0);
+      if (itens.length === 0) continue;
+      const last = secoes[secoes.length - 1];
+      if (last && last.TITULO_SECAO === titulo) {
+        last.ITENS.push(...itens);
+      } else {
+        secoes.push({ TITULO_SECAO: titulo, ITENS: itens });
+      }
+    }
 
     const numeroFmt = String(numero).padStart(3, "0");
     const dataNota = dataBR(doc.data_documento);
