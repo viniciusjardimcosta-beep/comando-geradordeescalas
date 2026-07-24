@@ -409,15 +409,18 @@ export type Database = {
           autoridade_lotacao: string | null
           autoridade_militar_id: string | null
           autoridade_nome: string | null
+          autoridade_posto_quadro: string | null
           comandante_funcao: string | null
           comandante_lotacao: string | null
           comandante_militar_id: string | null
           comandante_nome: string | null
+          comandante_posto_quadro: string | null
           created_at: string
           digitador_funcao: string | null
           digitador_lotacao: string | null
           digitador_militar_id: string | null
           digitador_nome: string | null
+          digitador_posto_quadro: string | null
           id: string
           unidade_nome: string | null
           unidade_sigla: string | null
@@ -429,15 +432,18 @@ export type Database = {
           autoridade_lotacao?: string | null
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
+          autoridade_posto_quadro?: string | null
           comandante_funcao?: string | null
           comandante_lotacao?: string | null
           comandante_militar_id?: string | null
           comandante_nome?: string | null
+          comandante_posto_quadro?: string | null
           created_at?: string
           digitador_funcao?: string | null
           digitador_lotacao?: string | null
           digitador_militar_id?: string | null
           digitador_nome?: string | null
+          digitador_posto_quadro?: string | null
           id?: string
           unidade_nome?: string | null
           unidade_sigla?: string | null
@@ -449,15 +455,18 @@ export type Database = {
           autoridade_lotacao?: string | null
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
+          autoridade_posto_quadro?: string | null
           comandante_funcao?: string | null
           comandante_lotacao?: string | null
           comandante_militar_id?: string | null
           comandante_nome?: string | null
+          comandante_posto_quadro?: string | null
           created_at?: string
           digitador_funcao?: string | null
           digitador_lotacao?: string | null
           digitador_militar_id?: string | null
           digitador_nome?: string | null
+          digitador_posto_quadro?: string | null
           id?: string
           unidade_nome?: string | null
           unidade_sigla?: string | null
