@@ -94,10 +94,13 @@ function uid() {
 function NovaNbiPage() {
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
+  const search = useSearch({ from: "/app/nbi/nova" });
+  const rascunhoId = search.rascunho ?? null;
 
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
+  const [documentoId, setDocumentoId] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
@@ -116,8 +119,8 @@ function NovaNbiPage() {
 
   useEffect(() => {
     if (!userId) return;
-    void carregar(userId);
-  }, [userId]);
+    void carregar(userId, rascunhoId);
+  }, [userId, rascunhoId]);
 
   async function carregar(uid: string) {
     setLoading(true);
