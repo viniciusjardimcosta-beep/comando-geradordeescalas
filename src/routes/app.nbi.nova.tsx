@@ -380,7 +380,11 @@ function NovaNbiPage() {
         const { texto, ausentes } = textoFinal(a);
         return {
           tipo: a.tipo,
+          template_codigo: t?.codigo ?? a.tipo,
           titulo: t?.titulo ?? a.tipo,
+          titulo_documento:
+            (t as unknown as { titulo_documento?: string | null } | undefined)?.titulo_documento ??
+            (t?.titulo ?? a.tipo).toUpperCase(),
           militar_id: a.militar_id,
           militar_titular_id: a.militar_titular_id,
           ferias_id: a.ferias_id,
