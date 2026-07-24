@@ -463,6 +463,7 @@ function NovaNbiPage() {
           templates={templates}
           militares={militares}
           textoFinal={textoFinal}
+          pendencias={pendencias}
           onBack={() => setEtapa(2)}
           onSalvar={salvarRascunho}
           salvando={salvando}
