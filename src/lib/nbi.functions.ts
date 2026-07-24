@@ -174,8 +174,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const modeloBuf = Buffer.from(await modelo.arrayBuffer());
 
     // 4. Monta payload de placeholders + seções
-    const resp = (doc.responsaveis ?? {}) as SnapshotResponsaveis;
-    const assuntosRaw = (doc.assuntos ?? []) as SnapshotAssunto[];
+    const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
+    const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
     const secoes = assuntosRaw.map((a) => ({
       TITULO_SECAO: (a.titulo ?? "").toUpperCase(),
       ITENS: (a.texto_final ?? "")
