@@ -17,16 +17,21 @@ async function carregarSpellchecker(): Promise<Spellchecker> {
   if (carregando) return carregando;
 
   carregando = (async () => {
+    // Só carrega no navegador; nunca durante SSR.
+    if (typeof window === "undefined") {
+      throw new Error("spellchecker indisponível no servidor");
+    }
     // Dinâmico: só entra no bundle quando o operador realmente digita em campo livre.
-    const [{ default: nspell }, affMod, dicMod] = await Promise.all([
+    // Dicionário servido como asset estático em /public para evitar o subpath
+    // exports do pacote dictionary-pt (que só expõe ./index.js — Node-only).
+    const [{ default: nspell }, affRes, dicRes] = await Promise.all([
       import("nspell"),
-      import("dictionary-pt/index.aff?url"),
-      import("dictionary-pt/index.dic?url"),
+      fetch("/dicionarios/pt/pt.aff"),
+      fetch("/dicionarios/pt/pt.dic"),
     ]);
-    const [affRes, dicRes] = await Promise.all([
-      fetch((affMod as { default: string }).default),
-      fetch((dicMod as { default: string }).default),
-    ]);
+    if (!affRes.ok || !dicRes.ok) {
+      throw new Error("falha ao baixar dicionário PT");
+    }
     const [aff, dic] = await Promise.all([affRes.text(), dicRes.text()]);
     const spell = nspell({ aff, dic });
     cache = spell as Spellchecker;
