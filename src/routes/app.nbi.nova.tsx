@@ -86,7 +86,7 @@ interface Rascunho {
   assuntos: AssuntoLocal[];
 }
 
-const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao", "dispensa"];
+const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao_funcao", "dispensa_funcao"];
 const RESP_VAZIO: ResponsavelSnap = { nome: "", posto_quadro: "", funcao: "", lotacao: "" };
 
 function uid() {
