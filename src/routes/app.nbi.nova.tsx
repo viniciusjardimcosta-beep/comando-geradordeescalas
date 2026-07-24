@@ -42,8 +42,10 @@ export const Route = createFileRoute("/app/nbi/nova")({
 
 interface TemplateRow {
   id: string;
-  codigo: AssuntoTipo;
+  codigo: string;
   titulo: string;
+  titulo_documento: string | null;
+  disponivel: boolean;
   ordem: number;
   texto_modelo: string;
   campos: Array<{
@@ -86,7 +88,7 @@ interface Rascunho {
   assuntos: AssuntoLocal[];
 }
 
-const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao_funcao", "dispensa_funcao"];
+const RESP_VAZIO_KEY = "__resp_vazio__" as const; void RESP_VAZIO_KEY;
 const RESP_VAZIO: ResponsavelSnap = { nome: "", posto_quadro: "", funcao: "", lotacao: "" };
 
 function uid() {
@@ -131,7 +133,7 @@ function NovaNbiPage() {
     setLoading(true);
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
-        supabase.from("nbi_templates").select("id,codigo,titulo,ordem,texto_modelo,campos").eq("disponivel", true).order("ordem"),
+        supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
         supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
@@ -187,14 +189,18 @@ function NovaNbiPage() {
   }
 
   const templatePor = useMemo(() => {
-    const m = new Map<AssuntoTipo, TemplateRow>();
+    const m = new Map<string, TemplateRow>();
     for (const t of templates) m.set(t.codigo, t);
     return m;
   }, [templates]);
 
-  function adicionarAssunto(tipo: AssuntoTipo) {
-    const t = templatePor.get(tipo);
+  function adicionarAssunto(codigo: string) {
+    const t = templatePor.get(codigo);
     if (!t) return;
+    if (!CODIGOS_HOMOLOGADOS.has(codigo) || !t.disponivel) {
+      toast.error("Modelo ainda não configurado para geração");
+      return;
+    }
     const campos: Record<string, string | boolean> = {};
     for (const c of t.campos) {
       if (c.tipo === "boolean") campos[c.chave] = Boolean(c.default ?? false);
@@ -203,7 +209,7 @@ function NovaNbiPage() {
       ...r,
       assuntos: [...r.assuntos, {
         id: uid(),
-        tipo,
+        tipo: codigo as AssuntoTipo,
         militar_id: null,
         militar_titular_id: null,
         ferias_id: null,
