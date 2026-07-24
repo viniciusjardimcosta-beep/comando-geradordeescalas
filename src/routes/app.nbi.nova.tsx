@@ -572,6 +572,7 @@ function Etapa2({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const total = rascunho.assuntos.length;
   return (
     <Card>
       <CardHeader>
@@ -579,7 +580,7 @@ function Etapa2({
         <CardDescription>Adicione um ou mais assuntos. Você pode reordenar, editar e remover livremente.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {TIPOS_ORDEM.map((tipo) => {
             const t = templates.find((x) => x.codigo === tipo);
             if (!t) return null;
@@ -589,6 +590,9 @@ function Etapa2({
               </Button>
             );
           })}
+          <span className="ml-auto text-xs text-muted-foreground">
+            {total === 0 ? "Nenhum assunto adicionado" : total === 1 ? "1 assunto adicionado" : `${total} assuntos adicionados`}
+          </span>
         </div>
 
         {rascunho.assuntos.length === 0 && (
@@ -616,6 +620,25 @@ function Etapa2({
             />
           );
         })}
+
+        {rascunho.assuntos.length > 0 && (
+          <div className="rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+              + Adicionar outro assunto
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {TIPOS_ORDEM.map((tipo) => {
+                const t = templates.find((x) => x.codigo === tipo);
+                if (!t) return null;
+                return (
+                  <Button key={`add-${tipo}`} size="sm" variant="secondary" onClick={() => adicionar(tipo)}>
+                    <Plus className="mr-1 h-4 w-4" /> {t.titulo}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
