@@ -870,8 +870,8 @@ function Etapa3({
       if (!r.ok) {
         toast.error("Falha ao gerar NBI", { description: r.code });
       } else {
-        setGerado({ numero: r.numero, ano: r.ano });
-        toast.success(`NBI nº ${String(r.numero).padStart(3, "0")}/${r.ano} gerada`);
+        setGerado({ numero: r.numero ?? 0, ano: r.ano ?? new Date().getFullYear() });
+        toast.success(`NBI nº ${String(r.numero ?? 0).padStart(3, "0")}/${r.ano} gerada`);
       }
     } catch (e) {
       toast.error("Falha ao gerar NBI", { description: (e as Error).message });
