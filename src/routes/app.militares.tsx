@@ -28,6 +28,7 @@ export const Route = createFileRoute("/app/militares")({
 });
 
 type TipoEscala = "24h" | "parcial";
+type Genero = "" | "M" | "F";
 
 interface Militar {
   id: string;
@@ -41,6 +42,11 @@ interface Militar {
   observacoes: string | null;
   created_at: string;
   tipo_escala: TipoEscala;
+  quadro: string | null;
+  lotacao_nbi: string | null;
+  funcao_atual: string | null;
+  genero_gramatical: string | null;
+  nome_guerra: string | null;
 }
 
 interface FormState {
@@ -53,6 +59,11 @@ interface FormState {
   ativo: boolean;
   observacoes: string;
   tipo_escala: TipoEscala;
+  quadro: string;
+  lotacao_nbi: string;
+  funcao_atual: string;
+  genero_gramatical: Genero;
+  nome_guerra: string;
 }
 
 const emptyForm: FormState = {
@@ -65,7 +76,15 @@ const emptyForm: FormState = {
   ativo: true,
   observacoes: "",
   tipo_escala: "24h",
+  quadro: "",
+  lotacao_nbi: "",
+  funcao_atual: "",
+  genero_gramatical: "",
+  nome_guerra: "",
 };
+
+const QUADROS_SUGERIDOS = ["QPBM", "QTBM", "QOEM", "QOBM", "PME"];
+
 
 type Filter = "todos" | "cov" | "cg" | "adm" | "bm";
 
