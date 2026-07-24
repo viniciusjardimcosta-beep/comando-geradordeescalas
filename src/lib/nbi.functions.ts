@@ -278,13 +278,22 @@ export const gerarNbi = createServerFn({ method: "POST" })
     // 4. Monta payload de placeholders + seções
     const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
     const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
-    const secoes = assuntosRaw.map((a) => ({
-      TITULO_SECAO: (a.titulo ?? "").toUpperCase(),
-      ITENS: (a.texto_final ?? "")
+    // Agrupamento por blocos consecutivos do mesmo título — evita repetição de título.
+    const secoes: Array<{ TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }> = [];
+    for (const a of assuntosRaw) {
+      const titulo = (a.titulo ?? "").toUpperCase();
+      const itens = (a.texto_final ?? "")
         .split(/\n{2,}/)
         .map((t) => ({ TEXTO_ITEM: t.trim() }))
-        .filter((x) => x.TEXTO_ITEM.length > 0),
-    }));
+        .filter((x) => x.TEXTO_ITEM.length > 0);
+      if (itens.length === 0) continue;
+      const last = secoes[secoes.length - 1];
+      if (last && last.TITULO_SECAO === titulo) {
+        last.ITENS.push(...itens);
+      } else {
+        secoes.push({ TITULO_SECAO: titulo, ITENS: itens });
+      }
+    }
 
     const numeroFmt = String(numero).padStart(3, "0");
     const dataNota = dataBR(doc.data_documento);
