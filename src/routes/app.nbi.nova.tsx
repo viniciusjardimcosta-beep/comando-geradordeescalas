@@ -808,17 +808,32 @@ function AssuntoCard({
 // ============ ETAPA 3 ============
 
 function Etapa3({
-  rascunho, templates, militares, textoFinal, onBack, onSalvar, salvando,
+  rascunho, templates, militares, textoFinal, pendencias, onBack, onSalvar, salvando,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
   militares: MilitarNbi[];
   textoFinal: (a: AssuntoLocal) => { texto: string; ausentes: string[] };
+  pendencias: (a: AssuntoLocal) => string[];
   onBack: () => void;
   onSalvar: () => void;
   salvando: boolean;
 }) {
   const [finalizado, setFinalizado] = useState(false);
+
+  const resumoPend = rascunho.assuntos.map((a) => {
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const militar = militares.find((m) => m.id === a.militar_id);
+    return {
+      id: a.id,
+      titulo: t?.titulo ?? a.tipo,
+      militar: militar?.nome ?? null,
+      lista: pendencias(a),
+    };
+  });
+  const totalPend = resumoPend.reduce((acc, r) => acc + r.lista.length, 0);
+  const semAssuntos = rascunho.assuntos.length === 0;
+  const bloqueado = semAssuntos || totalPend > 0;
 
   return (
     <Card>
@@ -837,26 +852,56 @@ function Etapa3({
           if (!t) return null;
           const { texto, ausentes } = textoFinal(a);
           const militar = militares.find((m) => m.id === a.militar_id);
+          const pend = pendencias(a);
+          const usaFerias = a.tipo === "ferias" || a.tipo === "apresentacao";
           return (
             <div key={a.id} className="rounded-md border p-4">
               <div className="mb-2 flex items-center gap-2">
                 <Badge>#{idx + 1}</Badge>
                 <span className="font-semibold">{t.titulo}</span>
-                {ausentes.length === 0
+                {pend.length === 0
                   ? <Badge variant="secondary" className="ml-auto"><CheckCircle2 className="mr-1 h-3 w-3" /> Completo</Badge>
-                  : <Badge variant="destructive" className="ml-auto"><AlertTriangle className="mr-1 h-3 w-3" /> {ausentes.length} campo(s) ausente(s)</Badge>}
+                  : <Badge variant="destructive" className="ml-auto"><AlertTriangle className="mr-1 h-3 w-3" /> {pend.length} pendência(s)</Badge>}
               </div>
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{texto}</p>
               <Separator className="my-3" />
-              <div className="text-xs text-muted-foreground">
-                <p><strong>Origem:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "militar não selecionado"}</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p><strong>Militar:</strong> {militar ? `${militar.nome} · ID ${militar.matricula ?? "—"}` : "não selecionado"} <span className="italic">(fonte: Cadastro de Militares)</span></p>
+                {usaFerias && a.ferias_id && (
+                  <p><strong>Datas:</strong> preenchidas a partir do <span className="italic">Banco de Férias</span></p>
+                )}
+                <p><strong>Texto:</strong> <span className="italic">Modelo oficial NBI</span> (interpolação literal de placeholders)</p>
                 {ausentes.length > 0 && (
-                  <p className="mt-1 text-destructive">Campos pendentes: {ausentes.join(", ")}</p>
+                  <p className="text-amber-600 dark:text-amber-400">Placeholders não substituídos: {ausentes.join(", ")}</p>
+                )}
+                {pend.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5 text-destructive">
+                    {pend.map((p, i) => <li key={i}>{p}</li>)}
+                  </ul>
                 )}
               </div>
             </div>
           );
         })}
+
+        {bloqueado && !semAssuntos && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="mb-2 flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" />
+              Não é possível finalizar. Existem {totalPend} campo(s) obrigatório(s) pendente(s).
+            </div>
+            <ul className="space-y-2 pl-1">
+              {resumoPend.filter((r) => r.lista.length > 0).map((r) => (
+                <li key={r.id}>
+                  <div className="font-medium">{r.titulo}{r.militar ? ` — ${r.militar}` : ""}:</div>
+                  <ul className="ml-4 list-disc">
+                    {r.lista.map((m, i) => <li key={i}>{m}</li>)}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {finalizado && (
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
@@ -872,7 +917,7 @@ function Etapa3({
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar rascunho
             </Button>
-            <Button onClick={() => setFinalizado(true)} disabled={rascunho.assuntos.length === 0}>
+            <Button onClick={() => setFinalizado(true)} disabled={bloqueado}>
               Finalizar conferência
             </Button>
           </div>
