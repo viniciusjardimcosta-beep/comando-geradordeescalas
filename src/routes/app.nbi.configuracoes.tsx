@@ -45,6 +45,12 @@ interface Responsavel {
 interface NbiSettingsForm {
   unidade_nome: string;
   unidade_sigla: string;
+  cabecalho_estado: string;
+  cabecalho_secretaria: string;
+  cabecalho_corporacao: string;
+  cabecalho_batalhao: string;
+  cabecalho_subunidade: string;
+  cabecalho_cidade: string;
   digitador: Responsavel;
   comandante: Responsavel;
   autoridade: Responsavel;
@@ -61,6 +67,12 @@ const emptyResp: Responsavel = {
 const emptySettings: NbiSettingsForm = {
   unidade_nome: "",
   unidade_sigla: "",
+  cabecalho_estado: "",
+  cabecalho_secretaria: "",
+  cabecalho_corporacao: "",
+  cabecalho_batalhao: "",
+  cabecalho_subunidade: "",
+  cabecalho_cidade: "",
   digitador: { ...emptyResp },
   comandante: { ...emptyResp },
   autoridade: { ...emptyResp },
