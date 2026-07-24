@@ -1,7 +1,7 @@
 // Utilitários do módulo NBI — sem dependência do motor de escalas.
 // Todas as chaves de placeholder são SEM acento (LOTACAO, MISSAO, FUNCAO_*).
 
-export type AssuntoTipo = "ferias" | "apresentacao" | "viagem" | "assuncao" | "dispensa";
+export type AssuntoTipo = "ferias" | "apresentacao" | "viagem" | "assuncao_funcao" | "dispensa_funcao";
 
 export interface MilitarNbi {
   id: string;
