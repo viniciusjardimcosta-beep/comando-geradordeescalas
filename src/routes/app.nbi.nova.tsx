@@ -26,6 +26,9 @@ import {
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
+  validateSearch: (s: Record<string, unknown>): { rascunho?: string } => ({
+    rascunho: typeof s.rascunho === "string" ? s.rascunho : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Nova NBI — Comando" },
