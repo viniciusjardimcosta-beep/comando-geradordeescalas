@@ -124,6 +124,28 @@ function dataExtenso(iso: string): string {
   const [y, m, d] = iso.split("-").map((v) => parseInt(v, 10));
   return `${String(d).padStart(2, "0")} de ${mesExtenso(m)} de ${y}`;
 }
+function dataBR(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// Deduplica quadro/token repetido no posto_quadro (ex: "1º Sargento QPBM QPBM").
+function dedupPostoQuadro(v: string | null | undefined): string {
+  const s = String(v ?? "").trim().replace(/\s+/g, " ");
+  if (!s) return "";
+  const stripAcc = (x: string) =>
+    x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  const partes = s.split(" ");
+  const out: string[] = [];
+  const vistos = new Set<string>();
+  for (const p of partes) {
+    const key = stripAcc(p);
+    if (vistos.has(key)) continue;
+    vistos.add(key);
+    out.push(p);
+  }
+  return out.join(" ");
+}
 
 export const gerarNbi = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -165,6 +187,11 @@ export const gerarNbi = createServerFn({ method: "POST" })
       }
     }
 
+    // Confirma que número e ano estão definidos antes de prosseguir.
+    if (!numero || !ano) {
+      throw new Error("Número da NBI não pôde ser reservado");
+    }
+
     // 3. Baixa modelo mestre do storage (admin, arquivo do sistema)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: modelo, error: eM } = await supabaseAdmin.storage
@@ -184,27 +211,62 @@ export const gerarNbi = createServerFn({ method: "POST" })
         .filter((x) => x.TEXTO_ITEM.length > 0),
     }));
 
-    const numeroFmt = String(numero ?? 0).padStart(3, "0");
+    const numeroFmt = String(numero).padStart(3, "0");
+    const dataNota = dataBR(doc.data_documento);
+
+    // Objeto explícito enviado ao docxtemplater. Nomes de chaves fixos
+    // acordados com o modelo mestre (sem acentos, sempre maiúsculo).
     const placeholders: Record<string, string> = {
+      NUMERO_NOTA: `${numeroFmt}/${ano}`,
+      DATA_NOTA: dataNota,
+      // Compatibilidade com chaves antigas do modelo mestre (caso ainda existam)
+      NUMERO_NBI: numeroFmt,
+      ANO_NBI: String(ano),
+      DATA_DOCUMENTO: dataExtenso(doc.data_documento),
       UNIDADE_CABECALHO: resp.unidade?.nome ?? "",
       UNIDADE_SIGLA: resp.unidade?.sigla ?? "",
-      NUMERO_NBI: numeroFmt,
-      ANO_NBI: String(ano ?? anoLocal),
-      DATA_DOCUMENTO: dataExtenso(doc.data_documento),
       LOCAL_DATA: `${resp.unidade?.sigla ?? ""}, ${dataExtenso(doc.data_documento)}`.trim(),
+
       NOME_DIGITADOR: resp.digitador?.nome ?? "",
-      POSTO_DIGITADOR: resp.digitador?.posto_quadro ?? "",
+      POSTO_QUADRO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
+      POSTO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
       FUNCAO_DIGITADOR: resp.digitador?.funcao ?? "",
       LOTACAO_DIGITADOR: resp.digitador?.lotacao ?? "",
+
       NOME_COMANDANTE: resp.comandante?.nome ?? "",
-      POSTO_COMANDANTE: resp.comandante?.posto_quadro ?? "",
+      POSTO_QUADRO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
+      POSTO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
       FUNCAO_COMANDANTE: resp.comandante?.funcao ?? "",
       LOTACAO_COMANDANTE: resp.comandante?.lotacao ?? "",
+
       NOME_AUTORIDADE: resp.autoridade?.nome ?? "",
-      POSTO_AUTORIDADE: resp.autoridade?.posto_quadro ?? "",
+      POSTO_QUADRO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
+      POSTO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
       FUNCAO_AUTORIDADE: resp.autoridade?.funcao ?? "",
       LOTACAO_AUTORIDADE: resp.autoridade?.lotacao ?? "",
     };
+
+    // Validação pré-renderização: nenhum campo obrigatório pode ser
+    // undefined, null, vazio ou string "undefined"/"null".
+    const obrigatorios = [
+      "NUMERO_NOTA", "DATA_NOTA", "UNIDADE_CABECALHO",
+      "NOME_DIGITADOR", "POSTO_QUADRO_DIGITADOR", "FUNCAO_DIGITADOR",
+      "NOME_COMANDANTE", "POSTO_QUADRO_COMANDANTE", "FUNCAO_COMANDANTE",
+    ];
+    const ausentes: string[] = [];
+    for (const k of obrigatorios) {
+      const v = placeholders[k];
+      if (v === undefined || v === null || v === "" || v === "undefined" || v === "null" || v === "[object Object]") {
+        ausentes.push(k);
+      }
+    }
+    if (secoes.length === 0) ausentes.push("SECOES");
+    if (ausentes.length > 0) {
+      return {
+        ok: false as const,
+        code: `Campos obrigatórios ausentes: ${ausentes.join(", ")}`,
+      };
+    }
 
     // 5. Renderiza DOCX
     const PizZip = (await import("pizzip")).default;
@@ -214,12 +276,30 @@ export const gerarNbi = createServerFn({ method: "POST" })
       paragraphLoop: true,
       linebreaks: true,
       delimiters: { start: "{", end: "}" },
+      // Nunca deixe passar "undefined" — retorna string vazia e coletamos ausentes.
+      nullGetter: () => "",
     });
     dt.render({ ...placeholders, SECOES: secoes });
+
+    // Validação pós-renderização: nenhum placeholder residual ou "undefined".
+    const textoRender = dt.getFullText();
+    const residuoPlaceholder = /\{[A-Z0-9_]+\}/.test(textoRender);
+    const residuoUndef = /\b(undefined|null)\b/.test(textoRender);
+    if (residuoPlaceholder || residuoUndef) {
+      const amostras = [
+        ...(textoRender.match(/\{[A-Z0-9_]+\}/g) ?? []),
+        ...(textoRender.match(/\b(undefined|null)\b/g) ?? []),
+      ];
+      return {
+        ok: false as const,
+        code: `Documento contém marcadores não substituídos: ${Array.from(new Set(amostras)).slice(0, 6).join(", ")}`,
+      };
+    }
+
     const buf = dt.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
 
     // 6. Upload no bucket
-    const path = `${userId}/${ano}/nbi-${String(numero).padStart(3, "0")}-${data.documento_id}.docx`;
+    const path = `${userId}/${ano}/nbi-${numeroFmt}-${data.documento_id}.docx`;
     const { error: eU } = await supabaseAdmin.storage
       .from("nbi-documentos")
       .upload(path, buf, {

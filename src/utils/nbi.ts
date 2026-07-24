@@ -201,10 +201,18 @@ export function postoMilitarCombina(postoCadastrado: string | null | undefined, 
 
 
 export function montarPostoQuadro(posto: string | null, quadro: string | null): string {
-  const p = (posto ?? "").trim();
-  const q = (quadro ?? "").trim();
-  if (p && q) return `${p} ${q}`;
-  return p || q;
+  const p = (posto ?? "").trim().replace(/\s+/g, " ");
+  const q = (quadro ?? "").trim().replace(/\s+/g, " ");
+  if (!p) return q;
+  if (!q) return p;
+  // Detecta duplicação do quadro no posto (case/acento-insensitive)
+  const norm = (s: string) => stripDiacritics(s).toUpperCase().replace(/\s+/g, " ").trim();
+  const pN = norm(p);
+  const qN = norm(q);
+  // Já contém o quadro como token isolado?
+  const re = new RegExp(`(^|\\s)${qN.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}(\\s|$)`);
+  if (re.test(pN)) return p;
+  return `${p} ${q}`;
 }
 
 export function artigoO(genero: string | null | undefined): string {
