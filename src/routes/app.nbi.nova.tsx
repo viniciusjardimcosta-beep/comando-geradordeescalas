@@ -26,6 +26,10 @@ import {
   montarPostoQuadro, artigoO, artigoAo,
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
+import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
+import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
+import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
