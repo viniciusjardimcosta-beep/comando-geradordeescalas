@@ -644,19 +644,46 @@ function AssuntoCard({
   function interpretarFrase() {
     setSugestoes([]);
     setAvisoSugestao(null);
-    const { periodo, nome } = extrairPeriodoENome(frase);
-    if (!nome) {
-      setAvisoSugestao("Não consegui identificar o nome. Ex.: “segundo período de férias de Ademir”.");
+    const info = analisarFraseNbi(frase);
+
+    // nenhum critério identificado
+    if (!info.matricula && !info.postoCanonico && info.termos.length === 0) {
+      setAvisoSugestao(
+        'Não foi possível identificar o militar. Informe nome, matrícula ou posto. Ex.: "primeiro período do 1º sargento 1" · "férias matrícula 333333" · "segundo período de férias de Ademir".',
+      );
       return;
     }
-    const candidatos = militares.filter((m) =>
-      (m.nome || "").toLowerCase().includes(nome) ||
-      (m.nome_guerra || "").toLowerCase().includes(nome),
-    );
+
+    let candidatos = militares.slice();
+
+    // filtro por matrícula (prioritário)
+    if (info.matricula) {
+      const filtro = candidatos.filter((m) => (m.matricula || "").includes(info.matricula!));
+      if (filtro.length > 0) candidatos = filtro;
+    }
+
+    // filtro por posto/graduação
+    if (info.postoCanonico) {
+      const filtro = candidatos.filter((m) => postoMilitarCombina(m.posto_graduacao, info.postoCanonico));
+      if (filtro.length > 0) candidatos = filtro;
+    }
+
+    // filtro por termos livres (nome, nome de guerra, matrícula, IDs fictícios)
+    if (info.termos.length > 0) {
+      const filtro = candidatos.filter((m) => {
+        const alvos = [m.nome, m.nome_guerra, m.matricula]
+          .filter((v): v is string => Boolean(v))
+          .map((v) => normalizarTextoNbi(v));
+        return info.termos.some((t) => alvos.some((a) => a.includes(t)));
+      });
+      if (filtro.length > 0) candidatos = filtro;
+    }
+
     if (candidatos.length === 0) {
-      setAvisoSugestao(`Nenhum militar encontrado com “${nome}”.`);
+      setAvisoSugestao("Nenhum militar compatível encontrado com os termos informados.");
       return;
     }
+
     if (usaFerias) {
       const anoAtual = new Date().getFullYear();
       const combos: Array<{ militar: MilitarNbi; ferias?: FeriasReg }> = [];
@@ -664,24 +691,35 @@ function AssuntoCard({
         const filhas = ferias.filter((f) =>
           f.militar_id === m.id &&
           f.ano === anoAtual &&
-          (periodo == null || f.periodo === periodo),
+          (info.periodo == null || f.periodo === info.periodo),
         );
         if (filhas.length === 0) combos.push({ militar: m });
         else for (const f of filhas) combos.push({ militar: m, ferias: f });
       }
       setSugestoes(combos);
-      if (combos.length > 1) setAvisoSugestao("Ambiguidade: escolha manualmente o militar/período correto.");
+      if (combos.length > 1) {
+        setAvisoSugestao(`Foram encontrados ${combos.length} candidatos. Selecione o correto.`);
+      } else {
+        setAvisoSugestao("1 candidato encontrado — confirme antes de aplicar.");
+      }
     } else {
       setSugestoes(candidatos.map((m) => ({ militar: m })));
-      if (candidatos.length > 1) setAvisoSugestao("Mais de um militar encontrado — confirme a seleção.");
+      if (candidatos.length > 1) {
+        setAvisoSugestao(`Foram encontrados ${candidatos.length} militares compatíveis. Selecione o correto.`);
+      } else {
+        setAvisoSugestao("1 candidato encontrado — confirme antes de aplicar.");
+      }
     }
   }
 
   function aplicarSugestao(s: { militar: MilitarNbi; ferias?: FeriasReg }) {
     onChange({ militar_id: s.militar.id, ferias_id: s.ferias?.id ?? null });
     if (s.ferias) {
+      const dias = diasEntreISO(s.ferias.data_inicio, s.ferias.data_fim);
       onCampo("DATA_INICIO", s.ferias.data_inicio);
       onCampo("DATA_FIM", s.ferias.data_fim);
+      onCampo("QTD_DIAS", String(dias));
+      onCampo("DATA_APRESENTACAO", somarDiasISO(s.ferias.data_fim, 1));
       onCampo("PERIODO", String(s.ferias.periodo));
       onCampo("ANO", String(s.ferias.ano));
     }
