@@ -651,6 +651,7 @@ function Etapa2({
               template={t}
               militares={militares}
               ferias={ferias}
+              anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
               onRemove={() => remover(a.id)}
