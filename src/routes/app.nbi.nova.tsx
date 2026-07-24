@@ -719,6 +719,14 @@ function AssuntoCard({
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
 
+  // Dicionário dinâmico: nomes cadastrados + siglas militares fixas.
+  // Palavras aqui não são marcadas como erro pelo corretor ortográfico.
+  const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
+    militaresNome: militares.map((m) => m.nome),
+    militaresNomeGuerra: militares.map((m) => m.nome_guerra),
+    lotacoes: militares.map((m) => m.lotacao_nbi),
+  }), [militares]);
+
   function interpretarFrase() {
     setSugestoes([]);
     setAvisoSugestao(null);
