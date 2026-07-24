@@ -690,7 +690,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias,
+  index, assunto, template, militares, ferias, anoNbi,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -698,6 +698,7 @@ function AssuntoCard({
   template: TemplateRow;
   militares: MilitarNbi[];
   ferias: FeriasReg[];
+  anoNbi: number;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
   onRemove: () => void;
@@ -722,6 +723,10 @@ function AssuntoCard({
       );
       return;
     }
+
+    // Extrai ano explícito da frase (4 dígitos entre 2000 e 2100), se houver.
+    const anoMatch = frase.match(/\b(20\d{2})\b/);
+    const anoAlvo = anoMatch ? parseInt(anoMatch[1], 10) : anoNbi;
 
     let candidatos = militares.slice();
 
@@ -754,22 +759,39 @@ function AssuntoCard({
     }
 
     if (usaFerias) {
-      const anoAtual = new Date().getFullYear();
       const combos: Array<{ militar: MilitarNbi; ferias?: FeriasReg }> = [];
+      const naoEncontrado: string[] = [];
       for (const m of candidatos) {
+        // Consulta EXATA: militar_id + ano_alvo + periodo (quando informado).
+        // Nunca faz fallback silencioso para o primeiro registro.
         const filhas = ferias.filter((f) =>
           f.militar_id === m.id &&
-          f.ano === anoAtual &&
+          f.ano === anoAlvo &&
           (info.periodo == null || f.periodo === info.periodo),
         );
-        if (filhas.length === 0) combos.push({ militar: m });
-        else for (const f of filhas) combos.push({ militar: m, ferias: f });
+        if (filhas.length === 0) {
+          if (info.periodo != null) {
+            naoEncontrado.push(
+              `Não foi encontrado o ${periodoOrdinal(info.periodo)} período de férias de ${m.nome} no ano de ${anoAlvo}.`,
+            );
+          } else {
+            combos.push({ militar: m });
+          }
+        } else {
+          for (const f of filhas) combos.push({ militar: m, ferias: f });
+        }
       }
       setSugestoes(combos);
-      if (combos.length > 1) {
+      if (combos.length === 0 && naoEncontrado.length > 0) {
+        setAvisoSugestao(naoEncontrado.join(" "));
+      } else if (combos.length > 1) {
         setAvisoSugestao(`Foram encontrados ${combos.length} candidatos. Selecione o correto.`);
-      } else {
-        setAvisoSugestao("1 candidato encontrado — confirme antes de aplicar.");
+      } else if (combos.length === 1) {
+        setAvisoSugestao(
+          naoEncontrado.length > 0
+            ? `${naoEncontrado.join(" ")} 1 candidato encontrado — confirme antes de aplicar.`
+            : "1 candidato encontrado — confirme antes de aplicar.",
+        );
       }
     } else {
       setSugestoes(candidatos.map((m) => ({ militar: m })));
