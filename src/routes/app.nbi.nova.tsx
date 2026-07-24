@@ -122,7 +122,7 @@ function NovaNbiPage() {
     void carregar(userId, rascunhoId);
   }, [userId, rascunhoId]);
 
-  async function carregar(uid: string) {
+  async function carregar(uid: string, rascId: string | null) {
     setLoading(true);
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
@@ -158,6 +158,20 @@ function NovaNbiPage() {
             lotacao: d.autoridade_lotacao ?? "",
           },
         }));
+      }
+      if (rascId) {
+        const { data: doc } = await supabase
+          .from("nbi_documents")
+          .select("id,snapshot,status")
+          .eq("id", rascId).eq("user_id", uid).maybeSingle();
+        const snap = (doc?.snapshot as { rascunho?: Rascunho } | null)?.rascunho;
+        if (snap && Array.isArray(snap.assuntos)) {
+          setRascunho(snap);
+          setDocumentoId(doc!.id);
+          toast.success("Rascunho restaurado");
+        } else if (doc) {
+          toast.error("Rascunho sem dados estruturados");
+        }
       }
     } catch (e) {
       console.error("Erro ao carregar dados NBI", e);
