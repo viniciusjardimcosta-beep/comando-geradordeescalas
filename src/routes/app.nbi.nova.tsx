@@ -304,13 +304,13 @@ function NovaNbiPage() {
         data_documento: rascunho.data_documento,
         titulo: `NBI ${rascunho.numero || "s/nº"} — ${formatarDataBR(rascunho.data_documento)}`,
         assuntos: snapshot,
-        responsaveis: {
+        responsaveis: JSON.parse(JSON.stringify({
           unidade: rascunho.unidade,
           digitador: rascunho.digitador,
           comandante: rascunho.comandante,
           autoridade: rascunho.autoridade,
-        },
-        snapshot: { rascunho },
+        })),
+        snapshot: JSON.parse(JSON.stringify({ rascunho })),
         status: "rascunho",
       }]);
       if (error) throw error;
