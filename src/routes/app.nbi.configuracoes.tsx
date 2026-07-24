@@ -271,12 +271,6 @@ function NbiConfiguracoesPage() {
                 <Building2 className="h-4 w-4 text-primary" />
                 <CardTitle className="text-base">Dados da unidade (cabeçalho)</CardTitle>
               </div>
-              <CardDescription>Aparecem no topo do documento gerado.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="uni_nome">Nome da unidade</Label>
-                <Input id="uni_nome" value={form.unidade_nome}
               <CardDescription>
                 Aparecem no topo do documento gerado. As 4 primeiras linhas do cabeçalho oficial e
                 a subunidade emissora são configuráveis por unidade — nenhum texto é fixo.
