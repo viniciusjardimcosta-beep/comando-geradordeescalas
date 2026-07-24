@@ -1048,7 +1048,9 @@ function Etapa3({
           <div className="font-semibold">
             {gerado
               ? `NBI nº ${String(gerado.numero).padStart(3, "0")}/${gerado.ano}`
-              : `NBI nº (previsto: ${previsto ? String(previsto.proximo).padStart(3, "0") + "/" + previsto.ano_vigente : "…"})`}
+              : rascunho.modo_numeracao === "manual"
+                ? `NBI nº ${(rascunho.numero || "—").padStart(3, "0")}/${anoDoc} (manual)`
+                : `NBI nº (previsto: ${previsto ? String(previsto.proximo).padStart(3, "0") + "/" + previsto.ano_vigente : "…"})`}
             {" · "}{formatarDataBR(rascunho.data_documento)}
           </div>
           <div className="text-muted-foreground">{rascunho.unidade.nome} {rascunho.unidade.sigla && `(${rascunho.unidade.sigla})`}</div>
