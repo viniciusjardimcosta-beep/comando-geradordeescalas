@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, Navigate, useLocation } from "@tanstack/
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock, CreditCard, ClipboardCheck } from "lucide-react";
+import { Shield, FileSpreadsheet, Users, LogOut, Loader2, UserSquare2, Plane, ListOrdered, Crown, AlertTriangle, Clock, CreditCard, ClipboardCheck, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/app")({
   component: AppLayout,
