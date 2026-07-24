@@ -494,7 +494,9 @@ function Etapa1({
   setRascunho: React.Dispatch<React.SetStateAction<Rascunho>>;
   onNext: () => void;
 }) {
-  const podeAvancar = rascunho.data_documento && rascunho.unidade.nome && rascunho.comandante.nome;
+  const modoManual = rascunho.modo_numeracao === "manual";
+  const numeroManualOk = !modoManual || (rascunho.numero.trim() !== "" && rascunho.ano > 1900);
+  const podeAvancar = rascunho.data_documento && rascunho.unidade.nome && rascunho.comandante.nome && numeroManualOk;
 
   function editarResp(chave: "digitador" | "comandante" | "autoridade", campo: keyof ResponsavelSnap, valor: string) {
     setRascunho((r) => ({ ...r, [chave]: { ...r[chave], [campo]: valor } }));
@@ -507,10 +509,44 @@ function Etapa1({
         <CardDescription>Estes valores vêm das Configurações; edite se necessário para esta nota.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="rounded-md border p-4">
+          <Label className="mb-2 block text-sm font-semibold">Modo de numeração</Label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="modo_numeracao"
+                checked={rascunho.modo_numeracao === "automatico"}
+                onChange={() => setRascunho({ ...rascunho, modo_numeracao: "automatico", numero: "" })}
+              />
+              Usar próximo número automático
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="modo_numeracao"
+                checked={rascunho.modo_numeracao === "manual"}
+                onChange={() => setRascunho({ ...rascunho, modo_numeracao: "manual" })}
+              />
+              Informar número manualmente
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {modoManual
+              ? "O número informado será usado exatamente como digitado, após verificação de colisão."
+              : "O próximo número da sequência será reservado no momento da geração."}
+          </p>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
           <div>
-            <Label>Número</Label>
-            <Input value={rascunho.numero} onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })} placeholder="Ex: 020" />
+            <Label>Número {modoManual && <span className="text-destructive">*</span>}</Label>
+            <Input
+              value={rascunho.numero}
+              onChange={(e) => setRascunho({ ...rascunho, numero: e.target.value })}
+              placeholder={modoManual ? "Ex: 018" : "(automático)"}
+              disabled={!modoManual}
+            />
           </div>
           <div>
             <Label>Ano</Label>
@@ -521,6 +557,7 @@ function Etapa1({
             <Input type="date" value={rascunho.data_documento} onChange={(e) => setRascunho({ ...rascunho, data_documento: e.target.value })} />
           </div>
         </div>
+
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
