@@ -75,6 +75,7 @@ interface ResponsavelSnap {
 }
 
 interface Rascunho {
+  modo_numeracao: "manual" | "automatico";
   numero: string;
   ano: number;
   data_documento: string;
