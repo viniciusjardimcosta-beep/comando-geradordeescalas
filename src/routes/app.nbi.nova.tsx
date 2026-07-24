@@ -26,6 +26,10 @@ import {
   montarPostoQuadro, artigoO, artigoAo,
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
+import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
+import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
+import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
@@ -42,8 +46,10 @@ export const Route = createFileRoute("/app/nbi/nova")({
 
 interface TemplateRow {
   id: string;
-  codigo: AssuntoTipo;
+  codigo: string;
   titulo: string;
+  titulo_documento: string | null;
+  disponivel: boolean;
   ordem: number;
   texto_modelo: string;
   campos: Array<{
@@ -86,7 +92,7 @@ interface Rascunho {
   assuntos: AssuntoLocal[];
 }
 
-const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao_funcao", "dispensa_funcao"];
+const RESP_VAZIO_KEY = "__resp_vazio__" as const; void RESP_VAZIO_KEY;
 const RESP_VAZIO: ResponsavelSnap = { nome: "", posto_quadro: "", funcao: "", lotacao: "" };
 
 function uid() {
@@ -131,7 +137,7 @@ function NovaNbiPage() {
     setLoading(true);
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
-        supabase.from("nbi_templates").select("id,codigo,titulo,ordem,texto_modelo,campos").eq("disponivel", true).order("ordem"),
+        supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
         supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
@@ -187,14 +193,18 @@ function NovaNbiPage() {
   }
 
   const templatePor = useMemo(() => {
-    const m = new Map<AssuntoTipo, TemplateRow>();
+    const m = new Map<string, TemplateRow>();
     for (const t of templates) m.set(t.codigo, t);
     return m;
   }, [templates]);
 
-  function adicionarAssunto(tipo: AssuntoTipo) {
-    const t = templatePor.get(tipo);
+  function adicionarAssunto(codigo: string) {
+    const t = templatePor.get(codigo);
     if (!t) return;
+    if (!CODIGOS_HOMOLOGADOS.has(codigo) || !t.disponivel) {
+      toast.error("Modelo ainda não configurado para geração");
+      return;
+    }
     const campos: Record<string, string | boolean> = {};
     for (const c of t.campos) {
       if (c.tipo === "boolean") campos[c.chave] = Boolean(c.default ?? false);
@@ -203,7 +213,7 @@ function NovaNbiPage() {
       ...r,
       assuntos: [...r.assuntos, {
         id: uid(),
-        tipo,
+        tipo: codigo as AssuntoTipo,
         militar_id: null,
         militar_titular_id: null,
         ferias_id: null,
@@ -607,7 +617,7 @@ function Etapa2({
   templates: TemplateRow[];
   militares: MilitarNbi[];
   ferias: FeriasReg[];
-  adicionar: (t: AssuntoTipo) => void;
+  adicionar: (codigo: string) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
   remover: (id: string) => void;
@@ -624,15 +634,10 @@ function Etapa2({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          {TIPOS_ORDEM.map((tipo) => {
-            const t = templates.find((x) => x.codigo === tipo);
-            if (!t) return null;
-            return (
-              <Button key={tipo} size="sm" variant="outline" onClick={() => adicionar(tipo)}>
-                <Plus className="mr-1 h-4 w-4" /> {t.titulo}
-              </Button>
-            );
-          })}
+          <AssuntoPicker
+            templates={templates as TemplatePickable[]}
+            onEscolher={(codigo) => adicionar(codigo)}
+          />
           <span className="ml-auto text-xs text-muted-foreground">
             {total === 0 ? "Nenhum assunto adicionado" : total === 1 ? "1 assunto adicionado" : `${total} assuntos adicionados`}
           </span>
@@ -640,7 +645,10 @@ function Etapa2({
 
         {rascunho.assuntos.length === 0 && (
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Nenhum assunto adicionado. Escolha um tipo acima para começar.
+            Nenhum assunto adicionado. Clique em <strong>Adicionar assunto</strong> para começar.
+            <div className="mt-1 text-[11px]">
+              Ex.: <em>Férias</em>, <em>Viagem</em>, <em>Assunção de função</em>.
+            </div>
           </div>
         )}
 
@@ -666,23 +674,19 @@ function Etapa2({
         })}
 
         {rascunho.assuntos.length > 0 && (
-          <div className="rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
-              + Adicionar outro assunto
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {TIPOS_ORDEM.map((tipo) => {
-                const t = templates.find((x) => x.codigo === tipo);
-                if (!t) return null;
-                return (
-                  <Button key={`add-${tipo}`} size="sm" variant="secondary" onClick={() => adicionar(tipo)}>
-                    <Plus className="mr-1 h-4 w-4" /> {t.titulo}
-                  </Button>
-                );
-              })}
-            </div>
+          <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
+            <AssuntoPicker
+              templates={templates as TemplatePickable[]}
+              onEscolher={(codigo) => adicionar(codigo)}
+              label="Adicionar outro assunto"
+              size="sm"
+            />
+            <span className="text-xs text-muted-foreground">
+              Pesquise por nome, título oficial ou categoria.
+            </span>
           </div>
         )}
+
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
@@ -714,6 +718,14 @@ function AssuntoCard({
   const [avisoSugestao, setAvisoSugestao] = useState<string | null>(null);
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
+
+  // Dicionário dinâmico: nomes cadastrados + siglas militares fixas.
+  // Palavras aqui não são marcadas como erro pelo corretor ortográfico.
+  const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
+    militaresNome: militares.map((m) => m.nome),
+    militaresNomeGuerra: militares.map((m) => m.nome_guerra),
+    lotacoes: militares.map((m) => m.lotacao_nbi),
+  }), [militares]);
 
   function interpretarFrase() {
     setSugestoes([]);
@@ -930,19 +942,39 @@ function AssuntoCard({
                 </label>
               );
             }
-            const inputType = c.tipo === "data" ? "date" : c.tipo === "inteiro" ? "number" : "text";
+            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
+            // Datas e números não são corrigidos.
             if (c.tipo === "texto_longo") {
               return (
                 <div key={c.chave} className="md:col-span-2">
-                  <Label>{c.label}</Label>
-                  <Textarea value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} rows={2} />
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <CampoLivreCorrigido
+                    value={String(val ?? "")}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    multiline
+                    rows={2}
+                    extraWords={dicionarioExtras}
+                  />
+                </div>
+              );
+            }
+            if (c.tipo === "data" || c.tipo === "inteiro") {
+              const inputType = c.tipo === "data" ? "date" : "number";
+              return (
+                <div key={c.chave}>
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
                 </div>
               );
             }
             return (
               <div key={c.chave}>
                 <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
-                <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+                <CampoLivreCorrigido
+                  value={String(val ?? "")}
+                  onChange={(v) => onCampo(c.chave, v)}
+                  extraWords={dicionarioExtras}
+                />
               </div>
             );
           })}
