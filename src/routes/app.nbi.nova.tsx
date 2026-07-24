@@ -312,7 +312,7 @@ function NovaNbiPage() {
         },
         snapshot: { rascunho },
         status: "rascunho",
-      });
+      }]);
       if (error) throw error;
       toast.success("Rascunho salvo com sucesso");
     } catch (e) {
