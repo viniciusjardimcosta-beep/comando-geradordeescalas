@@ -136,6 +136,12 @@ function NbiConfiguracoesPage() {
         setForm({
           unidade_nome: s.unidade_nome ?? "",
           unidade_sigla: s.unidade_sigla ?? "",
+          cabecalho_estado: (s as { cabecalho_estado?: string | null }).cabecalho_estado ?? "",
+          cabecalho_secretaria: (s as { cabecalho_secretaria?: string | null }).cabecalho_secretaria ?? "",
+          cabecalho_corporacao: (s as { cabecalho_corporacao?: string | null }).cabecalho_corporacao ?? "",
+          cabecalho_batalhao: (s as { cabecalho_batalhao?: string | null }).cabecalho_batalhao ?? "",
+          cabecalho_subunidade: (s as { cabecalho_subunidade?: string | null }).cabecalho_subunidade ?? "",
+          cabecalho_cidade: (s as { cabecalho_cidade?: string | null }).cabecalho_cidade ?? "",
           digitador: {
             militar_id: s.digitador_militar_id,
             nome: s.digitador_nome ?? "",
