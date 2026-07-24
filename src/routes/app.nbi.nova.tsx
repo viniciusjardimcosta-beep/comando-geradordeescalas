@@ -934,19 +934,39 @@ function AssuntoCard({
                 </label>
               );
             }
-            const inputType = c.tipo === "data" ? "date" : c.tipo === "inteiro" ? "number" : "text";
+            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
+            // Datas e números não são corrigidos.
             if (c.tipo === "texto_longo") {
               return (
                 <div key={c.chave} className="md:col-span-2">
-                  <Label>{c.label}</Label>
-                  <Textarea value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} rows={2} />
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <CampoLivreCorrigido
+                    value={String(val ?? "")}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    multiline
+                    rows={2}
+                    extraWords={dicionarioExtras}
+                  />
+                </div>
+              );
+            }
+            if (c.tipo === "data" || c.tipo === "inteiro") {
+              const inputType = c.tipo === "data" ? "date" : "number";
+              return (
+                <div key={c.chave}>
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
                 </div>
               );
             }
             return (
               <div key={c.chave}>
                 <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
-                <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+                <CampoLivreCorrigido
+                  value={String(val ?? "")}
+                  onChange={(v) => onCampo(c.chave, v)}
+                  extraWords={dicionarioExtras}
+                />
               </div>
             );
           })}
