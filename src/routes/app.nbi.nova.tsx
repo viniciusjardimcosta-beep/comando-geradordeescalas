@@ -353,14 +353,16 @@ function NovaNbiPage() {
       }
     }
 
-    // férias/apresentação: precisa ter datas coerentes
-    if ((a.tipo === "ferias" || a.tipo === "apresentacao")) {
-      const ini = a.campos.DATA_INICIO as string | undefined;
-      const fim = a.campos.DATA_FIM as string | undefined;
-      if (a.tipo === "ferias" && (!ini || !fim)) {
-        if (!fim) out.push("data fim do período de férias ausente");
+    // férias/apresentação: datas coerentes (fim pode ser derivado de qtd_dias)
+    if (a.tipo === "ferias" || a.tipo === "apresentacao") {
+      const resolvidos = resolverValores(a);
+      const ini = resolvidos.DATA_INICIO;
+      const fim = resolvidos.DATA_FIM;
+      if (a.tipo === "ferias") {
+        if (!ini) out.push("data de início do período de férias ausente");
+        if (!fim) out.push("informe a quantidade de dias ou a data fim das férias");
       }
-      if (a.tipo === "apresentacao" && !a.campos.DATA_APRESENTACAO && !fim) {
+      if (a.tipo === "apresentacao" && !resolvidos.DATA_APRESENTACAO && !fim) {
         out.push("data de apresentação ausente");
       }
     }
