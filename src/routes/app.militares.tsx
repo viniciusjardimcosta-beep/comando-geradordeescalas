@@ -390,6 +390,78 @@ function MilitaresPage() {
               </p>
             </div>
 
+            <div className="grid gap-3 rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold text-primary">Dados para NBI</Label>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Opcional · não afeta escala</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Utilizados apenas na geração de Notas para Boletim Interno. Não interferem no motor
+                de escalas nem nas funções operacionais (CG/COV/ADM).
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="quadro">Quadro</Label>
+                  <Input
+                    id="quadro"
+                    list="quadros-sugeridos"
+                    value={form.quadro}
+                    onChange={(e) => setForm({ ...form, quadro: e.target.value })}
+                    placeholder="Ex.: QPBM, QOEM"
+                  />
+                  <datalist id="quadros-sugeridos">
+                    {QUADROS_SUGERIDOS.map((q) => <option key={q} value={q} />)}
+                  </datalist>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="genero">Gênero gramatical</Label>
+                  <Select
+                    value={form.genero_gramatical || "__none__"}
+                    onValueChange={(v) => setForm({ ...form, genero_gramatical: (v === "__none__" ? "" : v) as Genero })}
+                  >
+                    <SelectTrigger id="genero"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Não informado —</SelectItem>
+                      <SelectItem value="M">Masculino (o / ao)</SelectItem>
+                      <SelectItem value="F">Feminino (a / à)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="lotacao_nbi">Lotação para NBI</Label>
+                <Input
+                  id="lotacao_nbi"
+                  value={form.lotacao_nbi}
+                  onChange={(e) => setForm({ ...form, lotacao_nbi: e.target.value })}
+                  placeholder="Ex.: 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="funcao_atual">Função administrativa atual</Label>
+                <Input
+                  id="funcao_atual"
+                  value={form.funcao_atual}
+                  onChange={(e) => setForm({ ...form, funcao_atual: e.target.value })}
+                  placeholder="Ex.: Sgte do 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Cargo/função administrativa — diferente do papel operacional CG/COV.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="nome_guerra">Nome de guerra</Label>
+                <Input
+                  id="nome_guerra"
+                  value={form.nome_guerra}
+                  onChange={(e) => setForm({ ...form, nome_guerra: e.target.value })}
+                  placeholder="Uso interno · o Word sempre usa o nome completo"
+                />
+              </div>
+            </div>
+
+
+
             <div className="flex items-center justify-between rounded-md border border-border p-3">
               <div>
                 <Label htmlFor="ativo" className="cursor-pointer">Ativo</Label>
