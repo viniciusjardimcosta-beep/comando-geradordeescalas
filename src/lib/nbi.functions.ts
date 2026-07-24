@@ -271,29 +271,78 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: modelo, error: eM } = await supabaseAdmin.storage
       .from("nbi-documentos")
-      .download("_sistema/nbi-mestre-v1.docx");
+      .download("_sistema/nbi-mestre-v2.docx");
     if (eM || !modelo) throw new Error("Modelo mestre indisponível");
     const modeloBuf = Buffer.from(await modelo.arrayBuffer());
+
+    // 3.1 Cabeçalho oficial — fonte única: nbi_settings da unidade emissora.
+    const { data: settings } = await supabase
+      .from("nbi_settings")
+      .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const cabecalho = {
+      estado: (settings?.cabecalho_estado ?? "").trim(),
+      secretaria: (settings?.cabecalho_secretaria ?? "").trim(),
+      corporacao: (settings?.cabecalho_corporacao ?? "").trim(),
+      batalhao: (settings?.cabecalho_batalhao ?? "").trim(),
+      subunidade: (settings?.cabecalho_subunidade ?? settings?.unidade_nome ?? "").trim(),
+      cidade: (settings?.cabecalho_cidade ?? "").trim(),
+    };
+    const cabecalhoFaltando: string[] = [];
+    if (!cabecalho.estado) cabecalhoFaltando.push("Estado");
+    if (!cabecalho.secretaria) cabecalhoFaltando.push("Secretaria");
+    if (!cabecalho.corporacao) cabecalhoFaltando.push("Corporação");
+    if (!cabecalho.batalhao) cabecalhoFaltando.push("Batalhão");
+    if (!cabecalho.subunidade) cabecalhoFaltando.push("Subunidade (Unidade)");
+    if (cabecalhoFaltando.length > 0) {
+      return {
+        ok: false as const,
+        code: `Cabeçalho oficial incompleto em Configurações NBI: ${cabecalhoFaltando.join(", ")}.`,
+      };
+    }
+
+    // 3.2 Mapa de títulos oficiais por código de template (uppercase p/ Word)
+    const { data: tpls } = await supabaseAdmin
+      .from("nbi_templates")
+      .select("codigo, titulo, titulo_documento");
+    const tituloOficialPorCodigo = new Map<string, string>();
+    for (const t of tpls ?? []) {
+      const oficial = ((t as { titulo_documento?: string | null }).titulo_documento ?? t.titulo ?? "").toUpperCase();
+      tituloOficialPorCodigo.set(t.codigo, oficial);
+    }
 
     // 4. Monta payload de placeholders + seções
     const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
     const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
-    // Agrupamento por blocos consecutivos do mesmo título — evita repetição de título.
-    const secoes: Array<{ TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }> = [];
+
+    // Agrupamento GLOBAL por tipo/título oficial: todos os itens do mesmo tipo
+    // ficam sob um único título, preservando a ordem de primeira aparição.
+    // Nunca duplica cabeçalho de seção mesmo que os assuntos sejam intercalados.
+    const secoesMap = new Map<string, { TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }>();
+    const ordemChaves: string[] = [];
     for (const a of assuntosRaw) {
-      const titulo = (a.titulo ?? "").toUpperCase();
+      const codigo = (a as { tipo?: string; template_codigo?: string }).template_codigo
+        ?? (a as { tipo?: string }).tipo
+        ?? "";
+      const titulo = (
+        tituloOficialPorCodigo.get(codigo) ??
+        (a.titulo ?? "").toUpperCase()
+      ).trim();
+      if (!titulo) continue;
       const itens = (a.texto_final ?? "")
         .split(/\n{2,}/)
         .map((t) => ({ TEXTO_ITEM: t.trim() }))
         .filter((x) => x.TEXTO_ITEM.length > 0);
       if (itens.length === 0) continue;
-      const last = secoes[secoes.length - 1];
-      if (last && last.TITULO_SECAO === titulo) {
-        last.ITENS.push(...itens);
-      } else {
-        secoes.push({ TITULO_SECAO: titulo, ITENS: itens });
+      const chave = titulo;
+      if (!secoesMap.has(chave)) {
+        secoesMap.set(chave, { TITULO_SECAO: titulo, ITENS: [] });
+        ordemChaves.push(chave);
       }
+      secoesMap.get(chave)!.ITENS.push(...itens);
     }
+    const secoes = ordemChaves.map((k) => secoesMap.get(k)!);
 
     const numeroFmt = String(numero).padStart(3, "0");
     const dataNota = dataBR(doc.data_documento);
@@ -307,9 +356,15 @@ export const gerarNbi = createServerFn({ method: "POST" })
       NUMERO_NBI: numeroFmt,
       ANO_NBI: String(ano),
       DATA_DOCUMENTO: dataExtenso(doc.data_documento),
-      UNIDADE_CABECALHO: resp.unidade?.nome ?? "",
-      UNIDADE_SIGLA: resp.unidade?.sigla ?? "",
-      LOCAL_DATA: `${resp.unidade?.sigla ?? ""}, ${dataExtenso(doc.data_documento)}`.trim(),
+
+      // Cabeçalho oficial configurável
+      ESTADO_CABECALHO: cabecalho.estado,
+      SECRETARIA_CABECALHO: cabecalho.secretaria,
+      CORPORACAO_CABECALHO: cabecalho.corporacao,
+      BATALHAO_CABECALHO: cabecalho.batalhao,
+      UNIDADE_CABECALHO: cabecalho.subunidade,
+      UNIDADE_SIGLA: settings?.unidade_sigla ?? "",
+      LOCAL_DATA: `${cabecalho.cidade || settings?.unidade_sigla || ""}, ${dataExtenso(doc.data_documento)}`.trim(),
 
       NOME_DIGITADOR: resp.digitador?.nome ?? "",
       POSTO_QUADRO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
@@ -333,7 +388,9 @@ export const gerarNbi = createServerFn({ method: "POST" })
     // Validação pré-renderização: nenhum campo obrigatório pode ser
     // undefined, null, vazio ou string "undefined"/"null".
     const obrigatorios = [
-      "NUMERO_NOTA", "DATA_NOTA", "UNIDADE_CABECALHO",
+      "NUMERO_NOTA", "DATA_NOTA",
+      "ESTADO_CABECALHO", "SECRETARIA_CABECALHO", "CORPORACAO_CABECALHO",
+      "BATALHAO_CABECALHO", "UNIDADE_CABECALHO",
       "NOME_DIGITADOR", "POSTO_QUADRO_DIGITADOR", "FUNCAO_DIGITADOR",
       "NOME_COMANDANTE", "POSTO_QUADRO_COMANDANTE", "FUNCAO_COMANDANTE",
     ];

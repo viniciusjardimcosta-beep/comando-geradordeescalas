@@ -526,6 +526,12 @@ export type Database = {
           autoridade_militar_id: string | null
           autoridade_nome: string | null
           autoridade_posto_quadro: string | null
+          cabecalho_batalhao: string | null
+          cabecalho_cidade: string | null
+          cabecalho_corporacao: string | null
+          cabecalho_estado: string | null
+          cabecalho_secretaria: string | null
+          cabecalho_subunidade: string | null
           comandante_funcao: string | null
           comandante_lotacao: string | null
           comandante_militar_id: string | null
@@ -549,6 +555,12 @@ export type Database = {
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
           autoridade_posto_quadro?: string | null
+          cabecalho_batalhao?: string | null
+          cabecalho_cidade?: string | null
+          cabecalho_corporacao?: string | null
+          cabecalho_estado?: string | null
+          cabecalho_secretaria?: string | null
+          cabecalho_subunidade?: string | null
           comandante_funcao?: string | null
           comandante_lotacao?: string | null
           comandante_militar_id?: string | null
@@ -572,6 +584,12 @@ export type Database = {
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
           autoridade_posto_quadro?: string | null
+          cabecalho_batalhao?: string | null
+          cabecalho_cidade?: string | null
+          cabecalho_corporacao?: string | null
+          cabecalho_estado?: string | null
+          cabecalho_secretaria?: string | null
+          cabecalho_subunidade?: string | null
           comandante_funcao?: string | null
           comandante_lotacao?: string | null
           comandante_militar_id?: string | null
@@ -659,6 +677,7 @@ export type Database = {
           ordem: number
           texto_modelo: string
           titulo: string
+          titulo_documento: string | null
           updated_at: string
         }
         Insert: {
@@ -671,6 +690,7 @@ export type Database = {
           ordem?: number
           texto_modelo: string
           titulo: string
+          titulo_documento?: string | null
           updated_at?: string
         }
         Update: {
@@ -683,6 +703,7 @@ export type Database = {
           ordem?: number
           texto_modelo?: string
           titulo?: string
+          titulo_documento?: string | null
           updated_at?: string
         }
         Relationships: []

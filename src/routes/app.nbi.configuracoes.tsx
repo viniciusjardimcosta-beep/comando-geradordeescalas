@@ -45,6 +45,12 @@ interface Responsavel {
 interface NbiSettingsForm {
   unidade_nome: string;
   unidade_sigla: string;
+  cabecalho_estado: string;
+  cabecalho_secretaria: string;
+  cabecalho_corporacao: string;
+  cabecalho_batalhao: string;
+  cabecalho_subunidade: string;
+  cabecalho_cidade: string;
   digitador: Responsavel;
   comandante: Responsavel;
   autoridade: Responsavel;
@@ -61,6 +67,12 @@ const emptyResp: Responsavel = {
 const emptySettings: NbiSettingsForm = {
   unidade_nome: "",
   unidade_sigla: "",
+  cabecalho_estado: "",
+  cabecalho_secretaria: "",
+  cabecalho_corporacao: "",
+  cabecalho_batalhao: "",
+  cabecalho_subunidade: "",
+  cabecalho_cidade: "",
   digitador: { ...emptyResp },
   comandante: { ...emptyResp },
   autoridade: { ...emptyResp },
@@ -124,6 +136,12 @@ function NbiConfiguracoesPage() {
         setForm({
           unidade_nome: s.unidade_nome ?? "",
           unidade_sigla: s.unidade_sigla ?? "",
+          cabecalho_estado: (s as { cabecalho_estado?: string | null }).cabecalho_estado ?? "",
+          cabecalho_secretaria: (s as { cabecalho_secretaria?: string | null }).cabecalho_secretaria ?? "",
+          cabecalho_corporacao: (s as { cabecalho_corporacao?: string | null }).cabecalho_corporacao ?? "",
+          cabecalho_batalhao: (s as { cabecalho_batalhao?: string | null }).cabecalho_batalhao ?? "",
+          cabecalho_subunidade: (s as { cabecalho_subunidade?: string | null }).cabecalho_subunidade ?? "",
+          cabecalho_cidade: (s as { cabecalho_cidade?: string | null }).cabecalho_cidade ?? "",
           digitador: {
             militar_id: s.digitador_militar_id,
             nome: s.digitador_nome ?? "",
@@ -196,6 +214,12 @@ function NbiConfiguracoesPage() {
       user_id: session.user.id,
       unidade_nome: form.unidade_nome.trim() || null,
       unidade_sigla: form.unidade_sigla.trim() || null,
+      cabecalho_estado: form.cabecalho_estado.trim() || null,
+      cabecalho_secretaria: form.cabecalho_secretaria.trim() || null,
+      cabecalho_corporacao: form.cabecalho_corporacao.trim() || null,
+      cabecalho_batalhao: form.cabecalho_batalhao.trim() || null,
+      cabecalho_subunidade: form.cabecalho_subunidade.trim() || null,
+      cabecalho_cidade: form.cabecalho_cidade.trim() || null,
       digitador_militar_id: form.digitador.militar_id,
       digitador_nome: form.digitador.nome.trim() || null,
       digitador_posto_quadro: form.digitador.posto_quadro.trim() || null,
@@ -247,17 +271,56 @@ function NbiConfiguracoesPage() {
                 <Building2 className="h-4 w-4 text-primary" />
                 <CardTitle className="text-base">Dados da unidade (cabeçalho)</CardTitle>
               </div>
-              <CardDescription>Aparecem no topo do documento gerado.</CardDescription>
+              <CardDescription>
+                Aparecem no topo do documento gerado. As 4 primeiras linhas do cabeçalho oficial e
+                a subunidade emissora são configuráveis por unidade — nenhum texto é fixo.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_estado">Linha 1 — Estado (cabeçalho oficial)</Label>
+                <Input id="cab_estado" value={form.cabecalho_estado}
+                  onChange={(e) => setForm({ ...form, cabecalho_estado: e.target.value })}
+                  placeholder="Ex.: ESTADO DO RIO GRANDE DO SUL" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_secretaria">Linha 2 — Secretaria</Label>
+                <Input id="cab_secretaria" value={form.cabecalho_secretaria}
+                  onChange={(e) => setForm({ ...form, cabecalho_secretaria: e.target.value })}
+                  placeholder="Ex.: SECRETARIA DA SEGURANÇA PÚBLICA" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_corp">Linha 3 — Corporação</Label>
+                <Input id="cab_corp" value={form.cabecalho_corporacao}
+                  onChange={(e) => setForm({ ...form, cabecalho_corporacao: e.target.value })}
+                  placeholder="Ex.: CORPO DE BOMBEIROS MILITAR" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_bat">Linha 4 — Batalhão</Label>
+                <Input id="cab_bat" value={form.cabecalho_batalhao}
+                  onChange={(e) => setForm({ ...form, cabecalho_batalhao: e.target.value })}
+                  placeholder="Ex.: 3º BATALHÃO DE BOMBEIROS MILITAR" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_sub">Linha 5 — Subunidade emissora</Label>
+                <Input id="cab_sub" value={form.cabecalho_subunidade}
+                  onChange={(e) => setForm({ ...form, cabecalho_subunidade: e.target.value })}
+                  placeholder="Ex.: 2ª COMPANHIA DE BOMBEIROS MILITAR" />
+              </div>
               <div className="grid gap-2">
-                <Label htmlFor="uni_nome">Nome da unidade</Label>
+                <Label htmlFor="cab_cidade">Cidade (local do encerramento)</Label>
+                <Input id="cab_cidade" value={form.cabecalho_cidade}
+                  onChange={(e) => setForm({ ...form, cabecalho_cidade: e.target.value })}
+                  placeholder="Ex.: Porto Alegre" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="uni_nome">Nome da unidade (uso interno)</Label>
                 <Input id="uni_nome" value={form.unidade_nome}
                   onChange={(e) => setForm({ ...form, unidade_nome: e.target.value })}
                   placeholder="Ex.: 12º Batalhão de Bombeiro Militar" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="uni_sigla">Sigla</Label>
+                <Label htmlFor="uni_sigla">Sigla (uso interno)</Label>
                 <Input id="uni_sigla" value={form.unidade_sigla}
                   onChange={(e) => setForm({ ...form, unidade_sigla: e.target.value })}
                   placeholder="Ex.: 12ºBBM" />

@@ -86,7 +86,7 @@ interface Rascunho {
   assuntos: AssuntoLocal[];
 }
 
-const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao", "dispensa"];
+const TIPOS_ORDEM: AssuntoTipo[] = ["ferias", "apresentacao", "viagem", "assuncao_funcao", "dispensa_funcao"];
 const RESP_VAZIO: ResponsavelSnap = { nome: "", posto_quadro: "", funcao: "", lotacao: "" };
 
 function uid() {
@@ -319,7 +319,7 @@ function NovaNbiPage() {
 
     // exige seleção de militar sempre
     if (!militar) out.push("militar não selecionado");
-    if (a.tipo === "dispensa" && !titular) out.push("titular não selecionado");
+    if (a.tipo === "dispensa_funcao" && !titular) out.push("titular não selecionado");
 
     // dados cadastrais NBI do militar (obrigatórios em todos os templates)
     if (militar) {
@@ -329,7 +329,7 @@ function NovaNbiPage() {
       if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
       if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
     }
-    if (a.tipo === "dispensa" && titular) {
+    if (a.tipo === "dispensa_funcao" && titular) {
       if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
       if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
       if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
@@ -380,7 +380,11 @@ function NovaNbiPage() {
         const { texto, ausentes } = textoFinal(a);
         return {
           tipo: a.tipo,
+          template_codigo: t?.codigo ?? a.tipo,
           titulo: t?.titulo ?? a.tipo,
+          titulo_documento:
+            (t as unknown as { titulo_documento?: string | null } | undefined)?.titulo_documento ??
+            (t?.titulo ?? a.tipo).toUpperCase(),
           militar_id: a.militar_id,
           militar_titular_id: a.militar_titular_id,
           ferias_id: a.ferias_id,
@@ -719,7 +723,7 @@ function AssuntoCard({
     // nenhum critério identificado
     if (!info.matricula && !info.postoCanonico && info.termos.length === 0) {
       setAvisoSugestao(
-        'Não foi possível identificar o militar. Informe nome, matrícula ou posto. Ex.: "primeiro período do 1º sargento 1" · "férias matrícula 333333" · "segundo período de férias de Ademir".',
+        'Não foi possível identificar o militar. Informe nome, matrícula ou posto. Ex.: "segundo período de férias do Soldado Silva".',
       );
       return;
     }
@@ -743,12 +747,18 @@ function AssuntoCard({
     }
 
     // filtro por termos livres (nome, nome de guerra, matrícula, IDs fictícios)
+    // Normalizações extras: "soldado1" ~ "soldado 1"; ignora espaços internos.
     if (info.termos.length > 0) {
+      const compact = (s: string) => normalizarTextoNbi(s).replace(/\s+/g, "");
       const filtro = candidatos.filter((m) => {
         const alvos = [m.nome, m.nome_guerra, m.matricula]
           .filter((v): v is string => Boolean(v))
           .map((v) => normalizarTextoNbi(v));
-        return info.termos.some((t) => alvos.some((a) => a.includes(t)));
+        const alvosCompact = alvos.map(compact);
+        return info.termos.some((t) => {
+          const tc = compact(t);
+          return alvos.some((a) => a.includes(t)) || alvosCompact.some((a) => a.includes(tc));
+        });
       });
       if (filtro.length > 0) candidatos = filtro;
     }
@@ -760,38 +770,41 @@ function AssuntoCard({
 
     if (usaFerias) {
       const combos: Array<{ militar: MilitarNbi; ferias?: FeriasReg }> = [];
-      const naoEncontrado: string[] = [];
       for (const m of candidatos) {
-        // Consulta EXATA: militar_id + ano_alvo + periodo (quando informado).
-        // Nunca faz fallback silencioso para o primeiro registro.
         const filhas = ferias.filter((f) =>
           f.militar_id === m.id &&
           f.ano === anoAlvo &&
           (info.periodo == null || f.periodo === info.periodo),
         );
         if (filhas.length === 0) {
-          if (info.periodo != null) {
-            naoEncontrado.push(
-              `Não foi encontrado o ${periodoOrdinal(info.periodo)} período de férias de ${m.nome} no ano de ${anoAlvo}.`,
-            );
-          } else {
-            combos.push({ militar: m });
-          }
+          // Só reporta o militar em foco quando não há férias — nunca lista o efetivo.
+          if (info.periodo == null) combos.push({ militar: m });
         } else {
           for (const f of filhas) combos.push({ militar: m, ferias: f });
         }
       }
+      if (combos.length === 0) {
+        // Mensagem única, referindo-se somente aos candidatos identificados.
+        if (candidatos.length === 1 && info.periodo != null) {
+          const m = candidatos[0];
+          setAvisoSugestao(
+            `Não foi encontrado o ${periodoOrdinal(info.periodo)} período de férias de ${m.nome} no ano de ${anoAlvo}.`,
+          );
+        } else if (info.periodo != null) {
+          setAvisoSugestao(
+            `Nenhum dos ${candidatos.length} candidatos possui o ${periodoOrdinal(info.periodo)} período de férias registrado em ${anoAlvo}. Refine o termo (nome, matrícula ou posto).`,
+          );
+        } else {
+          setAvisoSugestao(`Nenhum registro de férias em ${anoAlvo} para os candidatos identificados.`);
+        }
+        setSugestoes([]);
+        return;
+      }
       setSugestoes(combos);
-      if (combos.length === 0 && naoEncontrado.length > 0) {
-        setAvisoSugestao(naoEncontrado.join(" "));
-      } else if (combos.length > 1) {
+      if (combos.length > 1) {
         setAvisoSugestao(`Foram encontrados ${combos.length} candidatos. Selecione o correto.`);
-      } else if (combos.length === 1) {
-        setAvisoSugestao(
-          naoEncontrado.length > 0
-            ? `${naoEncontrado.join(" ")} 1 candidato encontrado — confirme antes de aplicar.`
-            : "1 candidato encontrado — confirme antes de aplicar.",
-        );
+      } else {
+        setAvisoSugestao("1 candidato encontrado — confirme antes de aplicar.");
       }
     } else {
       setSugestoes(candidatos.map((m) => ({ militar: m })));
@@ -836,7 +849,7 @@ function AssuntoCard({
         <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sugestão por frase (opcional)</Label>
         <div className="flex gap-2">
           <Input
-            placeholder='Ex.: "segundo período de férias de Ademir"'
+            placeholder='Ex.: "segundo período de férias do Soldado Silva"'
             value={frase}
             onChange={(e) => setFrase(e.target.value)}
           />
@@ -884,7 +897,7 @@ function AssuntoCard({
         </Select>
       </div>
 
-      {assunto.tipo === "dispensa" && (
+      {assunto.tipo === "dispensa_funcao" && (
         <div className="mb-3">
           <Label>Militar titular (que retornou)</Label>
           <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
