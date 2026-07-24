@@ -1,93 +1,260 @@
-## Objetivo
+# Bloco 5 — NBI: Inteligência, Numeração, Histórico e Auditoria (revisado 4)
 
-Adicionar um **Modo Auditoria** que diagnostica a origem exata de qualquer diferença de horas por militar, **sem tocar em uma linha sequer** do motor de geração (`src/utils/escala.functions.ts` lógica de decisão) nem do preenchimento XLSX (`src/utils/xlsx-surgical.ts`).
+Todo o trabalho fica dentro do módulo NBI. Nenhum arquivo do motor de escalas,
+XLSX, PDF de furos, Stripe/Nexano/Asaas, autenticação, assinaturas ou Landing
+Page será tocado.
 
-A auditoria é puramente leitora: recebe o resultado já gerado pelo motor + a planilha final preenchida e produz um relatório linha-a-linha, dia-a-dia, célula-a-célula.
+## 1. Banco de dados (uma migração NBI)
 
-## O que o relatório mostra (por militar)
+Todas as tabelas em `public`, `GRANT` para `authenticated` e `service_role`
+(sem `anon`), RLS ligado, políticas por `auth.uid()`.
+Toda função `SECURITY DEFINER` usa `SET search_path = public`.
 
-Tabela única por militar com:
+### Tabelas
 
-- **Carga mensal prevista** (`cargaMensalProporcional(afastamentos)` — função já existente no motor, apenas reutilizada em modo leitura)
-- **Horas ordinárias lançadas** (soma das siglas ORD: `1,2,3,4,12,...,234,1234` — mapa `ORD_HORAS` já existente)
-- **CM lançado** (soma de `CM1..CM16`)
-- **HE lançadas** (soma de `HE1..HE24`)
-- **EXP lançadas** (soma de `EXP1..EXP12` + TELE)
-- **Total final** = ORD + CM + HE + EXP
-- **Diferença** = Total final − Carga prevista
+- `public.nbi_numeracao` — 1 linha por `user_id`. Campos:
+  `ano_referencia smallint`, `ultima_nota int`, `reiniciar_anualmente bool`,
+  `prefixo text null`, `observacoes text null`, `updated_at`.
+  RLS: dono lê/escreve a própria linha.
+- `public.nbi_numeracao_log` — histórico de mudanças de sequência.
+  `user_id`, `ano`, `numero_anterior`, `numero_novo`, `motivo`, `created_at`.
+  RLS: dono só SELECT. Sem INSERT/UPDATE/DELETE para `authenticated` — só
+  `service_role` (funções DEFINER escrevem por baixo).
+- `public.nbi_auditoria` — append-only.
+  `user_id`, `documento_id`, `acao text CHECK IN
+  ('criou','editou','gerou','baixou','cancelou','numeracao_alterada','erro_geracao')`,
+  `detalhes jsonb`, `created_at`.
+  RLS: dono só SELECT. Sem INSERT/UPDATE/DELETE para `authenticated`.
+- `nbi_documents`: adiciona `numero_oficial int`, `ano_oficial smallint`,
+  `prefixo_oficial text null`, `reserved_at timestamptz null`,
+  `generated_at timestamptz null`, `arquivo_hash_sha256 text null`,
+  `arquivo_bytes int null`, `modelo_mestre_versao text null`,
+  `templates_versoes jsonb null`, `erro_geracao text null`,
+  `cancelado_em timestamptz null`, `cancelado_por uuid null`,
+  `cancelamento_motivo text null`.
+  Índice único parcial `(user_id, ano_oficial, numero_oficial)
+  WHERE numero_oficial IS NOT NULL`.
 
-Quando `Diferença ≠ 0`, expandir um detalhamento:
+### Funções SECURITY DEFINER — EXECUTE para `authenticated`
 
-### Detalhamento passo a passo
+Todas usam `auth.uid()` como fonte de identidade; ignoram qualquer `user_id`
+externo.
 
-Para cada dia 1..N do mês:
+- `nbi_reservar_numero(_documento_id uuid, _ano_local smallint,
+  _confirmar_novo_ano boolean DEFAULT false)`
+  **Escopo restrito à reserva.** Não preenche `generated_at`. Não grava
+  auditoria `'gerou'`. Passos:
+  1. `auth.uid()` obrigatório; erro se NULL.
+  2. Valida `_ano_local` em `2020..2100` **e** que coincide com
+     `EXTRACT(YEAR FROM nbi_documents.data_documento)` do documento —
+     senão `RAISE NBI_ANO_LOCAL_INVALIDO`. O cliente não escolhe o ano
+     livremente.
+  3. `SELECT ... FOR UPDATE` no documento; erro se não pertence a
+     `auth.uid()`.
+  4. **Idempotência:** se o documento já tem `numero_oficial` e
+     `ano_oficial`, devolve `{ numero, ano, prefixo }` atuais e encerra
+     — sem tocar em `nbi_numeracao`, sem log, sem auditoria.
+  5. `SELECT ... FOR UPDATE` na linha de `nbi_numeracao` do usuário
+     (serializa cliques simultâneos).
+  6. Transição de ano (`_ano_local` vs `ano_referencia`; nunca `now()`
+     em UTC):
+     - `_ano_local > ano_referencia` e `reiniciar_anualmente = true`:
+       - `_confirmar_novo_ano = false` → `RAISE NBI_CONFIRMAR_NOVO_ANO`
+         (nada é gravado).
+       - `true` → grava `nbi_numeracao_log` (`numero_anterior =
+         ultima_nota`, `numero_novo = 0`, motivo `reinicio_anual`),
+         seta `ano_referencia = _ano_local`, `ultima_nota = 0`.
+     - `_ano_local > ano_referencia` e `reiniciar_anualmente = false`:
+       grava log (`numero_anterior = ultima_nota`, `numero_novo =
+       ultima_nota`, motivo `continuidade_ano_{ano}`), seta
+       `ano_referencia = _ano_local`. Mantém `ultima_nota`.
+       Última 237/2026 → próxima 238/2027, sem confirmação.
+     - `_ano_local < ano_referencia` → `RAISE NBI_ANO_LOCAL_INVALIDO`.
+  7. `numero := ultima_nota + 1`; `UPDATE nbi_numeracao SET ultima_nota =
+     numero`.
+  8. `UPDATE nbi_documents SET numero_oficial = numero, ano_oficial =
+     _ano_local, prefixo_oficial = nbi_numeracao.prefixo, reserved_at =
+     now()`. **Não** seta `generated_at`. **Não** grava auditoria
+     `'gerou'`.
+  9. Retorna `{ numero, ano, prefixo }`.
 
-| Dia | Célula XLSX | Linha (ORD/EXP/HE) | Sigla lançada | Horas | Acumulado | Fonte |
-|-----|-------------|---------------------|---------------|-------|-----------|-------|
-| 04  | F37         | HE                  | HE2           | 2     | 18        | motor |
-| 05  | G35         | ORD                 | 234           | 18    | 36        | motor |
-| 06  | H35         | ORD                 | 1 (virada)    | 6     | 42        | auto-virada |
+- `nbi_alterar_sequencia(_ano int, _nova_ultima int, _motivo text)`
+  Só age sobre `auth.uid()`. Motivo obrigatório. Rejeita
+  `_nova_ultima < max(numero_oficial WHERE ano_oficial = _ano AND
+  user_id = auth.uid() AND numero_oficial IS NOT NULL)`. Grava
+  `nbi_numeracao_log` e `nbi_auditoria('numeracao_alterada')` — a própria
+  função DEFINER escreve (owner tem privilégio; não depende de
+  `service_role`).
 
-Onde:
-- **Célula XLSX** é resolvida lendo a aba "Anexo B - Escala" diretamente do arquivo gerado em `escalas_geradas.arquivo_saida_path` (mesma lógica de mapeamento de coordenadas que `xlsx-surgical.ts` já usa, apenas em modo leitura).
-- **Sigla lançada** vem de duas fontes que são comparadas:
-  1. estrutura em memória produzida pelo motor (`Lancamento[]`)
-  2. valor real escrito na célula da planilha
-- Se as duas fontes divergirem → marcar **"divergência motor↔planilha"** no relatório (isso isola se o problema está na geração ou no preenchimento).
+- `nbi_cancelar(_documento_id uuid, _motivo text)`
+  Valida propriedade; motivo obrigatório; rejeita documento sem
+  `numero_oficial`. Marca `cancelado_em/por/motivo`. Número e arquivo
+  permanecem. Grava `nbi_auditoria('cancelou')`.
 
-### Classificação automática da causa
+- `nbi_descartar_rascunho(_documento_id uuid)` — só documentos sem
+  `numero_oficial`. Marca status descartado (não apaga bytes). Grava
+  `nbi_auditoria('editou')` com detalhe descarte.
 
-No fim do bloco do militar, mostrar diagnóstico:
+### Sem funções internas de auditoria expostas
 
-- `arredondamento` — soma fracionária convertida para inteiro perdeu/ganhou < 1h
-- `CM` — total de CM excede/abaixo do esperado para fechar virada
-- `HE` — diferença concentrada em siglas HE
-- `EXP` — diferença em EXP/TELE
-- `leitura da planilha` — célula esperada vazia ou com sigla diferente da gerada em memória
-- `virada de mês` — "234" no dia D sem "1" correspondente no dia D+1 (ou vice-versa)
-- `fórmula do Excel` — célula de total da planilha (se houver) não bate com soma manual das siglas
+Não haverá `nbi_registrar_download/erro/criacao/edicao` chamadas do
+cliente. Não haverá função DEFINER que dependa de `auth.uid()` sendo
+chamada por `service_role` (isso quebraria, pois `service_role` não tem
+`auth.uid()`).
 
-## Onde adicionar (sem mexer no motor)
+As inserções em `nbi_auditoria` para `criou`, `editou`, `gerou`, `baixou`,
+`erro_geracao` são feitas **exclusivamente pelo backend** (`supabaseAdmin`)
+depois que a server function autenticou o usuário e validou a
+propriedade do documento via RLS. O `user_id` é sempre o `context.userId`
+da sessão — nunca vindo do frontend.
 
-### Novo arquivo: `src/utils/auditoria-escala.ts`
-Função pura: `auditarEscala({ militares, lancamentos, cargaPrevista, xlsxBuffer, ano, mes }) → RelatorioAuditoria`.
+## 2. Server functions (`src/lib/nbi.functions.ts`)
 
-Reutiliza (importando, sem modificar):
-- `ORD_HORAS`, `SIGLAS_COMP_VALIDAS`, `SIGLAS_HE_VALIDAS`, `cargaMensalProporcional`, regex de horas — todos já existem em `escala.functions.ts` e serão **exportados** (única mudança no arquivo do motor: adicionar `export` em constantes já existentes, zero mudança de comportamento).
-- Lê a planilha com `xlsx` em modo `cellFormula:false, cellText:true` para extrair o que realmente foi escrito.
+Todas com `requireSupabaseAuth`. Padrão comum em cada handler:
 
-### Nova rota: `src/routes/app.auditoria.tsx`
-- Lista escalas geradas (`escalas_geradas`)
-- Botão "Auditar" por escala → baixa o XLSX do storage, roda `auditarEscala`, mostra:
-  - Resumo por militar (tabela)
-  - Expandir linha → detalhamento dia-a-dia + diagnóstico
-  - Botão "Exportar relatório (CSV)" salvando em `/mnt/documents/` (download)
-- Acesso: qualquer usuário aprovado (vê só suas escalas via RLS existente).
+```
+1. userId = context.userId (do bearer validado)
+2. doc = context.supabase.from('nbi_documents').select().eq('id', id).single()
+   → RLS garante que o documento é do usuário; senão 404/forbidden.
+3. lógica de negócio (RPC DEFINER, storage, docx…)
+4. supabaseAdmin.from('nbi_auditoria').insert({
+     user_id: userId, documento_id: id, acao, detalhes,
+   })  ← só depois da validação
+```
 
-### Item no menu lateral
-Adicionar "Auditoria" em `src/routes/app.tsx`, visível para todos os usuários aprovados (não só admin — é ferramenta operacional).
+Nenhum handler aceita `user_id`, `acao` de auditoria ou `detalhes`
+técnicos vindos do frontend.
 
-## O que NÃO muda
+- `criarRascunhoNbi({ snapshot })` — INSERT via `context.supabase`
+  (RLS). Auditoria `criou` via admin.
+- `atualizarRascunhoNbi({ documentoId, snapshot })` — UPDATE via
+  `context.supabase`. Auditoria `editou` via admin.
+- `gerarDocxNbi({ documentoId, confirmarNovoAno? })`:
+  1. Valida propriedade (passo 2 acima). Se `cancelado_em != null`,
+     rejeita.
+  2. Deriva `anoLocal` de `data_documento` (fonte única).
+  3. `context.supabase.rpc('nbi_reservar_numero', { ... })`. Se
+     `NBI_CONFIRMAR_NOVO_ANO`, devolve `{ precisaConfirmarNovoAno: true,
+     ano: anoLocal }` sem outros efeitos. Se `NBI_ANO_LOCAL_INVALIDO`,
+     mensagem clara. Sucesso → `{ numero, ano, prefixo }` reservados.
+  4. Renderiza DOCX com `docxtemplater` a partir do snapshot já
+     validado. Se `docs.arquivo_hash_sha256 != null && generated_at !=
+     null`, pula geração (nada a fazer).
+  5. Upload em `nbi-documentos` no path
+     `${userId}/${ano}/${numero}-${docId}.docx`. Calcula SHA-256 e
+     tamanho.
+  6. UPDATE `nbi_documents` via admin: `arquivo_path`,
+     `arquivo_hash_sha256`, `arquivo_bytes`, `modelo_mestre_versao`,
+     `templates_versoes`, **`generated_at = now()`**,
+     **`erro_geracao = null`**.
+  7. Auditoria `gerou` via admin (exatamente uma vez — só se `generated_at`
+     estava NULL antes deste UPDATE).
+  8. **Se qualquer passo 4-6 falhar:** mensagem **sanitizada pelo
+     backend** (sem stack, sem provider data). UPDATE via admin
+     `erro_geracao = <mensagem sanitizada>`. Número permanece reservado,
+     `generated_at` continua NULL. Auditoria `erro_geracao` via admin.
+     Próxima tentativa reaproveita o mesmo número (idempotência em
+     `nbi_reservar_numero` + checagem de `generated_at`).
+- `baixarDocxNbi({ documentoId })`:
+  1. Valida propriedade via `context.supabase` (RLS).
+  2. Verifica `arquivo_path` presente e `generated_at != null`; senão
+     erro.
+  3. Gera URL assinada temporária pelo admin.
+  4. Insere `nbi_auditoria('baixou')` via admin com `user_id =
+     context.userId`.
+  5. Retorna a URL. Nunca regenera arquivo.
+- `cancelarNbi`, `alterarSequenciaNbi`, `descartarRascunhoNbi` — usam
+  as RPCs DEFINER correspondentes (que já gravam sua própria auditoria
+  como owner). Nenhum insert manual em `nbi_auditoria` aqui.
+- `duplicarNbi` — cria rascunho limpo (número/arquivo/generated_at
+  nulos), reconsulta férias, nunca reserva número, nunca copia bytes.
+  Auditoria `criou` via admin.
 
-- `src/utils/escala.functions.ts` — **nenhuma alteração de lógica**. Apenas marcar como `export` 3-4 constantes/funções já existentes (`ORD_HORAS`, `cargaMensalProporcional`, `SIGLAS_*`). Zero risco para geração.
-- `src/utils/xlsx-surgical.ts` — não tocado.
-- Rotas existentes de Escalas, Importar, Militares, Férias, Assinaturas — não tocadas.
-- Webhook Nexano, auth, banco — não tocados.
+## 3. Interpretador (`src/utils/nbi-interpretador.ts`)
 
-## Entregáveis
+Puro, sem IA. Devolve `{ tipo, campos, candidatosMilitar[],
+nãoReconhecido[] }`. Só sugere; nunca escolhe em ambiguidade; nunca
+altera texto oficial; nunca chama gerador; nunca cruza dados entre
+usuários. Viagem sem destino/data/retorno → não infere. Assunção/dispensa
+sem titular/função → não infere.
 
-1. `src/utils/auditoria-escala.ts` (novo, ~250 linhas, puro)
-2. `src/routes/app.auditoria.tsx` (nova rota)
-3. Item de menu "Auditoria" em `app.tsx`
-4. 3-4 `export` adicionados em `escala.functions.ts` (sem mudar comportamento)
+## 4. Wizard `app.nbi.nova.tsx`
 
-## Critério de sucesso
+- Etapa 1: "Próximo número previsto: {prefixo?}{ultima_nota+1}/{ano_local}"
+  (leitura pura). Data manual/hoje. Se `nbi_numeracao` vazio, bloqueia
+  com CTA para Configurações NBI.
+- Etapa 2: interpretador + consulta `ferias_militares`; autopreenche
+  nome/posto/quadro/ID func/lotação/artigos (o/a, ao/à, do/da)/dias por
+  extenso/ano/período/apresentação/responsáveis.
+- Etapa 3: conferência com pendências por assunto. Botão "Gerar DOCX"
+  desabilitado enquanto houver pendência.
+- Ao gerar: se resposta = `precisaConfirmarNovoAno`, diálogo "Iniciar a
+  numeração de {ano} em 1?"; só então rechama com `confirmarNovoAno =
+  true`. Sucesso → "NBI nº X/ANO gerada" + link para Histórico. Se
+  falha após reserva: mostra número reservado e "Tentar novamente" (mesmo
+  número).
 
-Ao rodar a auditoria de uma escala com divergência conhecida, o relatório deve apontar **exatamente**:
-- qual militar
-- qual dia
-- qual célula da aba "Anexo B - Escala"
-- qual sigla
-- qual das 7 causas classificadas
+## 5. Configurações NBI
 
-Sem alterar nenhum byte do resultado gerado pelo motor.
+Nova seção **Controle de Numeração**: ano de referência, última nota,
+próximo número (calculado), reiniciar anualmente, prefixo
+opcional/visual, observações. Primeira configuração exige "Última Nota"
++ "Ano". Botão "Alterar sequência" com motivo obrigatório, confirmação e
+bloqueio server-side de colisão.
+
+## 6. Histórico (`src/routes/app.nbi.historico.tsx`)
+
+Paginação e filtros no banco (nunca client-side): número, ano, status
+(rascunho/reservado sem arquivo/gerado/cancelado/erro), data, tipo,
+nome/matrícula. Ações: Visualizar, Baixar DOCX (server fn), Duplicar,
+Cancelar (só NBI com número). Cancelada = somente leitura, badge
+"CANCELADA" persistente. Documentos com `reserved_at != null` e
+`generated_at == null` aparecem como "Número reservado — pendente de
+geração".
+
+## 7. Menu
+
+Itens "NBI › Nova", "NBI › Histórico", "NBI › Configurações" em
+`src/routes/app.tsx`. Sem outras alterações de layout.
+
+## 8. Fora desta entrega
+
+Reserva manual isolada, importação de histórico, pular número,
+assinatura digital, QR Code, PDF, aprovação eletrônica.
+
+## 9. Testes manuais (Playwright headless)
+
+1. Dois cliques simultâneos em "Gerar DOCX" → 1 único número, 1 única
+   auditoria `gerou`.
+2. Duas abas em documentos diferentes → números consecutivos distintos.
+3. Retentativa após timeout de upload → mesmo número, `generated_at`
+   preenchido só na tentativa bem-sucedida, `gerou` gravado uma vez.
+4. Falha simulada de upload após reserva → `generated_at` NULL,
+   `erro_geracao` gravado sanitizado, `erro_geracao` na auditoria; nova
+   tentativa reutiliza o mesmo número e conclui.
+5. Usuário A tenta gerar/baixar/cancelar documento de B → bloqueado por
+   RLS antes de qualquer efeito.
+6. Cliente tenta INSERT direto em `nbi_auditoria`/`nbi_numeracao_log`
+   → negado (sem GRANT/policy).
+7. Cliente tenta chamar RPC de auditoria interna → não existe.
+8. Alterar sequência abaixo do maior emitido → bloqueado.
+9. Cancelar NBI → número não reutilizado.
+10. Trocar `nbi-mestre-v1.docx` e baixar NBI antiga → arquivo original
+    inalterado (sem regeneração).
+11. Novo ano com `reiniciar_anualmente = true`: 1º clique pede
+    confirmação; confirmar → 1/novo ano; sem confirmar → nada gravado.
+12. Novo ano com `reiniciar_anualmente = false`: 237/2026 → 238/2027
+    automaticamente; `ano_oficial = 2027`.
+13. `_ano_local` divergente de `data_documento` →
+    `NBI_ANO_LOCAL_INVALIDO`.
+14. Duplicação → rascunho sem número/arquivo/generated_at.
+15. RLS cruzada entre 2 contas em todas as tabelas NBI.
+16. `git diff` confirma zero mudanças no motor de escalas, XLSX,
+    auditoria de escalas, rotas de escalas/importar/férias, webhooks
+    Stripe/Nexano/Asaas, Landing e auth.
+
+## 10. Relatório final
+
+Arquivos criados/alterados, novas tabelas/funções, novas rotas, resultado
+dos 16 testes, confirmação de isolamento e da separação
+reserva ↔ geração efetiva.
