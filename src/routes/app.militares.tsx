@@ -173,6 +173,11 @@ function MilitaresPage() {
       ativo: form.ativo,
       observacoes: form.observacoes.trim() || null,
       tipo_escala: form.tipo_escala,
+      quadro: form.quadro.trim() || null,
+      lotacao_nbi: form.lotacao_nbi.trim() || null,
+      funcao_atual: form.funcao_atual.trim() || null,
+      genero_gramatical: form.genero_gramatical || null,
+      nome_guerra: form.nome_guerra.trim() || null,
     } as never;
     let error;
     if (editing) {
