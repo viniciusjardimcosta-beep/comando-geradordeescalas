@@ -277,11 +277,56 @@ function NbiConfiguracoesPage() {
               <div className="grid gap-2">
                 <Label htmlFor="uni_nome">Nome da unidade</Label>
                 <Input id="uni_nome" value={form.unidade_nome}
+              <CardDescription>
+                Aparecem no topo do documento gerado. As 4 primeiras linhas do cabeçalho oficial e
+                a subunidade emissora são configuráveis por unidade — nenhum texto é fixo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_estado">Linha 1 — Estado (cabeçalho oficial)</Label>
+                <Input id="cab_estado" value={form.cabecalho_estado}
+                  onChange={(e) => setForm({ ...form, cabecalho_estado: e.target.value })}
+                  placeholder="Ex.: ESTADO DO RIO GRANDE DO SUL" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_secretaria">Linha 2 — Secretaria</Label>
+                <Input id="cab_secretaria" value={form.cabecalho_secretaria}
+                  onChange={(e) => setForm({ ...form, cabecalho_secretaria: e.target.value })}
+                  placeholder="Ex.: SECRETARIA DA SEGURANÇA PÚBLICA" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_corp">Linha 3 — Corporação</Label>
+                <Input id="cab_corp" value={form.cabecalho_corporacao}
+                  onChange={(e) => setForm({ ...form, cabecalho_corporacao: e.target.value })}
+                  placeholder="Ex.: CORPO DE BOMBEIROS MILITAR" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_bat">Linha 4 — Batalhão</Label>
+                <Input id="cab_bat" value={form.cabecalho_batalhao}
+                  onChange={(e) => setForm({ ...form, cabecalho_batalhao: e.target.value })}
+                  placeholder="Ex.: 3º BATALHÃO DE BOMBEIROS MILITAR" />
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="cab_sub">Linha 5 — Subunidade emissora</Label>
+                <Input id="cab_sub" value={form.cabecalho_subunidade}
+                  onChange={(e) => setForm({ ...form, cabecalho_subunidade: e.target.value })}
+                  placeholder="Ex.: 2ª COMPANHIA DE BOMBEIROS MILITAR" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="cab_cidade">Cidade (local do encerramento)</Label>
+                <Input id="cab_cidade" value={form.cabecalho_cidade}
+                  onChange={(e) => setForm({ ...form, cabecalho_cidade: e.target.value })}
+                  placeholder="Ex.: Porto Alegre" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="uni_nome">Nome da unidade (uso interno)</Label>
+                <Input id="uni_nome" value={form.unidade_nome}
                   onChange={(e) => setForm({ ...form, unidade_nome: e.target.value })}
                   placeholder="Ex.: 12º Batalhão de Bombeiro Militar" />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="uni_sigla">Sigla</Label>
+                <Label htmlFor="uni_sigla">Sigla (uso interno)</Label>
                 <Input id="uni_sigla" value={form.unidade_sigla}
                   onChange={(e) => setForm({ ...form, unidade_sigla: e.target.value })}
                   placeholder="Ex.: 12ºBBM" />
