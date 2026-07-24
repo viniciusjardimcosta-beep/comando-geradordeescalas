@@ -617,7 +617,7 @@ function Etapa2({
   templates: TemplateRow[];
   militares: MilitarNbi[];
   ferias: FeriasReg[];
-  adicionar: (t: AssuntoTipo) => void;
+  adicionar: (codigo: string) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
   remover: (id: string) => void;
