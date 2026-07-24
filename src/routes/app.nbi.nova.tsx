@@ -299,6 +299,67 @@ function NovaNbiPage() {
     return interpolarTexto(t.texto_modelo, resolverValores(a));
   }
 
+  // Pendências bloqueantes por assunto — verifica campos cadastrais do militar
+  // e campos do próprio assunto. Retorna motivos legíveis, em português.
+  function pendencias(a: AssuntoLocal): string[] {
+    const t = templatePor.get(a.tipo);
+    if (!t) return ["template não encontrado"];
+    const out: string[] = [];
+    const militar = militares.find((m) => m.id === a.militar_id) ?? null;
+    const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
+
+    // exige seleção de militar sempre
+    if (!militar) out.push("militar não selecionado");
+    if (a.tipo === "dispensa" && !titular) out.push("titular não selecionado");
+
+    // dados cadastrais NBI do militar (obrigatórios em todos os templates)
+    if (militar) {
+      if (!militar.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${militar.nome}`);
+      if (!militar.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${militar.nome}`);
+      if (!militar.quadro) out.push(`quadro ausente no cadastro NBI de ${militar.nome}`);
+      if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
+      if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
+    }
+    if (a.tipo === "dispensa" && titular) {
+      if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
+      if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
+      if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
+      if (!titular.lotacao_nbi) out.push(`lotação NBI do titular ${titular.nome} ausente`);
+      if (!titular.genero_gramatical) out.push(`gênero gramatical do titular ${titular.nome} ausente`);
+    }
+
+    // campos do template
+    const auto = new Set(["QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR"]);
+    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR"]);
+    for (const c of t.campos) {
+      if (auto.has(c.chave) || derivadosMilitar.has(c.chave)) continue;
+      const val = a.campos[c.chave];
+      // regras especiais
+      if (c.chave === "DATA_RETORNO") {
+        const mesmoDia = Boolean(a.campos.retorno_no_mesmo_dia);
+        if (!mesmoDia && (!val || val === "")) out.push(`${c.label}: obrigatório quando não há retorno no mesmo dia`);
+        continue;
+      }
+      if (c.tipo === "boolean") continue;
+      if (c.obrigatorio && (val === undefined || val === null || val === "")) {
+        out.push(`${c.label} ausente`);
+      }
+    }
+
+    // férias/apresentação: precisa ter datas coerentes
+    if ((a.tipo === "ferias" || a.tipo === "apresentacao")) {
+      const ini = a.campos.DATA_INICIO as string | undefined;
+      const fim = a.campos.DATA_FIM as string | undefined;
+      if (a.tipo === "ferias" && (!ini || !fim)) {
+        if (!fim) out.push("data fim do período de férias ausente");
+      }
+      if (a.tipo === "apresentacao" && !a.campos.DATA_APRESENTACAO && !fim) {
+        out.push("data de apresentação ausente");
+      }
+    }
+    return out;
+  }
+
   async function salvarRascunho() {
     if (!userId) return;
     setSalvando(true);
@@ -315,9 +376,10 @@ function NovaNbiPage() {
           campos: a.campos,
           texto_final: texto,
           campos_ausentes: ausentes,
+          pendencias: pendencias(a),
         };
       });
-      const { error } = await supabase.from("nbi_documents").insert([{
+      const payload = {
         user_id: userId,
         numero: rascunho.numero || null,
         ano: rascunho.ano,
@@ -332,9 +394,17 @@ function NovaNbiPage() {
         })),
         snapshot: JSON.parse(JSON.stringify({ rascunho })),
         status: "rascunho",
-      }]);
-      if (error) throw error;
-      toast.success("Rascunho salvo com sucesso");
+      };
+      if (documentoId) {
+        const { error } = await supabase.from("nbi_documents").update(payload).eq("id", documentoId);
+        if (error) throw error;
+        toast.success("Rascunho atualizado");
+      } else {
+        const { data, error } = await supabase.from("nbi_documents").insert([payload]).select("id").single();
+        if (error) throw error;
+        if (data?.id) setDocumentoId(data.id);
+        toast.success("Rascunho salvo com sucesso");
+      }
     } catch (e) {
       console.error(e);
       toast.error("Erro ao salvar rascunho");
