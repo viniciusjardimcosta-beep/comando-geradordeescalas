@@ -944,6 +944,16 @@ function AssuntoCard({
             }
             // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
             // Datas e números não são corrigidos.
+            // Chaves que representam nomes próprios (cidade/pessoa/lotação) recebem
+            // sugestão de capitalização palavra-a-palavra. MISSAO/MOTIVO recebem
+            // apenas sugestão de inicial maiúscula.
+            const chaveUp = c.chave.toUpperCase();
+            const capitalizacao: "nome_proprio" | "inicial" | undefined =
+              ["ORIGEM", "DESTINO", "CIDADE", "LOTACAO", "LOTACAO_TITULAR"].includes(chaveUp)
+                ? "nome_proprio"
+                : ["MISSAO", "MOTIVO", "MOTIVO_TITULAR", "OBSERVACAO", "OBSERVACOES", "FUNCAO_ASSUMIDA", "FUNCAO_DISPENSADA"].includes(chaveUp)
+                  ? "inicial"
+                  : undefined;
             if (c.tipo === "texto_longo") {
               return (
                 <div key={c.chave} className="md:col-span-2">
@@ -954,6 +964,7 @@ function AssuntoCard({
                     multiline
                     rows={2}
                     extraWords={dicionarioExtras}
+                    capitalizacao={capitalizacao}
                   />
                 </div>
               );
@@ -974,6 +985,7 @@ function AssuntoCard({
                   value={String(val ?? "")}
                   onChange={(v) => onCampo(c.chave, v)}
                   extraWords={dicionarioExtras}
+                  capitalizacao={capitalizacao}
                 />
               </div>
             );
