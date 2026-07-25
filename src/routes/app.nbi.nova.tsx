@@ -30,6 +30,8 @@ import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
+import { sugestoesTexto, aplicarSugestao as aplicarSugestaoTexto } from "@/utils/nbi-corretor";
+import { useSpellchecker } from "@/hooks/use-spellcheck";
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
