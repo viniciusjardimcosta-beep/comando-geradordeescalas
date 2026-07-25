@@ -1221,3 +1221,93 @@ function Etapa3({
   );
 }
 
+
+// ============ REVISÃO ORTOGRÁFICA (pré-conferência) ============
+// Recomputa sugestões nos campos livres de todos os assuntos.
+// Não bloqueia a geração — o operador aplica ou mantém explicitamente.
+function RevisaoOrtografica({
+  assuntos, templates, militares, onAplicar,
+}: {
+  assuntos: AssuntoLocal[];
+  templates: TemplateRow[];
+  militares: MilitarNbi[];
+  onAplicar: (assuntoId: string, chave: string, novoValor: string) => void;
+}) {
+  const { spell } = useSpellchecker(true);
+  const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
+
+  const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
+    militaresNome: militares.map((m) => m.nome),
+    militaresNomeGuerra: militares.map((m) => m.nome_guerra),
+    lotacoes: militares.map((m) => m.lotacao_nbi),
+  }), [militares]);
+
+  const itens = useMemo(() => {
+    const out: Array<{
+      assuntoId: string;
+      titulo: string;
+      chave: string;
+      label: string;
+      valor: string;
+      sugestoes: ReturnType<typeof sugestoesTexto>;
+    }> = [];
+    for (const a of assuntos) {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      if (!t) continue;
+      for (const c of t.campos) {
+        if (c.tipo !== "texto" && c.tipo !== "texto_longo") continue;
+        // Ignora campos derivados/automáticos.
+        if (["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A",
+             "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR",
+             "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "PERIODO", "ANO"].includes(c.chave)) continue;
+        const v = String(a.campos[c.chave] ?? "");
+        if (!v.trim()) continue;
+        const s = sugestoesTexto(v, spell, { extras: dicionarioExtras, ignoradas });
+        if (s.length === 0) continue;
+        out.push({ assuntoId: a.id, titulo: t.titulo, chave: c.chave, label: c.label, valor: v, sugestoes: s });
+      }
+    }
+    return out;
+  }, [assuntos, templates, spell, dicionarioExtras, ignoradas]);
+
+  if (itens.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
+      <div className="mb-2 flex items-center gap-2 font-semibold text-amber-800 dark:text-amber-200">
+        <AlertTriangle className="h-4 w-4" /> Possíveis correções ortográficas
+      </div>
+      <p className="mb-2 text-xs text-amber-800 dark:text-amber-200">
+        Confirme cada sugestão antes de gerar. Nomes próprios não listados no dicionário podem ser mantidos como digitados.
+      </p>
+      <div className="space-y-2">
+        {itens.map((it) => (
+          <div key={`${it.assuntoId}-${it.chave}`} className="rounded border border-amber-200 bg-background p-2 dark:border-amber-800">
+            <div className="text-xs font-medium">{it.titulo} · {it.label}</div>
+            <div className="mt-1 space-y-1">
+              {it.sugestoes.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs">
+                  <span className="flex-1">"<strong>{s.original}</strong>" → "<strong>{s.correcao}</strong>"</span>
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-6 px-2"
+                    onClick={() => onAplicar(it.assuntoId, it.chave, aplicarSugestaoTexto(it.valor, s))}
+                  >
+                    Aplicar sugestão
+                  </Button>
+                  <Button
+                    type="button" size="sm" variant="ghost" className="h-6 px-2"
+                    onClick={() => setIgnoradas((prev) => {
+                      const n = new Set(prev); n.add(s.original.toLowerCase()); return n;
+                    })}
+                  >
+                    Manter como digitado
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
