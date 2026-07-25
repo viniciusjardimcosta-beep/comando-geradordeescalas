@@ -1132,6 +1132,20 @@ function Etapa3({
           </div>
         )}
 
+        <RevisaoOrtografica
+          assuntos={rascunho.assuntos}
+          templates={templates}
+          militares={militares}
+          onCorrigir={(assuntoId, chave, novoValor) => {
+            // Reaproveita o callback do pai — o Wizard já passa uma função equivalente,
+            // então emitimos um evento customizado que a página captura via setState.
+            const ev = new CustomEvent("nbi-corrigir-campo", {
+              detail: { assuntoId, chave, novoValor },
+            });
+            window.dispatchEvent(ev);
+          }}
+        />
+
         {rascunho.assuntos.map((a, idx) => {
           const t = templates.find((x) => x.codigo === a.tipo);
           if (!t) return null;
