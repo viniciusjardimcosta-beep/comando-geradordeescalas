@@ -1138,14 +1138,7 @@ function Etapa3({
           assuntos={rascunho.assuntos}
           templates={templates}
           militares={militares}
-          onCorrigir={(assuntoId, chave, novoValor) => {
-            // Reaproveita o callback do pai — o Wizard já passa uma função equivalente,
-            // então emitimos um evento customizado que a página captura via setState.
-            const ev = new CustomEvent("nbi-corrigir-campo", {
-              detail: { assuntoId, chave, novoValor },
-            });
-            window.dispatchEvent(ev);
-          }}
+          onAplicar={(assuntoId, chave, novoValor) => atualizarCampo(assuntoId, chave, novoValor)}
         />
 
         {rascunho.assuntos.map((a, idx) => {
