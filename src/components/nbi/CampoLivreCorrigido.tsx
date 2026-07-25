@@ -8,6 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
 import { CheckCircle2, X } from "lucide-react";
+import {
+  sugestoesTexto,
+  aplicarSugestao,
+  sugestaoInicialMaiuscula,
+  type SugestaoPalavra,
+} from "@/utils/nbi-corretor";
 
 interface Props {
   id?: string;
@@ -18,77 +24,58 @@ interface Props {
   rows?: number;
   extraWords?: Set<string>;
   disabled?: boolean;
-}
-
-// Tokeniza preservando pontuação para reconstrução exata.
-function palavras(s: string): string[] {
-  return s.match(/[\p{L}\p{M}\d'\-]+/gu) ?? [];
-}
-
-// Palavras que o corretor ignora por convenção (siglas em CAIXA ALTA, números,
-// abreviações com ponto). Isso complementa o dicionário militar / dinâmico.
-function deveIgnorar(word: string): boolean {
-  if (word.length < 3) return true;
-  if (/^\d+$/.test(word)) return true;
-  if (/[A-ZÁÉÍÓÚÇÃÕÂÊÔ]{2,}/.test(word) && word === word.toUpperCase()) return true;
-  if (/\d/.test(word)) return true;
-  return false;
+  // 'nome_proprio' → sugere capitalização palavra a palavra (ORIGEM/DESTINO/cidade).
+  // 'inicial'      → sugere inicial maiúscula (MISSAO/MOTIVO).
+  capitalizacao?: "nome_proprio" | "inicial";
 }
 
 export function CampoLivreCorrigido({
-  id, value, onChange, placeholder, multiline, rows, extraWords, disabled,
+  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao,
 }: Props) {
   const [focused, setFocused] = useState(false);
   const { spell, loading } = useSpellchecker(focused);
-  const [sugestao, setSugestao] = useState<{ original: string; correcao: string } | null>(null);
+  const [sugestoes, setSugestoes] = useState<SugestaoPalavra[]>([]);
+  const [sugInicial, setSugInicial] = useState<{ correcao: string } | null>(null);
   const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const extras = useMemo(() => extraWords ?? new Set<string>(), [extraWords]);
 
   useEffect(() => {
-    if (!spell || !focused) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const toks = palavras(value);
-      for (let i = toks.length - 1; i >= 0; i--) {
-        const w = toks[i];
-        if (deveIgnorar(w)) continue;
-        if (ignoradas.has(w.toLowerCase())) continue;
-        if (extras.has(w) || extras.has(w.toLowerCase())) continue;
-        if (spell.correct(w)) continue;
-        const sugs = spell.suggest(w);
-        if (sugs.length === 0) continue;
-        const alvo = sugs[0];
-        if (alvo.toLowerCase() === w.toLowerCase()) continue;
-        setSugestao({ original: w, correcao: alvo });
-        return;
-      }
-      setSugestao(null);
-    }, 450);
+      const s = sugestoesTexto(value, spell, {
+        extras,
+        ignoradas,
+        capitalizarProprios: capitalizacao === "nome_proprio",
+      });
+      setSugestoes(s);
+      setSugInicial(capitalizacao === "inicial" ? sugestaoInicialMaiuscula(value) : null);
+    }, 350);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, spell, focused, extras, ignoradas]);
+  }, [value, spell, extras, ignoradas, capitalizacao]);
 
-  function aplicar() {
-    if (!sugestao) return;
-    // Substituição da última ocorrência da palavra original (case-insensitive),
-    // preservando o restante do texto do operador.
-    const re = new RegExp(`\\b${sugestao.original.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b(?!.*\\b${sugestao.original.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b)`, "i");
-    const novo = value.replace(re, sugestao.correcao);
+  function aplicar(s: SugestaoPalavra) {
+    const novo = aplicarSugestao(value, s);
     onChange(novo);
-    setSugestao(null);
+    setSugestoes((prev) => prev.filter((x) => x.inicio !== s.inicio));
   }
 
-  function ignorar() {
-    if (!sugestao) return;
+  function ignorar(s: SugestaoPalavra) {
     setIgnoradas((prev) => {
       const next = new Set(prev);
-      next.add(sugestao.original.toLowerCase());
+      next.add(s.original.toLowerCase());
       return next;
     });
-    setSugestao(null);
+    setSugestoes((prev) => prev.filter((x) => x.original.toLowerCase() !== s.original.toLowerCase()));
+  }
+
+  function aplicarInicial() {
+    if (!sugInicial) return;
+    onChange(sugInicial.correcao);
+    setSugInicial(null);
   }
 
   const comum = {
@@ -108,22 +95,38 @@ export function CampoLivreCorrigido({
       {multiline
         ? <Textarea {...comum} rows={rows ?? 2} />
         : <Input {...comum} />}
-      {sugestao && (
-        <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          <span className="flex-1">
-            Você quis dizer: <strong>{sugestao.correcao}</strong>?
-            <span className="ml-1 text-amber-700 dark:text-amber-400">
-              (no lugar de "{sugestao.original}")
-            </span>
-          </span>
-          <Button type="button" size="sm" variant="outline" className="h-6 px-2" onClick={aplicar}>
+
+      {sugestoes.length > 0 && (
+        <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">Possíveis correções ortográficas:</p>
+          {sugestoes.map((s, i) => (
+            <div key={`${s.inicio}-${i}`} className="flex items-center gap-2">
+              <span className="flex-1">
+                "<strong>{s.original}</strong>" → "<strong>{s.correcao}</strong>"
+              </span>
+              <Button type="button" size="sm" variant="outline" className="h-6 px-2" onClick={() => aplicar(s)}>
+                <CheckCircle2 className="mr-1 h-3 w-3" /> Aplicar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={() => ignorar(s)}>
+                <X className="mr-1 h-3 w-3" /> Ignorar
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sugInicial && (
+        <div className="flex items-center gap-2 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+          <span className="flex-1">Sugestão: iniciar o texto com letra maiúscula.</span>
+          <Button type="button" size="sm" variant="outline" className="h-6 px-2" onClick={aplicarInicial}>
             <CheckCircle2 className="mr-1 h-3 w-3" /> Aplicar
           </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={ignorar}>
+          <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={() => setSugInicial(null)}>
             <X className="mr-1 h-3 w-3" /> Ignorar
           </Button>
         </div>
       )}
+
       {focused && loading && !spell && (
         <p className="text-[10px] text-muted-foreground">Carregando dicionário ortográfico…</p>
       )}
