@@ -1001,7 +1001,7 @@ function AssuntoCard({
 // ============ ETAPA 3 ============
 
 function Etapa3({
-  rascunho, templates, militares, textoFinal, pendencias, onBack, onSalvar, salvando,
+  rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, salvando,
   documentoId,
 }: {
   rascunho: Rascunho;
@@ -1009,6 +1009,7 @@ function Etapa3({
   militares: MilitarNbi[];
   textoFinal: (a: AssuntoLocal) => { texto: string; ausentes: string[] };
   pendencias: (a: AssuntoLocal) => string[];
+  atualizarCampo: (assuntoId: string, chave: string, valor: string | boolean) => void;
   onBack: () => void;
   onSalvar: () => Promise<void> | void;
   salvando: boolean;
