@@ -395,6 +395,32 @@ function NovaNbiPage() {
       const snapshot = rascunho.assuntos.map((a) => {
         const t = templatePor.get(a.tipo);
         const { texto, ausentes } = textoFinal(a);
+        const militar = militares.find((m) => m.id === a.militar_id) ?? null;
+        const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
+        // Snapshot rico: preserva dados cadastrais usados (titular e substituto)
+        // mesmo que o texto oficial não imprima todos os campos.
+        const dadosTitular = titular ? {
+          militar_id: titular.id,
+          nome: titular.nome,
+          posto_graduacao: titular.posto_graduacao,
+          quadro: titular.quadro,
+          matricula: titular.matricula,
+          lotacao_nbi: titular.lotacao_nbi,
+          funcao_atual: titular.funcao_atual,
+          distribuicao_interna_nbi: titular.distribuicao_interna_nbi,
+          genero_gramatical: titular.genero_gramatical,
+        } : null;
+        const dadosMilitar = militar ? {
+          militar_id: militar.id,
+          nome: militar.nome,
+          posto_graduacao: militar.posto_graduacao,
+          quadro: militar.quadro,
+          matricula: militar.matricula,
+          lotacao_nbi: militar.lotacao_nbi,
+          funcao_atual: militar.funcao_atual,
+          distribuicao_interna_nbi: militar.distribuicao_interna_nbi,
+          genero_gramatical: militar.genero_gramatical,
+        } : null;
         return {
           tipo: a.tipo,
           template_codigo: t?.codigo ?? a.tipo,
@@ -404,6 +430,8 @@ function NovaNbiPage() {
             (t?.titulo ?? a.tipo).toUpperCase(),
           militar_id: a.militar_id,
           militar_titular_id: a.militar_titular_id,
+          militar_snapshot: dadosMilitar,
+          titular_snapshot: dadosTitular,
           ferias_id: a.ferias_id,
           campos: a.campos,
           texto_final: texto,
