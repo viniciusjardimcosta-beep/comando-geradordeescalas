@@ -945,19 +945,27 @@ function AssuntoCard({
         </Select>
       </div>
 
-      {assunto.tipo === "dispensa_funcao" && (
+      {(assunto.tipo === "dispensa_funcao" || assunto.tipo === "assuncao_funcao") && (
         <div className="mb-3">
-          <Label>Militar titular (que retornou)</Label>
+          <Label>
+            {assunto.tipo === "assuncao_funcao"
+              ? "Militar titular da função (afastado)"
+              : "Militar titular (que retornou)"}
+            <span className="text-destructive"> *</span>
+          </Label>
           <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
             <SelectTrigger><SelectValue placeholder="Selecionar titular" /></SelectTrigger>
             <SelectContent>
-              {militares.map((m) => (
+              {militares.filter((m) => m.id !== assunto.militar_id).map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Dados do titular são preservados no snapshot mesmo quando não impressos no texto oficial.
+          </p>
         </div>
       )}
 
