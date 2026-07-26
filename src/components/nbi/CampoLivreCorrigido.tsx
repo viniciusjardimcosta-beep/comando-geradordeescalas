@@ -34,13 +34,15 @@ interface Props {
 }
 
 export function CampoLivreCorrigido({
-  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao,
+  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao, modoToponimo,
 }: Props) {
   const [focused, setFocused] = useState(false);
   const { spell, loading } = useSpellchecker(focused);
   const [sugestoes, setSugestoes] = useState<SugestaoPalavra[]>([]);
   const [sugInicial, setSugInicial] = useState<{ correcao: string } | null>(null);
+  const [sugTop, setSugTop] = useState<SugestaoToponimo | null>(null);
   const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
+  const [topIgnorado, setTopIgnorado] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const extras = useMemo(() => extraWords ?? new Set<string>(), [extraWords]);
@@ -48,18 +50,28 @@ export function CampoLivreCorrigido({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const s = sugestoesTexto(value, spell, {
-        extras,
-        ignoradas,
-        capitalizarProprios: capitalizacao === "nome_proprio",
-      });
-      setSugestoes(s);
-      setSugInicial(capitalizacao === "inicial" ? sugestaoInicialMaiuscula(value) : null);
+      if (modoToponimo) {
+        // Modo topônimo: analisa a expressão inteira. Silencia o analisador
+        // palavra-a-palavra para não duplicar sugestões conflitantes.
+        const s = sugerirToponimo(value);
+        setSugTop(s && s.correcao !== topIgnorado ? s : null);
+        setSugestoes([]);
+        setSugInicial(null);
+      } else {
+        const s = sugestoesTexto(value, spell, {
+          extras,
+          ignoradas,
+          capitalizarProprios: capitalizacao === "nome_proprio",
+        });
+        setSugestoes(s);
+        setSugInicial(capitalizacao === "inicial" ? sugestaoInicialMaiuscula(value) : null);
+        setSugTop(null);
+      }
     }, 350);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, spell, extras, ignoradas, capitalizacao]);
+  }, [value, spell, extras, ignoradas, capitalizacao, modoToponimo, topIgnorado]);
 
   function aplicar(s: SugestaoPalavra) {
     const novo = aplicarSugestao(value, s);
@@ -81,6 +93,19 @@ export function CampoLivreCorrigido({
     onChange(sugInicial.correcao);
     setSugInicial(null);
   }
+
+  function aplicarTop() {
+    if (!sugTop) return;
+    onChange(sugTop.correcao);
+    setSugTop(null);
+  }
+
+  function ignorarTop() {
+    if (!sugTop) return;
+    setTopIgnorado(sugTop.correcao);
+    setSugTop(null);
+  }
+
 
   const comum = {
     id,
