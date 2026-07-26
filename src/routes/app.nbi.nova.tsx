@@ -971,7 +971,7 @@ function AssuntoCard({
 
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
-          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO"].includes(c.chave))
+          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR"].includes(c.chave))
           .map((c) => {
             const val = assunto.campos[c.chave];
             if (c.tipo === "boolean") {
@@ -986,18 +986,52 @@ function AssuntoCard({
                 </label>
               );
             }
-            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
-            // Datas e números não são corrigidos.
-            // Chaves que representam nomes próprios (cidade/pessoa/lotação) recebem
-            // sugestão de capitalização palavra-a-palavra. MISSAO/MOTIVO recebem
-            // apenas sugestão de inicial maiúscula.
             const chaveUp = c.chave.toUpperCase();
+
+            // ── Motivo controlado (Assunção/Dispensa) ──
+            if (chaveUp === "MOTIVO_TITULAR" || chaveUp === "MOTIVO_RETORNO") {
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <MotivoTitularField
+                    chave={c.chave}
+                    label={c.label}
+                    obrigatorio={!!c.obrigatorio}
+                    valor={String(val ?? "")}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    contexto={chaveUp === "MOTIVO_TITULAR" ? "afastamento" : "retorno"}
+                  />
+                </div>
+              );
+            }
+
+            // ── Função assumida / dispensada (composição a partir do titular) ──
+            if (chaveUp === "FUNCAO_ASSUMIDA" || chaveUp === "FUNCAO_DISPENSADA") {
+              const titular = militares.find((m) => m.id === assunto.militar_titular_id) ?? null;
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <FuncaoComposta
+                    chave={c.chave}
+                    label={c.label}
+                    obrigatorio={!!c.obrigatorio}
+                    valor={String(val ?? "")}
+                    titular={titular}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    extraWords={dicionarioExtras}
+                  />
+                </div>
+              );
+            }
+
+            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
+            // ORIGEM/DESTINO/CIDADE ganham análise por expressão contra a base de municípios.
             const capitalizacao: "nome_proprio" | "inicial" | undefined =
               ["ORIGEM", "DESTINO", "CIDADE", "LOTACAO", "LOTACAO_TITULAR"].includes(chaveUp)
                 ? "nome_proprio"
-                : ["MISSAO", "MOTIVO", "MOTIVO_TITULAR", "OBSERVACAO", "OBSERVACOES", "FUNCAO_ASSUMIDA", "FUNCAO_DISPENSADA"].includes(chaveUp)
+                : ["MISSAO", "MOTIVO", "OBSERVACAO", "OBSERVACOES"].includes(chaveUp)
                   ? "inicial"
                   : undefined;
+            const modoToponimo = ["ORIGEM", "DESTINO", "CIDADE"].includes(chaveUp);
+
             if (c.tipo === "texto_longo") {
               return (
                 <div key={c.chave} className="md:col-span-2">
@@ -1009,6 +1043,7 @@ function AssuntoCard({
                     rows={2}
                     extraWords={dicionarioExtras}
                     capitalizacao={capitalizacao}
+                    modoToponimo={modoToponimo}
                   />
                 </div>
               );
@@ -1030,6 +1065,7 @@ function AssuntoCard({
                   onChange={(v) => onCampo(c.chave, v)}
                   extraWords={dicionarioExtras}
                   capitalizacao={capitalizacao}
+                  modoToponimo={modoToponimo}
                 />
               </div>
             );
