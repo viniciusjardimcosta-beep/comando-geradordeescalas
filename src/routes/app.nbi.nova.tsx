@@ -1388,3 +1388,109 @@ function RevisaoOrtografica({
     </div>
   );
 }
+
+// ============ Motivo controlado (Assunção/Dispensa) ============
+const MOTIVOS_AFASTAMENTO = [
+  "Férias Regulamentares",
+  "Licença-paternidade",
+  "Luto regulamentar",
+  "Curso",
+  "Licença",
+];
+const MOTIVOS_RETORNO = [
+  "Término das Férias Regulamentares",
+  "Término da Licença-paternidade",
+  "Término do Luto regulamentar",
+  "Término do Curso",
+  "Término da Licença",
+];
+
+function MotivoTitularField({
+  chave, label, obrigatorio, valor, onChange, contexto,
+}: {
+  chave: string;
+  label: string;
+  obrigatorio: boolean;
+  valor: string;
+  onChange: (v: string) => void;
+  contexto: "afastamento" | "retorno";
+}) {
+  const opcoes = contexto === "afastamento" ? MOTIVOS_AFASTAMENTO : MOTIVOS_RETORNO;
+  const isOutro = valor !== "" && !opcoes.includes(valor);
+  const [modo, setModo] = useState<"lista" | "outro">(isOutro ? "outro" : "lista");
+  return (
+    <div className="rounded-md border p-3">
+      <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
+      <div className="mt-2 grid gap-2">
+        <Select
+          value={modo === "outro" ? "__outro__" : (opcoes.includes(valor) ? valor : "")}
+          onValueChange={(v) => {
+            if (v === "__outro__") { setModo("outro"); onChange(""); }
+            else { setModo("lista"); onChange(v); }
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
+          <SelectContent>
+            {opcoes.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            <SelectItem value="__outro__">— Outro (texto livre) —</SelectItem>
+          </SelectContent>
+        </Select>
+        {modo === "outro" && (
+          <Input
+            value={valor}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Descreva o motivo exatamente como deve constar na NBI"
+          />
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Chave interna: <code>{chave}</code>. O texto oficial recebe exatamente o motivo confirmado.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============ Composição de função (Assunção/Dispensa) ============
+function FuncaoComposta({
+  chave, label, obrigatorio, valor, titular, onChange, extraWords,
+}: {
+  chave: string;
+  label: string;
+  obrigatorio: boolean;
+  valor: string;
+  titular: MilitarNbi | null;
+  onChange: (v: string) => void;
+  extraWords: Set<string>;
+}) {
+  function componer() {
+    if (!titular) return;
+    const posto = (titular.posto_graduacao ?? "").trim();
+    const local = (titular.distribuicao_interna_nbi ?? titular.lotacao_nbi ?? "").trim();
+    const composto = [posto, local ? `do ${local}` : ""].filter(Boolean).join(" ");
+    if (composto) onChange(composto);
+  }
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-center justify-between">
+        <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
+        {titular && (
+          <Button type="button" variant="outline" size="sm" onClick={componer}>
+            Compor a partir do titular
+          </Button>
+        )}
+      </div>
+      <div className="mt-2">
+        <CampoLivreCorrigido
+          value={valor}
+          onChange={onChange}
+          extraWords={extraWords}
+          capitalizacao="inicial"
+          placeholder='Ex.: "2ºSGT do 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"'
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Chave interna: <code>{chave}</code>. Nunca usar nome do militar como função.
+        </p>
+      </div>
+    </div>
+  );
+}
