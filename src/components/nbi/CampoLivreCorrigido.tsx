@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
-import { CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import {
   sugestoesTexto,
   aplicarSugestao,
   sugestaoInicialMaiuscula,
   type SugestaoPalavra,
 } from "@/utils/nbi-corretor";
+import { sugerirToponimo, type SugestaoToponimo } from "@/utils/nbi-toponimos";
 
 interface Props {
   id?: string;
@@ -27,6 +28,9 @@ interface Props {
   // 'nome_proprio' → sugere capitalização palavra a palavra (ORIGEM/DESTINO/cidade).
   // 'inicial'      → sugere inicial maiúscula (MISSAO/MOTIVO).
   capitalizacao?: "nome_proprio" | "inicial";
+  // Quando true, analisa a EXPRESSÃO completa contra a lista curada de
+  // municípios (RS). Sugere grafia oficial ou avisa que não reconheceu.
+  modoToponimo?: boolean;
 }
 
 export function CampoLivreCorrigido({
