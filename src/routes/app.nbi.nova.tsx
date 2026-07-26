@@ -140,7 +140,7 @@ function NovaNbiPage() {
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
         supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
-        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
+        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
       ]);
@@ -276,6 +276,8 @@ function NovaNbiPage() {
       v.ID_FUNC_TITULAR = titular.matricula ?? "";
       v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
       v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
+      v.DISTRIBUICAO_INTERNA_TITULAR = titular.distribuicao_interna_nbi ?? "";
+      v.FUNCAO_ATUAL_TITULAR = titular.funcao_atual ?? "";
       v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
     }
     // autos
@@ -331,7 +333,10 @@ function NovaNbiPage() {
 
     // exige seleção de militar sempre
     if (!militar) out.push("militar não selecionado");
-    if (a.tipo === "dispensa_funcao" && !titular) out.push("titular não selecionado");
+    // Assunção e Dispensa exigem titular explícito — nunca inferir.
+    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && !titular) {
+      out.push("titular da função não selecionado");
+    }
 
     // dados cadastrais NBI do militar (obrigatórios em todos os templates)
     if (militar) {
@@ -341,7 +346,7 @@ function NovaNbiPage() {
       if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
       if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
     }
-    if (a.tipo === "dispensa_funcao" && titular) {
+    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && titular) {
       if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
       if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
       if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
@@ -351,7 +356,7 @@ function NovaNbiPage() {
 
     // campos do template
     const auto = new Set(["QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR"]);
-    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR"]);
+    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "DISTRIBUICAO_INTERNA_TITULAR", "FUNCAO_ATUAL_TITULAR"]);
     for (const c of t.campos) {
       if (auto.has(c.chave) || derivadosMilitar.has(c.chave)) continue;
       const val = a.campos[c.chave];
