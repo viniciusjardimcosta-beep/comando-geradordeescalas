@@ -290,6 +290,7 @@ export type Database = {
         Row: {
           ativo: boolean
           created_at: string
+          distribuicao_interna_nbi: string | null
           funcao: Database["public"]["Enums"]["funcao_militar"] | null
           funcao_atual: string | null
           genero_gramatical: string | null
@@ -312,6 +313,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           created_at?: string
+          distribuicao_interna_nbi?: string | null
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
           funcao_atual?: string | null
           genero_gramatical?: string | null
@@ -334,6 +336,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           created_at?: string
+          distribuicao_interna_nbi?: string | null
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
           funcao_atual?: string | null
           genero_gramatical?: string | null

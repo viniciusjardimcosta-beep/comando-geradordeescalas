@@ -12,6 +12,7 @@ export interface MilitarNbi {
   quadro: string | null;
   lotacao_nbi: string | null;
   funcao_atual: string | null;
+  distribuicao_interna_nbi: string | null;
   genero_gramatical: string | null;
 }
 

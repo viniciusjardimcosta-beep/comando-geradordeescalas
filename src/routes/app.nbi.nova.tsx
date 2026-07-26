@@ -140,7 +140,7 @@ function NovaNbiPage() {
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
         supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
-        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
+        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
       ]);
@@ -276,6 +276,8 @@ function NovaNbiPage() {
       v.ID_FUNC_TITULAR = titular.matricula ?? "";
       v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
       v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
+      v.DISTRIBUICAO_INTERNA_TITULAR = titular.distribuicao_interna_nbi ?? "";
+      v.FUNCAO_ATUAL_TITULAR = titular.funcao_atual ?? "";
       v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
     }
     // autos
@@ -331,7 +333,10 @@ function NovaNbiPage() {
 
     // exige seleção de militar sempre
     if (!militar) out.push("militar não selecionado");
-    if (a.tipo === "dispensa_funcao" && !titular) out.push("titular não selecionado");
+    // Assunção e Dispensa exigem titular explícito — nunca inferir.
+    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && !titular) {
+      out.push("titular da função não selecionado");
+    }
 
     // dados cadastrais NBI do militar (obrigatórios em todos os templates)
     if (militar) {
@@ -341,7 +346,7 @@ function NovaNbiPage() {
       if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
       if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
     }
-    if (a.tipo === "dispensa_funcao" && titular) {
+    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && titular) {
       if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
       if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
       if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
@@ -351,7 +356,7 @@ function NovaNbiPage() {
 
     // campos do template
     const auto = new Set(["QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR"]);
-    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR"]);
+    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "DISTRIBUICAO_INTERNA_TITULAR", "FUNCAO_ATUAL_TITULAR"]);
     for (const c of t.campos) {
       if (auto.has(c.chave) || derivadosMilitar.has(c.chave)) continue;
       const val = a.campos[c.chave];
@@ -390,6 +395,32 @@ function NovaNbiPage() {
       const snapshot = rascunho.assuntos.map((a) => {
         const t = templatePor.get(a.tipo);
         const { texto, ausentes } = textoFinal(a);
+        const militar = militares.find((m) => m.id === a.militar_id) ?? null;
+        const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
+        // Snapshot rico: preserva dados cadastrais usados (titular e substituto)
+        // mesmo que o texto oficial não imprima todos os campos.
+        const dadosTitular = titular ? {
+          militar_id: titular.id,
+          nome: titular.nome,
+          posto_graduacao: titular.posto_graduacao,
+          quadro: titular.quadro,
+          matricula: titular.matricula,
+          lotacao_nbi: titular.lotacao_nbi,
+          funcao_atual: titular.funcao_atual,
+          distribuicao_interna_nbi: titular.distribuicao_interna_nbi,
+          genero_gramatical: titular.genero_gramatical,
+        } : null;
+        const dadosMilitar = militar ? {
+          militar_id: militar.id,
+          nome: militar.nome,
+          posto_graduacao: militar.posto_graduacao,
+          quadro: militar.quadro,
+          matricula: militar.matricula,
+          lotacao_nbi: militar.lotacao_nbi,
+          funcao_atual: militar.funcao_atual,
+          distribuicao_interna_nbi: militar.distribuicao_interna_nbi,
+          genero_gramatical: militar.genero_gramatical,
+        } : null;
         return {
           tipo: a.tipo,
           template_codigo: t?.codigo ?? a.tipo,
@@ -399,6 +430,8 @@ function NovaNbiPage() {
             (t?.titulo ?? a.tipo).toUpperCase(),
           militar_id: a.militar_id,
           militar_titular_id: a.militar_titular_id,
+          militar_snapshot: dadosMilitar,
+          titular_snapshot: dadosTitular,
           ferias_id: a.ferias_id,
           campos: a.campos,
           texto_final: texto,
@@ -912,25 +945,33 @@ function AssuntoCard({
         </Select>
       </div>
 
-      {assunto.tipo === "dispensa_funcao" && (
+      {(assunto.tipo === "dispensa_funcao" || assunto.tipo === "assuncao_funcao") && (
         <div className="mb-3">
-          <Label>Militar titular (que retornou)</Label>
+          <Label>
+            {assunto.tipo === "assuncao_funcao"
+              ? "Militar titular da função (afastado)"
+              : "Militar titular (que retornou)"}
+            <span className="text-destructive"> *</span>
+          </Label>
           <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
             <SelectTrigger><SelectValue placeholder="Selecionar titular" /></SelectTrigger>
             <SelectContent>
-              {militares.map((m) => (
+              {militares.filter((m) => m.id !== assunto.militar_id).map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Dados do titular são preservados no snapshot mesmo quando não impressos no texto oficial.
+          </p>
         </div>
       )}
 
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
-          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO"].includes(c.chave))
+          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR"].includes(c.chave))
           .map((c) => {
             const val = assunto.campos[c.chave];
             if (c.tipo === "boolean") {
@@ -945,18 +986,52 @@ function AssuntoCard({
                 </label>
               );
             }
-            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
-            // Datas e números não são corrigidos.
-            // Chaves que representam nomes próprios (cidade/pessoa/lotação) recebem
-            // sugestão de capitalização palavra-a-palavra. MISSAO/MOTIVO recebem
-            // apenas sugestão de inicial maiúscula.
             const chaveUp = c.chave.toUpperCase();
+
+            // ── Motivo controlado (Assunção/Dispensa) ──
+            if (chaveUp === "MOTIVO_TITULAR" || chaveUp === "MOTIVO_RETORNO") {
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <MotivoTitularField
+                    chave={c.chave}
+                    label={c.label}
+                    obrigatorio={!!c.obrigatorio}
+                    valor={String(val ?? "")}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    contexto={chaveUp === "MOTIVO_TITULAR" ? "afastamento" : "retorno"}
+                  />
+                </div>
+              );
+            }
+
+            // ── Função assumida / dispensada (composição a partir do titular) ──
+            if (chaveUp === "FUNCAO_ASSUMIDA" || chaveUp === "FUNCAO_DISPENSADA") {
+              const titular = militares.find((m) => m.id === assunto.militar_titular_id) ?? null;
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <FuncaoComposta
+                    chave={c.chave}
+                    label={c.label}
+                    obrigatorio={!!c.obrigatorio}
+                    valor={String(val ?? "")}
+                    titular={titular}
+                    onChange={(v) => onCampo(c.chave, v)}
+                    extraWords={dicionarioExtras}
+                  />
+                </div>
+              );
+            }
+
+            // Campos livres (texto/texto_longo) recebem corretor ortográfico offline.
+            // ORIGEM/DESTINO/CIDADE ganham análise por expressão contra a base de municípios.
             const capitalizacao: "nome_proprio" | "inicial" | undefined =
               ["ORIGEM", "DESTINO", "CIDADE", "LOTACAO", "LOTACAO_TITULAR"].includes(chaveUp)
                 ? "nome_proprio"
-                : ["MISSAO", "MOTIVO", "MOTIVO_TITULAR", "OBSERVACAO", "OBSERVACOES", "FUNCAO_ASSUMIDA", "FUNCAO_DISPENSADA"].includes(chaveUp)
+                : ["MISSAO", "MOTIVO", "OBSERVACAO", "OBSERVACOES"].includes(chaveUp)
                   ? "inicial"
                   : undefined;
+            const modoToponimo = ["ORIGEM", "DESTINO", "CIDADE"].includes(chaveUp);
+
             if (c.tipo === "texto_longo") {
               return (
                 <div key={c.chave} className="md:col-span-2">
@@ -968,6 +1043,7 @@ function AssuntoCard({
                     rows={2}
                     extraWords={dicionarioExtras}
                     capitalizacao={capitalizacao}
+                    modoToponimo={modoToponimo}
                   />
                 </div>
               );
@@ -989,6 +1065,7 @@ function AssuntoCard({
                   onChange={(v) => onCampo(c.chave, v)}
                   extraWords={dicionarioExtras}
                   capitalizacao={capitalizacao}
+                  modoToponimo={modoToponimo}
                 />
               </div>
             );
@@ -1307,6 +1384,112 @@ function RevisaoOrtografica({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ============ Motivo controlado (Assunção/Dispensa) ============
+const MOTIVOS_AFASTAMENTO = [
+  "Férias Regulamentares",
+  "Licença-paternidade",
+  "Luto regulamentar",
+  "Curso",
+  "Licença",
+];
+const MOTIVOS_RETORNO = [
+  "Término das Férias Regulamentares",
+  "Término da Licença-paternidade",
+  "Término do Luto regulamentar",
+  "Término do Curso",
+  "Término da Licença",
+];
+
+function MotivoTitularField({
+  chave, label, obrigatorio, valor, onChange, contexto,
+}: {
+  chave: string;
+  label: string;
+  obrigatorio: boolean;
+  valor: string;
+  onChange: (v: string) => void;
+  contexto: "afastamento" | "retorno";
+}) {
+  const opcoes = contexto === "afastamento" ? MOTIVOS_AFASTAMENTO : MOTIVOS_RETORNO;
+  const isOutro = valor !== "" && !opcoes.includes(valor);
+  const [modo, setModo] = useState<"lista" | "outro">(isOutro ? "outro" : "lista");
+  return (
+    <div className="rounded-md border p-3">
+      <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
+      <div className="mt-2 grid gap-2">
+        <Select
+          value={modo === "outro" ? "__outro__" : (opcoes.includes(valor) ? valor : "")}
+          onValueChange={(v) => {
+            if (v === "__outro__") { setModo("outro"); onChange(""); }
+            else { setModo("lista"); onChange(v); }
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
+          <SelectContent>
+            {opcoes.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            <SelectItem value="__outro__">— Outro (texto livre) —</SelectItem>
+          </SelectContent>
+        </Select>
+        {modo === "outro" && (
+          <Input
+            value={valor}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Descreva o motivo exatamente como deve constar na NBI"
+          />
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Chave interna: <code>{chave}</code>. O texto oficial recebe exatamente o motivo confirmado.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============ Composição de função (Assunção/Dispensa) ============
+function FuncaoComposta({
+  chave, label, obrigatorio, valor, titular, onChange, extraWords,
+}: {
+  chave: string;
+  label: string;
+  obrigatorio: boolean;
+  valor: string;
+  titular: MilitarNbi | null;
+  onChange: (v: string) => void;
+  extraWords: Set<string>;
+}) {
+  function componer() {
+    if (!titular) return;
+    const posto = (titular.posto_graduacao ?? "").trim();
+    const local = (titular.distribuicao_interna_nbi ?? titular.lotacao_nbi ?? "").trim();
+    const composto = [posto, local ? `do ${local}` : ""].filter(Boolean).join(" ");
+    if (composto) onChange(composto);
+  }
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-center justify-between">
+        <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
+        {titular && (
+          <Button type="button" variant="outline" size="sm" onClick={componer}>
+            Compor a partir do titular
+          </Button>
+        )}
+      </div>
+      <div className="mt-2">
+        <CampoLivreCorrigido
+          value={valor}
+          onChange={onChange}
+          extraWords={extraWords}
+          capitalizacao="inicial"
+          placeholder='Ex.: "2ºSGT do 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"'
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Chave interna: <code>{chave}</code>. Nunca usar nome do militar como função.
+        </p>
       </div>
     </div>
   );

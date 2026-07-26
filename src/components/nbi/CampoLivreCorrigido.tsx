@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
-import { CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import {
   sugestoesTexto,
   aplicarSugestao,
   sugestaoInicialMaiuscula,
   type SugestaoPalavra,
 } from "@/utils/nbi-corretor";
+import { sugerirToponimo, type SugestaoToponimo } from "@/utils/nbi-toponimos";
 
 interface Props {
   id?: string;
@@ -27,16 +28,21 @@ interface Props {
   // 'nome_proprio' → sugere capitalização palavra a palavra (ORIGEM/DESTINO/cidade).
   // 'inicial'      → sugere inicial maiúscula (MISSAO/MOTIVO).
   capitalizacao?: "nome_proprio" | "inicial";
+  // Quando true, analisa a EXPRESSÃO completa contra a lista curada de
+  // municípios (RS). Sugere grafia oficial ou avisa que não reconheceu.
+  modoToponimo?: boolean;
 }
 
 export function CampoLivreCorrigido({
-  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao,
+  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao, modoToponimo,
 }: Props) {
   const [focused, setFocused] = useState(false);
   const { spell, loading } = useSpellchecker(focused);
   const [sugestoes, setSugestoes] = useState<SugestaoPalavra[]>([]);
   const [sugInicial, setSugInicial] = useState<{ correcao: string } | null>(null);
+  const [sugTop, setSugTop] = useState<SugestaoToponimo | null>(null);
   const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
+  const [topIgnorado, setTopIgnorado] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const extras = useMemo(() => extraWords ?? new Set<string>(), [extraWords]);
@@ -44,18 +50,28 @@ export function CampoLivreCorrigido({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const s = sugestoesTexto(value, spell, {
-        extras,
-        ignoradas,
-        capitalizarProprios: capitalizacao === "nome_proprio",
-      });
-      setSugestoes(s);
-      setSugInicial(capitalizacao === "inicial" ? sugestaoInicialMaiuscula(value) : null);
+      if (modoToponimo) {
+        // Modo topônimo: analisa a expressão inteira. Silencia o analisador
+        // palavra-a-palavra para não duplicar sugestões conflitantes.
+        const s = sugerirToponimo(value);
+        setSugTop(s && s.correcao !== topIgnorado ? s : null);
+        setSugestoes([]);
+        setSugInicial(null);
+      } else {
+        const s = sugestoesTexto(value, spell, {
+          extras,
+          ignoradas,
+          capitalizarProprios: capitalizacao === "nome_proprio",
+        });
+        setSugestoes(s);
+        setSugInicial(capitalizacao === "inicial" ? sugestaoInicialMaiuscula(value) : null);
+        setSugTop(null);
+      }
     }, 350);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [value, spell, extras, ignoradas, capitalizacao]);
+  }, [value, spell, extras, ignoradas, capitalizacao, modoToponimo, topIgnorado]);
 
   function aplicar(s: SugestaoPalavra) {
     const novo = aplicarSugestao(value, s);
@@ -77,6 +93,19 @@ export function CampoLivreCorrigido({
     onChange(sugInicial.correcao);
     setSugInicial(null);
   }
+
+  function aplicarTop() {
+    if (!sugTop) return;
+    onChange(sugTop.correcao);
+    setSugTop(null);
+  }
+
+  function ignorarTop() {
+    if (!sugTop) return;
+    setTopIgnorado(sugTop.correcao);
+    setSugTop(null);
+  }
+
 
   const comum = {
     id,
@@ -126,6 +155,37 @@ export function CampoLivreCorrigido({
           </Button>
         </div>
       )}
+
+      {sugTop && sugTop.reconhecido && (
+        <div className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+          <span className="flex-1">
+            Município reconhecido: sugerir "<strong>{sugTop.correcao}</strong>".
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-6 px-2" onClick={aplicarTop}>
+            <CheckCircle2 className="mr-1 h-3 w-3" /> Aplicar
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={ignorarTop}>
+            <X className="mr-1 h-3 w-3" /> Manter como está
+          </Button>
+        </div>
+      )}
+
+      {sugTop && !sugTop.reconhecido && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+          <span className="flex-1">
+            Grafia não reconhecida na base de municípios. Sugestão de capitalização:
+            "<strong>{sugTop.correcao}</strong>". Confirme como deseja manter.
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-6 px-2" onClick={aplicarTop}>
+            Aplicar
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={ignorarTop}>
+            Manter
+          </Button>
+        </div>
+      )}
+
 
       {focused && loading && !spell && (
         <p className="text-[10px] text-muted-foreground">Carregando dicionário ortográfico…</p>

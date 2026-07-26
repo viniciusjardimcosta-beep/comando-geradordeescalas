@@ -45,6 +45,7 @@ interface Militar {
   quadro: string | null;
   lotacao_nbi: string | null;
   funcao_atual: string | null;
+  distribuicao_interna_nbi: string | null;
   genero_gramatical: string | null;
   nome_guerra: string | null;
 }
@@ -62,6 +63,7 @@ interface FormState {
   quadro: string;
   lotacao_nbi: string;
   funcao_atual: string;
+  distribuicao_interna_nbi: string;
   genero_gramatical: Genero;
   nome_guerra: string;
 }
@@ -79,6 +81,7 @@ const emptyForm: FormState = {
   quadro: "",
   lotacao_nbi: "",
   funcao_atual: "",
+  distribuicao_interna_nbi: "",
   genero_gramatical: "",
   nome_guerra: "",
 };
@@ -147,6 +150,7 @@ function MilitaresPage() {
       quadro: m.quadro ?? "",
       lotacao_nbi: m.lotacao_nbi ?? "",
       funcao_atual: m.funcao_atual ?? "",
+      distribuicao_interna_nbi: m.distribuicao_interna_nbi ?? "",
       genero_gramatical: (m.genero_gramatical === "M" || m.genero_gramatical === "F") ? m.genero_gramatical : "",
       nome_guerra: m.nome_guerra ?? "",
     });
@@ -176,6 +180,7 @@ function MilitaresPage() {
       quadro: form.quadro.trim() || null,
       lotacao_nbi: form.lotacao_nbi.trim() || null,
       funcao_atual: form.funcao_atual.trim() || null,
+      distribuicao_interna_nbi: form.distribuicao_interna_nbi.trim() || null,
       genero_gramatical: form.genero_gramatical || null,
       nome_guerra: form.nome_guerra.trim() || null,
     } as never;
@@ -447,6 +452,18 @@ function MilitaresPage() {
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Cargo/função administrativa — diferente do papel operacional CG/COV.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="distribuicao_interna_nbi">Distribuição interna (NBI)</Label>
+                <Input
+                  id="distribuicao_interna_nbi"
+                  value={form.distribuicao_interna_nbi}
+                  onChange={(e) => setForm({ ...form, distribuicao_interna_nbi: e.target.value })}
+                  placeholder="Ex.: 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
                 </p>
               </div>
               <div className="grid gap-2">
