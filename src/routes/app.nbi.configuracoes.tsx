@@ -40,6 +40,14 @@ interface MilitarLite {
   genero_gramatical: string | null;
 }
 
+interface ItemRevisao {
+  label: string;
+  original: string;
+  correcao: string;
+  motivos: string[];
+  aplicar: () => void;
+}
+
 interface Responsavel {
   militar_id: string | null;
   nome: string;
@@ -213,7 +221,59 @@ function NbiConfiguracoesPage() {
     }));
   }
 
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
+
+  // ---- Revisão geral dos campos livres antes de salvar ----
+  const revisao = useMemo<ItemRevisao[]>(() => {
+    const itens: ItemRevisao[] = [];
+    const inst = (
+      label: string,
+      valor: string,
+      modo: "caixa_alta" | "funcao" | "lotacao",
+      set: (v: string) => void,
+    ) => {
+      const sg = sugerirInstitucional(valor, modo);
+      if (sg) itens.push({ label, original: sg.original, correcao: sg.correcao, motivos: sg.motivos, aplicar: () => set(sg.correcao) });
+    };
+
+    inst("Estado", form.cabecalho_estado, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_estado: v })));
+    inst("Secretaria", form.cabecalho_secretaria, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_secretaria: v })));
+    inst("Corporação", form.cabecalho_corporacao, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_corporacao: v })));
+    inst("Batalhão", form.cabecalho_batalhao, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_batalhao: v })));
+    inst("Subunidade", form.cabecalho_subunidade, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_subunidade: v })));
+
+    const cidade = sugerirToponimo(form.cabecalho_cidade);
+    if (cidade) {
+      itens.push({
+        label: "Cidade",
+        original: cidade.original,
+        correcao: cidade.correcao,
+        motivos: [cidade.reconhecido ? "Município reconhecido na base do RS" : "Grafia não reconhecida — apenas capitalização"],
+        aplicar: () => setForm((f) => ({ ...f, cabecalho_cidade: cidade.correcao })),
+      });
+    }
+
+    (["digitador", "comandante", "autoridade"] as const).forEach((campo) => {
+      const nomeCampo = campo === "digitador" ? "Digitador" : campo === "comandante" ? "Comandante" : "Autoridade publicadora";
+      inst(`${nomeCampo} — função`, form[campo].funcao, "funcao", (v) =>
+        setForm((f) => ({ ...f, [campo]: { ...f[campo], funcao: v } })));
+      inst(`${nomeCampo} — lotação`, form[campo].lotacao, "lotacao", (v) =>
+        setForm((f) => ({ ...f, [campo]: { ...f[campo], lotacao: v } })));
+    });
+
+    return itens;
+  }, [form]);
+
   async function salvar() {
+    if (revisao.length > 0) {
+      setRevisaoAberta(true);
+      return;
+    }
+    await persistir();
+  }
+
+  async function persistir() {
+    setRevisaoAberta(false);
     if (!session?.user.id) return;
     setSaving(true);
     const payload = {
