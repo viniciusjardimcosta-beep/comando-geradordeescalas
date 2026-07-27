@@ -375,6 +375,48 @@ function NbiConfiguracoesPage() {
             </Button>
           </div>
 
+          <Dialog open={revisaoAberta} onOpenChange={setRevisaoAberta}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <SpellCheck className="h-4 w-4 text-primary" /> Possíveis correções encontradas
+                </DialogTitle>
+                <DialogDescription>
+                  Nenhuma correção é aplicada automaticamente. Aplique individualmente ou confirme
+                  que deseja manter a grafia como digitada.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+                {revisao.length === 0 ? (
+                  <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Nenhuma sugestão pendente.
+                  </p>
+                ) : revisao.map((item, i) => (
+                  <div key={`${item.label}-${i}`} className="rounded-md border border-border p-3 text-xs">
+                    <p className="font-semibold">{item.label}</p>
+                    <p className="mt-1">
+                      "<strong>{item.original}</strong>" → "<strong>{item.correcao}</strong>"
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">{item.motivos.join(" · ")}</p>
+                    <Button type="button" size="sm" variant="outline" className="mt-2 h-7 px-2"
+                      onClick={item.aplicar}>
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Aplicar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button variant="ghost" onClick={() => setRevisaoAberta(false)}>Voltar e revisar</Button>
+                <Button onClick={() => void persistir()} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Manter como digitado e salvar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+
+
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
