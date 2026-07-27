@@ -10,7 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, AlertTriangle, UserCog, FileText, Building2 } from "lucide-react";
+import { Loader2, Save, AlertTriangle, UserCog, FileText, Building2, CheckCircle2, SpellCheck } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
+import { sugerirInstitucional } from "@/utils/nbi-institucional";
+import { sugerirToponimo } from "@/utils/nbi-toponimos";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/nbi/configuracoes")({
@@ -279,38 +285,44 @@ function NbiConfiguracoesPage() {
             <CardContent className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_estado">Linha 1 — Estado (cabeçalho oficial)</Label>
-                <Input id="cab_estado" value={form.cabecalho_estado}
-                  onChange={(e) => setForm({ ...form, cabecalho_estado: e.target.value })}
+                <CampoLivreCorrigido id="cab_estado" value={form.cabecalho_estado}
+                  onChange={(v) => setForm({ ...form, cabecalho_estado: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: ESTADO DO RIO GRANDE DO SUL" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_secretaria">Linha 2 — Secretaria</Label>
-                <Input id="cab_secretaria" value={form.cabecalho_secretaria}
-                  onChange={(e) => setForm({ ...form, cabecalho_secretaria: e.target.value })}
+                <CampoLivreCorrigido id="cab_secretaria" value={form.cabecalho_secretaria}
+                  onChange={(v) => setForm({ ...form, cabecalho_secretaria: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: SECRETARIA DA SEGURANÇA PÚBLICA" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_corp">Linha 3 — Corporação</Label>
-                <Input id="cab_corp" value={form.cabecalho_corporacao}
-                  onChange={(e) => setForm({ ...form, cabecalho_corporacao: e.target.value })}
+                <CampoLivreCorrigido id="cab_corp" value={form.cabecalho_corporacao}
+                  onChange={(v) => setForm({ ...form, cabecalho_corporacao: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: CORPO DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_bat">Linha 4 — Batalhão</Label>
-                <Input id="cab_bat" value={form.cabecalho_batalhao}
-                  onChange={(e) => setForm({ ...form, cabecalho_batalhao: e.target.value })}
+                <CampoLivreCorrigido id="cab_bat" value={form.cabecalho_batalhao}
+                  onChange={(v) => setForm({ ...form, cabecalho_batalhao: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: 3º BATALHÃO DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_sub">Linha 5 — Subunidade emissora</Label>
-                <Input id="cab_sub" value={form.cabecalho_subunidade}
-                  onChange={(e) => setForm({ ...form, cabecalho_subunidade: e.target.value })}
+                <CampoLivreCorrigido id="cab_sub" value={form.cabecalho_subunidade}
+                  onChange={(v) => setForm({ ...form, cabecalho_subunidade: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: 2ª COMPANHIA DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="cab_cidade">Cidade (local do encerramento)</Label>
-                <Input id="cab_cidade" value={form.cabecalho_cidade}
-                  onChange={(e) => setForm({ ...form, cabecalho_cidade: e.target.value })}
+                <CampoLivreCorrigido id="cab_cidade" value={form.cabecalho_cidade}
+                  onChange={(v) => setForm({ ...form, cabecalho_cidade: v })}
+                  modoToponimo
                   placeholder="Ex.: Porto Alegre" />
               </div>
               <div className="grid gap-2">
@@ -491,11 +503,17 @@ function ResponsavelSection({ titulo, campo, militares, valor, onAplicar, onChan
           </div>
           <div className="grid gap-2">
             <Label>Função</Label>
-            <Input value={valor.funcao} onChange={(e) => onChange({ ...valor, funcao: e.target.value })} />
+            <CampoLivreCorrigido value={valor.funcao}
+              onChange={(v) => onChange({ ...valor, funcao: v })}
+              modoInstitucional="funcao"
+              placeholder="Ex.: Cmt do 15ºBBM" />
           </div>
           <div className="grid gap-2">
             <Label>Lotação</Label>
-            <Input value={valor.lotacao} onChange={(e) => onChange({ ...valor, lotacao: e.target.value })} />
+            <CampoLivreCorrigido value={valor.lotacao}
+              onChange={(v) => onChange({ ...valor, lotacao: v })}
+              modoInstitucional="lotacao"
+              placeholder="Ex.: 1ª CiaBM" />
           </div>
         </div>
       </div>
