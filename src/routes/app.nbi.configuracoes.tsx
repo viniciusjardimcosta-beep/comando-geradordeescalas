@@ -10,7 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, AlertTriangle, UserCog, FileText, Building2 } from "lucide-react";
+import { Loader2, Save, AlertTriangle, UserCog, FileText, Building2, CheckCircle2, SpellCheck } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
+import { sugerirInstitucional } from "@/utils/nbi-institucional";
+import { sugerirToponimo } from "@/utils/nbi-toponimos";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/nbi/configuracoes")({
@@ -32,6 +38,14 @@ interface MilitarLite {
   lotacao_nbi: string | null;
   funcao_atual: string | null;
   genero_gramatical: string | null;
+}
+
+interface ItemRevisao {
+  label: string;
+  original: string;
+  correcao: string;
+  motivos: string[];
+  aplicar: () => void;
 }
 
 interface Responsavel {
@@ -207,7 +221,59 @@ function NbiConfiguracoesPage() {
     }));
   }
 
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
+
+  // ---- Revisão geral dos campos livres antes de salvar ----
+  const revisao = useMemo<ItemRevisao[]>(() => {
+    const itens: ItemRevisao[] = [];
+    const inst = (
+      label: string,
+      valor: string,
+      modo: "caixa_alta" | "funcao" | "lotacao",
+      set: (v: string) => void,
+    ) => {
+      const sg = sugerirInstitucional(valor, modo);
+      if (sg) itens.push({ label, original: sg.original, correcao: sg.correcao, motivos: sg.motivos, aplicar: () => set(sg.correcao) });
+    };
+
+    inst("Estado", form.cabecalho_estado, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_estado: v })));
+    inst("Secretaria", form.cabecalho_secretaria, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_secretaria: v })));
+    inst("Corporação", form.cabecalho_corporacao, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_corporacao: v })));
+    inst("Batalhão", form.cabecalho_batalhao, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_batalhao: v })));
+    inst("Subunidade", form.cabecalho_subunidade, "caixa_alta", (v) => setForm((f) => ({ ...f, cabecalho_subunidade: v })));
+
+    const cidade = sugerirToponimo(form.cabecalho_cidade);
+    if (cidade) {
+      itens.push({
+        label: "Cidade",
+        original: cidade.original,
+        correcao: cidade.correcao,
+        motivos: [cidade.reconhecido ? "Município reconhecido na base do RS" : "Grafia não reconhecida — apenas capitalização"],
+        aplicar: () => setForm((f) => ({ ...f, cabecalho_cidade: cidade.correcao })),
+      });
+    }
+
+    (["digitador", "comandante", "autoridade"] as const).forEach((campo) => {
+      const nomeCampo = campo === "digitador" ? "Digitador" : campo === "comandante" ? "Comandante" : "Autoridade publicadora";
+      inst(`${nomeCampo} — função`, form[campo].funcao, "funcao", (v) =>
+        setForm((f) => ({ ...f, [campo]: { ...f[campo], funcao: v } })));
+      inst(`${nomeCampo} — lotação`, form[campo].lotacao, "lotacao", (v) =>
+        setForm((f) => ({ ...f, [campo]: { ...f[campo], lotacao: v } })));
+    });
+
+    return itens;
+  }, [form]);
+
   async function salvar() {
+    if (revisao.length > 0) {
+      setRevisaoAberta(true);
+      return;
+    }
+    await persistir();
+  }
+
+  async function persistir() {
+    setRevisaoAberta(false);
     if (!session?.user.id) return;
     setSaving(true);
     const payload = {
@@ -279,38 +345,44 @@ function NbiConfiguracoesPage() {
             <CardContent className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_estado">Linha 1 — Estado (cabeçalho oficial)</Label>
-                <Input id="cab_estado" value={form.cabecalho_estado}
-                  onChange={(e) => setForm({ ...form, cabecalho_estado: e.target.value })}
+                <CampoLivreCorrigido id="cab_estado" value={form.cabecalho_estado}
+                  onChange={(v) => setForm({ ...form, cabecalho_estado: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: ESTADO DO RIO GRANDE DO SUL" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_secretaria">Linha 2 — Secretaria</Label>
-                <Input id="cab_secretaria" value={form.cabecalho_secretaria}
-                  onChange={(e) => setForm({ ...form, cabecalho_secretaria: e.target.value })}
+                <CampoLivreCorrigido id="cab_secretaria" value={form.cabecalho_secretaria}
+                  onChange={(v) => setForm({ ...form, cabecalho_secretaria: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: SECRETARIA DA SEGURANÇA PÚBLICA" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_corp">Linha 3 — Corporação</Label>
-                <Input id="cab_corp" value={form.cabecalho_corporacao}
-                  onChange={(e) => setForm({ ...form, cabecalho_corporacao: e.target.value })}
+                <CampoLivreCorrigido id="cab_corp" value={form.cabecalho_corporacao}
+                  onChange={(v) => setForm({ ...form, cabecalho_corporacao: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: CORPO DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_bat">Linha 4 — Batalhão</Label>
-                <Input id="cab_bat" value={form.cabecalho_batalhao}
-                  onChange={(e) => setForm({ ...form, cabecalho_batalhao: e.target.value })}
+                <CampoLivreCorrigido id="cab_bat" value={form.cabecalho_batalhao}
+                  onChange={(v) => setForm({ ...form, cabecalho_batalhao: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: 3º BATALHÃO DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_sub">Linha 5 — Subunidade emissora</Label>
-                <Input id="cab_sub" value={form.cabecalho_subunidade}
-                  onChange={(e) => setForm({ ...form, cabecalho_subunidade: e.target.value })}
+                <CampoLivreCorrigido id="cab_sub" value={form.cabecalho_subunidade}
+                  onChange={(v) => setForm({ ...form, cabecalho_subunidade: v })}
+                  modoInstitucional="caixa_alta"
                   placeholder="Ex.: 2ª COMPANHIA DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="cab_cidade">Cidade (local do encerramento)</Label>
-                <Input id="cab_cidade" value={form.cabecalho_cidade}
-                  onChange={(e) => setForm({ ...form, cabecalho_cidade: e.target.value })}
+                <CampoLivreCorrigido id="cab_cidade" value={form.cabecalho_cidade}
+                  onChange={(v) => setForm({ ...form, cabecalho_cidade: v })}
+                  modoToponimo
                   placeholder="Ex.: Porto Alegre" />
               </div>
               <div className="grid gap-2">
@@ -362,6 +434,48 @@ function NbiConfiguracoesPage() {
               Salvar configurações
             </Button>
           </div>
+
+          <Dialog open={revisaoAberta} onOpenChange={setRevisaoAberta}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <SpellCheck className="h-4 w-4 text-primary" /> Possíveis correções encontradas
+                </DialogTitle>
+                <DialogDescription>
+                  Nenhuma correção é aplicada automaticamente. Aplique individualmente ou confirme
+                  que deseja manter a grafia como digitada.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+                {revisao.length === 0 ? (
+                  <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Nenhuma sugestão pendente.
+                  </p>
+                ) : revisao.map((item, i) => (
+                  <div key={`${item.label}-${i}`} className="rounded-md border border-border p-3 text-xs">
+                    <p className="font-semibold">{item.label}</p>
+                    <p className="mt-1">
+                      "<strong>{item.original}</strong>" → "<strong>{item.correcao}</strong>"
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">{item.motivos.join(" · ")}</p>
+                    <Button type="button" size="sm" variant="outline" className="mt-2 h-7 px-2"
+                      onClick={item.aplicar}>
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Aplicar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button variant="ghost" onClick={() => setRevisaoAberta(false)}>Voltar e revisar</Button>
+                <Button onClick={() => void persistir()} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Manter como digitado e salvar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+
 
           <Card>
             <CardHeader>
@@ -491,11 +605,17 @@ function ResponsavelSection({ titulo, campo, militares, valor, onAplicar, onChan
           </div>
           <div className="grid gap-2">
             <Label>Função</Label>
-            <Input value={valor.funcao} onChange={(e) => onChange({ ...valor, funcao: e.target.value })} />
+            <CampoLivreCorrigido value={valor.funcao}
+              onChange={(v) => onChange({ ...valor, funcao: v })}
+              modoInstitucional="funcao"
+              placeholder="Ex.: Cmt do 15ºBBM" />
           </div>
           <div className="grid gap-2">
             <Label>Lotação</Label>
-            <Input value={valor.lotacao} onChange={(e) => onChange({ ...valor, lotacao: e.target.value })} />
+            <CampoLivreCorrigido value={valor.lotacao}
+              onChange={(v) => onChange({ ...valor, lotacao: v })}
+              modoInstitucional="lotacao"
+              placeholder="Ex.: 1ª CiaBM" />
           </div>
         </div>
       </div>
