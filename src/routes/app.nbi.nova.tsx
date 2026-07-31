@@ -21,12 +21,13 @@ import {
 } from "lucide-react";
 import {
   type AssuntoTipo, type MilitarNbi, type FeriasReg,
-  numeroPorExtenso, periodoOrdinal, analisarFraseNbi, postoMilitarCombina,
+  periodoOrdinal, analisarFraseNbi, postoMilitarCombina,
   normalizarTextoNbi,
-  montarPostoQuadro, artigoO, artigoAo,
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
+import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
@@ -250,70 +251,25 @@ function NovaNbiPage() {
     });
   }
 
+  // Contexto do motor NBI — dados brutos do assunto + cadastro envolvido.
+  function contextoDe(a: AssuntoLocal): ContextoMotor {
+    const t = templatePor.get(a.tipo);
+    return {
+      campos: a.campos,
+      militar: militares.find((m) => m.id === a.militar_id) ?? null,
+      titular: militares.find((m) => m.id === a.militar_titular_id) ?? null,
+      camposTemplate: (t?.campos ?? []) as ContextoMotor["camposTemplate"],
+    };
+  }
+
   // Resolve valores finais do assunto (apenas em memória, não altera texto oficial).
+  // Toda a regra por assunto vive no motor correspondente (registry).
   function resolverValores(a: AssuntoLocal): Record<string, string> {
     const t = templatePor.get(a.tipo);
     if (!t) return {};
-    const militar = militares.find((m) => m.id === a.militar_id) ?? null;
-    const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
-    const v: Record<string, string> = {};
-    for (const c of t.campos) {
-      const bruto = a.campos[c.chave];
-      if (bruto !== undefined && bruto !== "" && typeof bruto !== "boolean") {
-        v[c.chave] = String(bruto);
-      }
-    }
-    if (militar) {
-      if (!v.NOME) v.NOME = militar.nome;
-      if (!v.ID_FUNC) v.ID_FUNC = militar.matricula ?? "";
-      if (!v.LOTACAO) v.LOTACAO = militar.lotacao_nbi ?? "";
-      if (!v.POSTO_QUADRO) v.POSTO_QUADRO = montarPostoQuadro(militar.posto_graduacao, militar.quadro);
-      v.ARTIGO_O_A = artigoO(militar.genero_gramatical);
-      v.ARTIGO_AO_A = artigoAo(militar.genero_gramatical);
-    }
-    if (titular) {
-      v.NOME_TITULAR = titular.nome;
-      v.ID_FUNC_TITULAR = titular.matricula ?? "";
-      v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
-      v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
-      v.DISTRIBUICAO_INTERNA_TITULAR = titular.distribuicao_interna_nbi ?? "";
-      v.FUNCAO_ATUAL_TITULAR = titular.funcao_atual ?? "";
-      v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
-    }
-    // autos
-    if (v.DATA_INICIO && v.DATA_FIM && !v.QTD_DIAS) {
-      const n = diasEntreISO(v.DATA_INICIO, v.DATA_FIM);
-      v.QTD_DIAS = String(n);
-    }
-    if (v.DATA_INICIO && !v.DATA_FIM && v.QTD_DIAS) {
-      const n = parseInt(v.QTD_DIAS, 10);
-      if (!Number.isNaN(n) && n > 0) v.DATA_FIM = somarDiasISO(v.DATA_INICIO, n - 1);
-    }
-    if (v.QTD_DIAS && !v.QTD_DIAS_EXTENSO) {
-      const n = parseInt(v.QTD_DIAS, 10);
-      if (!Number.isNaN(n)) v.QTD_DIAS_EXTENSO = numeroPorExtenso(n);
-    }
-    if (v.DATA_FIM && !v.DATA_APRESENTACAO) {
-      v.DATA_APRESENTACAO = somarDiasISO(v.DATA_FIM, 1);
-    }
-    if (v.DATA_INICIO && !v.ANO) {
-      v.ANO = v.DATA_INICIO.slice(0, 4);
-    }
-    if (v.PERIODO && /^\d+$/.test(v.PERIODO)) {
-      v.PERIODO = periodoOrdinal(parseInt(v.PERIODO, 10));
-    }
-    // viagem
-    if (a.tipo === "viagem") {
-      const mesmoDia = Boolean(a.campos.retorno_no_mesmo_dia);
-      v.TERMINACAO_RETORNO = mesmoDia
-        ? "retornando no mesmo dia"
-        : (v.DATA_RETORNO ? `retornando em ${formatarDataBR(v.DATA_RETORNO)}` : "");
-    }
-    // formatação de datas visíveis
-    for (const k of ["DATA_INICIO", "DATA_FIM", "DATA_APRESENTACAO", "DATA_RETORNO"]) {
-      if (v[k] && /^\d{4}-\d{2}-\d{2}$/.test(v[k])) v[k] = formatarDataBR(v[k]);
-    }
-    return v;
+    const ctx = contextoDe(a);
+    const motor = obterMotor(a.tipo);
+    return motor ? motor.resolverCampos(ctx) : resolverBase(ctx);
   }
 
   function textoFinal(a: AssuntoLocal): { texto: string; ausentes: string[] } {
@@ -322,71 +278,16 @@ function NovaNbiPage() {
     return interpolarTexto(t.texto_modelo, resolverValores(a));
   }
 
-  // Pendências bloqueantes por assunto — verifica campos cadastrais do militar
-  // e campos do próprio assunto. Retorna motivos legíveis, em português.
+  // Pendências bloqueantes por assunto — delegadas ao motor do assunto.
   function pendencias(a: AssuntoLocal): string[] {
     const t = templatePor.get(a.tipo);
     if (!t) return ["template não encontrado"];
-    const out: string[] = [];
-    const militar = militares.find((m) => m.id === a.militar_id) ?? null;
-    const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
-
-    // exige seleção de militar sempre
-    if (!militar) out.push("militar não selecionado");
-    // Assunção e Dispensa exigem titular explícito — nunca inferir.
-    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && !titular) {
-      out.push("titular da função não selecionado");
-    }
-
-    // dados cadastrais NBI do militar (obrigatórios em todos os templates)
-    if (militar) {
-      if (!militar.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${militar.nome}`);
-      if (!militar.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${militar.nome}`);
-      if (!militar.quadro) out.push(`quadro ausente no cadastro NBI de ${militar.nome}`);
-      if (!militar.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${militar.nome}`);
-      if (!militar.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${militar.nome}`);
-    }
-    if ((a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") && titular) {
-      if (!titular.matricula) out.push(`ID FUNC do titular ${titular.nome} ausente`);
-      if (!titular.posto_graduacao) out.push(`posto do titular ${titular.nome} ausente`);
-      if (!titular.quadro) out.push(`quadro do titular ${titular.nome} ausente`);
-      if (!titular.lotacao_nbi) out.push(`lotação NBI do titular ${titular.nome} ausente`);
-      if (!titular.genero_gramatical) out.push(`gênero gramatical do titular ${titular.nome} ausente`);
-    }
-
-    // campos do template
-    const auto = new Set(["QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR"]);
-    const derivadosMilitar = new Set(["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "DISTRIBUICAO_INTERNA_TITULAR", "FUNCAO_ATUAL_TITULAR"]);
-    for (const c of t.campos) {
-      if (auto.has(c.chave) || derivadosMilitar.has(c.chave)) continue;
-      const val = a.campos[c.chave];
-      // regras especiais
-      if (c.chave === "DATA_RETORNO") {
-        const mesmoDia = Boolean(a.campos.retorno_no_mesmo_dia);
-        if (!mesmoDia && (!val || val === "")) out.push(`${c.label}: obrigatório quando não há retorno no mesmo dia`);
-        continue;
-      }
-      if (c.tipo === "boolean") continue;
-      if (c.obrigatorio && (val === undefined || val === null || val === "")) {
-        out.push(`${c.label} ausente`);
-      }
-    }
-
-    // férias/apresentação: datas coerentes (fim pode ser derivado de qtd_dias)
-    if (a.tipo === "ferias" || a.tipo === "apresentacao") {
-      const resolvidos = resolverValores(a);
-      const ini = resolvidos.DATA_INICIO;
-      const fim = resolvidos.DATA_FIM;
-      if (a.tipo === "ferias") {
-        if (!ini) out.push("data de início do período de férias ausente");
-        if (!fim) out.push("informe a quantidade de dias ou a data fim das férias");
-      }
-      if (a.tipo === "apresentacao" && !resolvidos.DATA_APRESENTACAO && !fim) {
-        out.push("data de apresentação ausente");
-      }
-    }
-    return out;
+    const ctx = contextoDe(a);
+    const motor = obterMotor(a.tipo);
+    if (motor) return motor.validar(ctx);
+    return [...validarMilitar(ctx), ...validarCamposTemplate(ctx)];
   }
+
 
   async function salvarRascunho() {
     if (!userId) return;
