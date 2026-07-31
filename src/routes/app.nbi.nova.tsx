@@ -27,6 +27,8 @@ import {
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
+import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
