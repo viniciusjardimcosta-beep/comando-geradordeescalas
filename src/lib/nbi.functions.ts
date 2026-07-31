@@ -306,9 +306,15 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const { data: tpls } = await supabaseAdmin
       .from("nbi_templates")
       .select("codigo, titulo, titulo_documento");
+    const { tituloDocumentoDoRegistry } = await import("@/lib/nbi/motores/registry");
     const tituloOficialPorCodigo = new Map<string, string>();
     for (const t of tpls ?? []) {
-      const oficial = ((t as { titulo_documento?: string | null }).titulo_documento ?? t.titulo ?? "").toUpperCase();
+      const oficial = (
+        (t as { titulo_documento?: string | null }).titulo_documento
+        ?? t.titulo
+        ?? tituloDocumentoDoRegistry(t.codigo)
+        ?? ""
+      ).toUpperCase();
       tituloOficialPorCodigo.set(t.codigo, oficial);
     }
 
