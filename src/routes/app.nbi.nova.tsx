@@ -1388,11 +1388,15 @@ function FuncaoComposta({
   onChange: (v: string) => void;
   extraWords: Set<string>;
 }) {
+  // Prioridade: função documental cadastrada; se vazia, composição automática.
   function componer() {
     if (!titular) return;
-    const posto = (titular.posto_graduacao ?? "").trim();
-    const local = (titular.distribuicao_interna_nbi ?? titular.lotacao_nbi ?? "").trim();
-    const composto = [posto, local ? `do ${local}` : ""].filter(Boolean).join(" ");
+    const composto = funcaoDocumentalDe(titular);
+    if (composto) onChange(composto);
+  }
+  function montarAutomatico() {
+    if (!titular) return;
+    const composto = comporFuncaoDocumental(titular);
     if (composto) onChange(composto);
   }
   return (
@@ -1400,9 +1404,14 @@ function FuncaoComposta({
       <div className="flex items-center justify-between">
         <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
         {titular && (
-          <Button type="button" variant="outline" size="sm" onClick={componer}>
-            Compor a partir do titular
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={componer}>
+              Usar função documental do titular
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={montarAutomatico}>
+              Montar função automaticamente
+            </Button>
+          </div>
         )}
       </div>
       <div className="mt-2">
