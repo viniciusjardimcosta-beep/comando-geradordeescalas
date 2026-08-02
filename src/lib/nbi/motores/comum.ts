@@ -122,7 +122,7 @@ export function validarMilitar(ctx: ContextoMotor): string[] {
   if (!m.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${m.nome}`);
   if (!m.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${m.nome}`);
   if (!m.quadro) out.push(`quadro ausente no cadastro NBI de ${m.nome}`);
-  if (!m.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${m.nome}`);
+  if (!lotacaoDocumentalDe(m)) out.push(`lotação NBI ausente no cadastro de ${m.nome}`);
   if (!m.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${m.nome}`);
   return out;
 }
@@ -135,7 +135,7 @@ export function validarTitular(ctx: ContextoMotor): string[] {
   if (!t.matricula) out.push(`ID FUNC do titular ${t.nome} ausente`);
   if (!t.posto_graduacao) out.push(`posto do titular ${t.nome} ausente`);
   if (!t.quadro) out.push(`quadro do titular ${t.nome} ausente`);
-  if (!t.lotacao_nbi) out.push(`lotação NBI do titular ${t.nome} ausente`);
+  if (!lotacaoDocumentalDe(t)) out.push(`lotação NBI do titular ${t.nome} ausente`);
   if (!t.genero_gramatical) out.push(`gênero gramatical do titular ${t.nome} ausente`);
   return out;
 }
