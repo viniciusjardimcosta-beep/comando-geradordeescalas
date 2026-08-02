@@ -7,6 +7,7 @@ import {
   somarDiasISO, diasEntreISO, formatarDataBR,
 } from "@/utils/nbi";
 import type { ContextoMotor } from "./tipos";
+import { lotacaoDocumentalDe, distribuicaoDocumentalDe, funcaoDocumentalDe } from "@/lib/nbi/formatacao";
 
 /** Placeholders derivados automaticamente (nunca cobrados do operador). */
 export const CHAVES_AUTO = new Set([
