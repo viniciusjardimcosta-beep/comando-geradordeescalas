@@ -26,6 +26,7 @@ import {
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { funcaoDocumentalDe, lotacaoDocumentalDe, comporFuncaoDocumental } from "@/lib/nbi/formatacao";
 import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
 import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
@@ -141,7 +142,7 @@ function NovaNbiPage() {
     try {
       const [tpl, mil, fer, cfg] = await Promise.all([
         supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
-        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical").eq("user_id", uid).eq("ativo", true).order("nome"),
+        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical,gbm_nbi,companhia_nbi,pelotao_nbi,secao_nbi,subsecao_nbi,setor_nbi,cidade_nbi,batalhao_nbi,funcao_administrativa_nbi,funcao_documental_nbi").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
       ]);
@@ -309,6 +310,18 @@ function NovaNbiPage() {
           lotacao_nbi: titular.lotacao_nbi,
           funcao_atual: titular.funcao_atual,
           distribuicao_interna_nbi: titular.distribuicao_interna_nbi,
+          gbm_nbi: titular.gbm_nbi ?? null,
+          companhia_nbi: titular.companhia_nbi ?? null,
+          pelotao_nbi: titular.pelotao_nbi ?? null,
+          secao_nbi: titular.secao_nbi ?? null,
+          subsecao_nbi: titular.subsecao_nbi ?? null,
+          setor_nbi: titular.setor_nbi ?? null,
+          cidade_nbi: titular.cidade_nbi ?? null,
+          batalhao_nbi: titular.batalhao_nbi ?? null,
+          funcao_administrativa_nbi: titular.funcao_administrativa_nbi ?? null,
+          funcao_documental_nbi: titular.funcao_documental_nbi ?? null,
+          funcao_documental_resolvida: funcaoDocumentalDe(titular),
+          lotacao_documental_resolvida: lotacaoDocumentalDe(titular),
           genero_gramatical: titular.genero_gramatical,
         } : null;
         const dadosMilitar = militar ? {
@@ -320,6 +333,18 @@ function NovaNbiPage() {
           lotacao_nbi: militar.lotacao_nbi,
           funcao_atual: militar.funcao_atual,
           distribuicao_interna_nbi: militar.distribuicao_interna_nbi,
+          gbm_nbi: militar.gbm_nbi ?? null,
+          companhia_nbi: militar.companhia_nbi ?? null,
+          pelotao_nbi: militar.pelotao_nbi ?? null,
+          secao_nbi: militar.secao_nbi ?? null,
+          subsecao_nbi: militar.subsecao_nbi ?? null,
+          setor_nbi: militar.setor_nbi ?? null,
+          cidade_nbi: militar.cidade_nbi ?? null,
+          batalhao_nbi: militar.batalhao_nbi ?? null,
+          funcao_administrativa_nbi: militar.funcao_administrativa_nbi ?? null,
+          funcao_documental_nbi: militar.funcao_documental_nbi ?? null,
+          funcao_documental_resolvida: funcaoDocumentalDe(militar),
+          lotacao_documental_resolvida: lotacaoDocumentalDe(militar),
           genero_gramatical: militar.genero_gramatical,
         } : null;
         return {
