@@ -7,6 +7,7 @@ import {
   somarDiasISO, diasEntreISO, formatarDataBR,
 } from "@/utils/nbi";
 import type { ContextoMotor } from "./tipos";
+import { lotacaoDocumentalDe, distribuicaoDocumentalDe, funcaoDocumentalDe } from "@/lib/nbi/formatacao";
 
 /** Placeholders derivados automaticamente (nunca cobrados do operador). */
 export const CHAVES_AUTO = new Set([
@@ -44,18 +45,20 @@ export function resolverBase(
   if (militar) {
     if (!v.NOME) v.NOME = militar.nome;
     if (!v.ID_FUNC) v.ID_FUNC = militar.matricula ?? "";
-    if (!v.LOTACAO) v.LOTACAO = militar.lotacao_nbi ?? "";
+    if (!v.LOTACAO) v.LOTACAO = lotacaoDocumentalDe(militar);
     if (!v.POSTO_QUADRO) v.POSTO_QUADRO = montarPostoQuadro(militar.posto_graduacao, militar.quadro);
+    if (!v.FUNCAO_DOCUMENTAL) v.FUNCAO_DOCUMENTAL = funcaoDocumentalDe(militar);
     v.ARTIGO_O_A = artigoO(militar.genero_gramatical);
     v.ARTIGO_AO_A = artigoAo(militar.genero_gramatical);
   }
   if (titular) {
     v.NOME_TITULAR = titular.nome;
     v.ID_FUNC_TITULAR = titular.matricula ?? "";
-    v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
+    v.LOTACAO_TITULAR = lotacaoDocumentalDe(titular);
     v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
-    v.DISTRIBUICAO_INTERNA_TITULAR = titular.distribuicao_interna_nbi ?? "";
-    v.FUNCAO_ATUAL_TITULAR = titular.funcao_atual ?? "";
+    v.DISTRIBUICAO_INTERNA_TITULAR = distribuicaoDocumentalDe(titular);
+    v.FUNCAO_ATUAL_TITULAR = funcaoDocumentalDe(titular);
+    v.FUNCAO_DOCUMENTAL_TITULAR = funcaoDocumentalDe(titular);
     v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
   }
 
@@ -119,7 +122,7 @@ export function validarMilitar(ctx: ContextoMotor): string[] {
   if (!m.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${m.nome}`);
   if (!m.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${m.nome}`);
   if (!m.quadro) out.push(`quadro ausente no cadastro NBI de ${m.nome}`);
-  if (!m.lotacao_nbi) out.push(`lotação NBI ausente no cadastro de ${m.nome}`);
+  if (!lotacaoDocumentalDe(m)) out.push(`lotação NBI ausente no cadastro de ${m.nome}`);
   if (!m.genero_gramatical) out.push(`gênero gramatical ausente no cadastro de ${m.nome}`);
   return out;
 }
@@ -132,7 +135,7 @@ export function validarTitular(ctx: ContextoMotor): string[] {
   if (!t.matricula) out.push(`ID FUNC do titular ${t.nome} ausente`);
   if (!t.posto_graduacao) out.push(`posto do titular ${t.nome} ausente`);
   if (!t.quadro) out.push(`quadro do titular ${t.nome} ausente`);
-  if (!t.lotacao_nbi) out.push(`lotação NBI do titular ${t.nome} ausente`);
+  if (!lotacaoDocumentalDe(t)) out.push(`lotação NBI do titular ${t.nome} ausente`);
   if (!t.genero_gramatical) out.push(`gênero gramatical do titular ${t.nome} ausente`);
   return out;
 }

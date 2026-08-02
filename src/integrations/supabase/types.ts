@@ -289,10 +289,16 @@ export type Database = {
       militares: {
         Row: {
           ativo: boolean
+          batalhao_nbi: string | null
+          cidade_nbi: string | null
+          companhia_nbi: string | null
           created_at: string
           distribuicao_interna_nbi: string | null
           funcao: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_administrativa_nbi: string | null
           funcao_atual: string | null
+          funcao_documental_nbi: string | null
+          gbm_nbi: string | null
           genero_gramatical: string | null
           id: string
           is_adm: boolean
@@ -304,18 +310,28 @@ export type Database = {
           nome: string
           nome_guerra: string | null
           observacoes: string | null
+          pelotao_nbi: string | null
           posto_graduacao: string | null
           quadro: string | null
+          secao_nbi: string | null
+          setor_nbi: string | null
+          subsecao_nbi: string | null
           tipo_escala: string
           updated_at: string
           user_id: string
         }
         Insert: {
           ativo?: boolean
+          batalhao_nbi?: string | null
+          cidade_nbi?: string | null
+          companhia_nbi?: string | null
           created_at?: string
           distribuicao_interna_nbi?: string | null
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_administrativa_nbi?: string | null
           funcao_atual?: string | null
+          funcao_documental_nbi?: string | null
+          gbm_nbi?: string | null
           genero_gramatical?: string | null
           id?: string
           is_adm?: boolean
@@ -327,18 +343,28 @@ export type Database = {
           nome: string
           nome_guerra?: string | null
           observacoes?: string | null
+          pelotao_nbi?: string | null
           posto_graduacao?: string | null
           quadro?: string | null
+          secao_nbi?: string | null
+          setor_nbi?: string | null
+          subsecao_nbi?: string | null
           tipo_escala?: string
           updated_at?: string
           user_id: string
         }
         Update: {
           ativo?: boolean
+          batalhao_nbi?: string | null
+          cidade_nbi?: string | null
+          companhia_nbi?: string | null
           created_at?: string
           distribuicao_interna_nbi?: string | null
           funcao?: Database["public"]["Enums"]["funcao_militar"] | null
+          funcao_administrativa_nbi?: string | null
           funcao_atual?: string | null
+          funcao_documental_nbi?: string | null
+          gbm_nbi?: string | null
           genero_gramatical?: string | null
           id?: string
           is_adm?: boolean
@@ -350,8 +376,12 @@ export type Database = {
           nome?: string
           nome_guerra?: string | null
           observacoes?: string | null
+          pelotao_nbi?: string | null
           posto_graduacao?: string | null
           quadro?: string | null
+          secao_nbi?: string | null
+          setor_nbi?: string | null
+          subsecao_nbi?: string | null
           tipo_escala?: string
           updated_at?: string
           user_id?: string

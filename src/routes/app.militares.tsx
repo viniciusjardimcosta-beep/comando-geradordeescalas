@@ -46,6 +46,16 @@ interface Militar {
   lotacao_nbi: string | null;
   funcao_atual: string | null;
   distribuicao_interna_nbi: string | null;
+  gbm_nbi: string | null;
+  companhia_nbi: string | null;
+  pelotao_nbi: string | null;
+  secao_nbi: string | null;
+  subsecao_nbi: string | null;
+  setor_nbi: string | null;
+  cidade_nbi: string | null;
+  batalhao_nbi: string | null;
+  funcao_administrativa_nbi: string | null;
+  funcao_documental_nbi: string | null;
   genero_gramatical: string | null;
   nome_guerra: string | null;
 }
@@ -64,6 +74,16 @@ interface FormState {
   lotacao_nbi: string;
   funcao_atual: string;
   distribuicao_interna_nbi: string;
+  gbm_nbi: string;
+  companhia_nbi: string;
+  pelotao_nbi: string;
+  secao_nbi: string;
+  subsecao_nbi: string;
+  setor_nbi: string;
+  cidade_nbi: string;
+  batalhao_nbi: string;
+  funcao_administrativa_nbi: string;
+  funcao_documental_nbi: string;
   genero_gramatical: Genero;
   nome_guerra: string;
 }
@@ -82,6 +102,16 @@ const emptyForm: FormState = {
   lotacao_nbi: "",
   funcao_atual: "",
   distribuicao_interna_nbi: "",
+  gbm_nbi: "",
+  companhia_nbi: "",
+  pelotao_nbi: "",
+  secao_nbi: "",
+  subsecao_nbi: "",
+  setor_nbi: "",
+  cidade_nbi: "",
+  batalhao_nbi: "",
+  funcao_administrativa_nbi: "",
+  funcao_documental_nbi: "",
   genero_gramatical: "",
   nome_guerra: "",
 };
@@ -151,6 +181,16 @@ function MilitaresPage() {
       lotacao_nbi: m.lotacao_nbi ?? "",
       funcao_atual: m.funcao_atual ?? "",
       distribuicao_interna_nbi: m.distribuicao_interna_nbi ?? "",
+      gbm_nbi: m.gbm_nbi ?? "",
+      companhia_nbi: m.companhia_nbi ?? "",
+      pelotao_nbi: m.pelotao_nbi ?? "",
+      secao_nbi: m.secao_nbi ?? "",
+      subsecao_nbi: m.subsecao_nbi ?? "",
+      setor_nbi: m.setor_nbi ?? "",
+      cidade_nbi: m.cidade_nbi ?? "",
+      batalhao_nbi: m.batalhao_nbi ?? "",
+      funcao_administrativa_nbi: m.funcao_administrativa_nbi ?? "",
+      funcao_documental_nbi: m.funcao_documental_nbi ?? "",
       genero_gramatical: (m.genero_gramatical === "M" || m.genero_gramatical === "F") ? m.genero_gramatical : "",
       nome_guerra: m.nome_guerra ?? "",
     });
@@ -181,6 +221,16 @@ function MilitaresPage() {
       lotacao_nbi: form.lotacao_nbi.trim() || null,
       funcao_atual: form.funcao_atual.trim() || null,
       distribuicao_interna_nbi: form.distribuicao_interna_nbi.trim() || null,
+      gbm_nbi: form.gbm_nbi.trim() || null,
+      companhia_nbi: form.companhia_nbi.trim() || null,
+      pelotao_nbi: form.pelotao_nbi.trim() || null,
+      secao_nbi: form.secao_nbi.trim() || null,
+      subsecao_nbi: form.subsecao_nbi.trim() || null,
+      setor_nbi: form.setor_nbi.trim() || null,
+      cidade_nbi: form.cidade_nbi.trim() || null,
+      batalhao_nbi: form.batalhao_nbi.trim() || null,
+      funcao_administrativa_nbi: form.funcao_administrativa_nbi.trim() || null,
+      funcao_documental_nbi: form.funcao_documental_nbi.trim() || null,
       genero_gramatical: form.genero_gramatical || null,
       nome_guerra: form.nome_guerra.trim() || null,
     } as never;
@@ -465,6 +515,57 @@ function MilitaresPage() {
                 <p className="text-[11px] text-muted-foreground">
                   Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
                 </p>
+              </div>
+
+              {/* Estrutura institucional (Bloco 8B) — usada apenas pelas NBIs */}
+              <div className="rounded-md border border-dashed p-3 space-y-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Topologia institucional (NBI)
+                </Label>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {([
+                    ["gbm_nbi", "GBM", "Ex.: 2 ou 2ºGBM"],
+                    ["pelotao_nbi", "Pelotão", "Ex.: 6 ou 6ºPelBM"],
+                    ["companhia_nbi", "Companhia", "Ex.: 8 ou 8ªCiaBM"],
+                    ["batalhao_nbi", "Batalhão", "Ex.: 15 ou 15ºBBM"],
+                    ["secao_nbi", "Seção", "Ex.: 2ª Seção"],
+                    ["subsecao_nbi", "Subseção", "Ex.: SSeg"],
+                    ["setor_nbi", "Setor", "Ex.: Setor de Vistorias"],
+                    ["cidade_nbi", "Cidade", "Ex.: IJUÍ"],
+                  ] as const).map(([campo, label, ph]) => (
+                    <div key={campo} className="grid gap-2">
+                      <Label htmlFor={campo}>{label}</Label>
+                      <Input
+                        id={campo}
+                        value={form[campo]}
+                        onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
+                        placeholder={ph}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="funcao_administrativa_nbi">Função administrativa (NBI)</Label>
+                  <Input
+                    id="funcao_administrativa_nbi"
+                    value={form.funcao_administrativa_nbi}
+                    onChange={(e) => setForm({ ...form, funcao_administrativa_nbi: e.target.value })}
+                    placeholder="Ex.: Sargenteante"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="funcao_documental_nbi">Função documental (NBI)</Label>
+                  <Input
+                    id="funcao_documental_nbi"
+                    value={form.funcao_documental_nbi}
+                    onChange={(e) => setForm({ ...form, funcao_documental_nbi: e.target.value })}
+                    placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 12ºBBM"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Texto oficial usado em Assunção, Dispensa, Cargo Vago e Comissão. Quando
+                    preenchido, o sistema nunca monta a função automaticamente.
+                  </p>
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="nome_guerra">Nome de guerra</Label>
