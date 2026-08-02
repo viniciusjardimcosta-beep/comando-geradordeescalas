@@ -14,6 +14,17 @@ export interface MilitarNbi {
   funcao_atual: string | null;
   distribuicao_interna_nbi: string | null;
   genero_gramatical: string | null;
+  // Estrutura institucional (Bloco 8B) — exclusiva do módulo NBI.
+  gbm_nbi?: string | null;
+  companhia_nbi?: string | null;
+  pelotao_nbi?: string | null;
+  secao_nbi?: string | null;
+  subsecao_nbi?: string | null;
+  setor_nbi?: string | null;
+  cidade_nbi?: string | null;
+  batalhao_nbi?: string | null;
+  funcao_administrativa_nbi?: string | null;
+  funcao_documental_nbi?: string | null;
 }
 
 export interface FeriasReg {
