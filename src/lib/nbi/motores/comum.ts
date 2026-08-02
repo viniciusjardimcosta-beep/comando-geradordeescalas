@@ -44,18 +44,20 @@ export function resolverBase(
   if (militar) {
     if (!v.NOME) v.NOME = militar.nome;
     if (!v.ID_FUNC) v.ID_FUNC = militar.matricula ?? "";
-    if (!v.LOTACAO) v.LOTACAO = militar.lotacao_nbi ?? "";
+    if (!v.LOTACAO) v.LOTACAO = lotacaoDocumentalDe(militar);
     if (!v.POSTO_QUADRO) v.POSTO_QUADRO = montarPostoQuadro(militar.posto_graduacao, militar.quadro);
+    if (!v.FUNCAO_DOCUMENTAL) v.FUNCAO_DOCUMENTAL = funcaoDocumentalDe(militar);
     v.ARTIGO_O_A = artigoO(militar.genero_gramatical);
     v.ARTIGO_AO_A = artigoAo(militar.genero_gramatical);
   }
   if (titular) {
     v.NOME_TITULAR = titular.nome;
     v.ID_FUNC_TITULAR = titular.matricula ?? "";
-    v.LOTACAO_TITULAR = titular.lotacao_nbi ?? "";
+    v.LOTACAO_TITULAR = lotacaoDocumentalDe(titular);
     v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
-    v.DISTRIBUICAO_INTERNA_TITULAR = titular.distribuicao_interna_nbi ?? "";
-    v.FUNCAO_ATUAL_TITULAR = titular.funcao_atual ?? "";
+    v.DISTRIBUICAO_INTERNA_TITULAR = distribuicaoDocumentalDe(titular);
+    v.FUNCAO_ATUAL_TITULAR = funcaoDocumentalDe(titular);
+    v.FUNCAO_DOCUMENTAL_TITULAR = funcaoDocumentalDe(titular);
     v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
   }
 
