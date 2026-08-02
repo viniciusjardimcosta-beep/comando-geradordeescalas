@@ -516,6 +516,57 @@ function MilitaresPage() {
                   Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
                 </p>
               </div>
+
+              {/* Estrutura institucional (Bloco 8B) — usada apenas pelas NBIs */}
+              <div className="rounded-md border border-dashed p-3 space-y-3">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Topologia institucional (NBI)
+                </Label>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {([
+                    ["gbm_nbi", "GBM", "Ex.: 2 ou 2ºGBM"],
+                    ["pelotao_nbi", "Pelotão", "Ex.: 6 ou 6ºPelBM"],
+                    ["companhia_nbi", "Companhia", "Ex.: 8 ou 8ªCiaBM"],
+                    ["batalhao_nbi", "Batalhão", "Ex.: 15 ou 15ºBBM"],
+                    ["secao_nbi", "Seção", "Ex.: 2ª Seção"],
+                    ["subsecao_nbi", "Subseção", "Ex.: SSeg"],
+                    ["setor_nbi", "Setor", "Ex.: Setor de Vistorias"],
+                    ["cidade_nbi", "Cidade", "Ex.: IJUÍ"],
+                  ] as const).map(([campo, label, ph]) => (
+                    <div key={campo} className="grid gap-2">
+                      <Label htmlFor={campo}>{label}</Label>
+                      <Input
+                        id={campo}
+                        value={form[campo]}
+                        onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
+                        placeholder={ph}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="funcao_administrativa_nbi">Função administrativa (NBI)</Label>
+                  <Input
+                    id="funcao_administrativa_nbi"
+                    value={form.funcao_administrativa_nbi}
+                    onChange={(e) => setForm({ ...form, funcao_administrativa_nbi: e.target.value })}
+                    placeholder="Ex.: Sargenteante"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="funcao_documental_nbi">Função documental (NBI)</Label>
+                  <Input
+                    id="funcao_documental_nbi"
+                    value={form.funcao_documental_nbi}
+                    onChange={(e) => setForm({ ...form, funcao_documental_nbi: e.target.value })}
+                    placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 12ºBBM"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Texto oficial usado em Assunção, Dispensa, Cargo Vago e Comissão. Quando
+                    preenchido, o sistema nunca monta a função automaticamente.
+                  </p>
+                </div>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="nome_guerra">Nome de guerra</Label>
                 <Input
