@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
-import { sugerirInstitucional } from "@/utils/nbi-institucional";
+import { sugerirInstitucional, normalizarInstitucional } from "@/utils/nbi-institucional";
 import { sugerirToponimo } from "@/utils/nbi-toponimos";
 import { toast } from "sonner";
 
@@ -280,11 +280,11 @@ function NbiConfiguracoesPage() {
       user_id: session.user.id,
       unidade_nome: form.unidade_nome.trim() || null,
       unidade_sigla: form.unidade_sigla.trim() || null,
-      cabecalho_estado: form.cabecalho_estado.trim() || null,
-      cabecalho_secretaria: form.cabecalho_secretaria.trim() || null,
-      cabecalho_corporacao: form.cabecalho_corporacao.trim() || null,
-      cabecalho_batalhao: form.cabecalho_batalhao.trim() || null,
-      cabecalho_subunidade: form.cabecalho_subunidade.trim() || null,
+      cabecalho_estado: normalizarInstitucional(form.cabecalho_estado) || null,
+      cabecalho_secretaria: normalizarInstitucional(form.cabecalho_secretaria) || null,
+      cabecalho_corporacao: normalizarInstitucional(form.cabecalho_corporacao) || null,
+      cabecalho_batalhao: normalizarInstitucional(form.cabecalho_batalhao) || null,
+      cabecalho_subunidade: normalizarInstitucional(form.cabecalho_subunidade) || null,
       cabecalho_cidade: form.cabecalho_cidade.trim() || null,
       digitador_militar_id: form.digitador.militar_id,
       digitador_nome: form.digitador.nome.trim() || null,
