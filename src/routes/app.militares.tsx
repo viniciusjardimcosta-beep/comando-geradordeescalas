@@ -46,6 +46,16 @@ interface Militar {
   lotacao_nbi: string | null;
   funcao_atual: string | null;
   distribuicao_interna_nbi: string | null;
+  gbm_nbi: string | null;
+  companhia_nbi: string | null;
+  pelotao_nbi: string | null;
+  secao_nbi: string | null;
+  subsecao_nbi: string | null;
+  setor_nbi: string | null;
+  cidade_nbi: string | null;
+  batalhao_nbi: string | null;
+  funcao_administrativa_nbi: string | null;
+  funcao_documental_nbi: string | null;
   genero_gramatical: string | null;
   nome_guerra: string | null;
 }
@@ -64,6 +74,16 @@ interface FormState {
   lotacao_nbi: string;
   funcao_atual: string;
   distribuicao_interna_nbi: string;
+  gbm_nbi: string;
+  companhia_nbi: string;
+  pelotao_nbi: string;
+  secao_nbi: string;
+  subsecao_nbi: string;
+  setor_nbi: string;
+  cidade_nbi: string;
+  batalhao_nbi: string;
+  funcao_administrativa_nbi: string;
+  funcao_documental_nbi: string;
   genero_gramatical: Genero;
   nome_guerra: string;
 }
@@ -82,6 +102,16 @@ const emptyForm: FormState = {
   lotacao_nbi: "",
   funcao_atual: "",
   distribuicao_interna_nbi: "",
+  gbm_nbi: "",
+  companhia_nbi: "",
+  pelotao_nbi: "",
+  secao_nbi: "",
+  subsecao_nbi: "",
+  setor_nbi: "",
+  cidade_nbi: "",
+  batalhao_nbi: "",
+  funcao_administrativa_nbi: "",
+  funcao_documental_nbi: "",
   genero_gramatical: "",
   nome_guerra: "",
 };
@@ -151,6 +181,16 @@ function MilitaresPage() {
       lotacao_nbi: m.lotacao_nbi ?? "",
       funcao_atual: m.funcao_atual ?? "",
       distribuicao_interna_nbi: m.distribuicao_interna_nbi ?? "",
+      gbm_nbi: m.gbm_nbi ?? "",
+      companhia_nbi: m.companhia_nbi ?? "",
+      pelotao_nbi: m.pelotao_nbi ?? "",
+      secao_nbi: m.secao_nbi ?? "",
+      subsecao_nbi: m.subsecao_nbi ?? "",
+      setor_nbi: m.setor_nbi ?? "",
+      cidade_nbi: m.cidade_nbi ?? "",
+      batalhao_nbi: m.batalhao_nbi ?? "",
+      funcao_administrativa_nbi: m.funcao_administrativa_nbi ?? "",
+      funcao_documental_nbi: m.funcao_documental_nbi ?? "",
       genero_gramatical: (m.genero_gramatical === "M" || m.genero_gramatical === "F") ? m.genero_gramatical : "",
       nome_guerra: m.nome_guerra ?? "",
     });
@@ -181,6 +221,16 @@ function MilitaresPage() {
       lotacao_nbi: form.lotacao_nbi.trim() || null,
       funcao_atual: form.funcao_atual.trim() || null,
       distribuicao_interna_nbi: form.distribuicao_interna_nbi.trim() || null,
+      gbm_nbi: form.gbm_nbi.trim() || null,
+      companhia_nbi: form.companhia_nbi.trim() || null,
+      pelotao_nbi: form.pelotao_nbi.trim() || null,
+      secao_nbi: form.secao_nbi.trim() || null,
+      subsecao_nbi: form.subsecao_nbi.trim() || null,
+      setor_nbi: form.setor_nbi.trim() || null,
+      cidade_nbi: form.cidade_nbi.trim() || null,
+      batalhao_nbi: form.batalhao_nbi.trim() || null,
+      funcao_administrativa_nbi: form.funcao_administrativa_nbi.trim() || null,
+      funcao_documental_nbi: form.funcao_documental_nbi.trim() || null,
       genero_gramatical: form.genero_gramatical || null,
       nome_guerra: form.nome_guerra.trim() || null,
     } as never;
