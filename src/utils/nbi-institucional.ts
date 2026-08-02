@@ -90,6 +90,30 @@ export interface SugestaoInstitucional {
 }
 
 /**
+ * Normalização OBRIGATÓRIA (Bloco 8B): aplicada automaticamente, sem depender
+ * de aceitação do operador. Cobre apenas regras determinísticas e seguras:
+ * concordância do ordinal (8º Companhia → 8ª Companhia) e a forma oficial
+ * "Bombeiros Militar". Não altera capitalização nem siglas livres.
+ */
+export function normalizarInstitucional(texto: string): string {
+  const bruto = (texto ?? "").trim().replace(/\s+/g, " ");
+  if (!bruto) return "";
+  let out = bruto.replace(/\b(bombeiro)(\s+militar)\b/gi, (_m, a: string, b: string) => {
+    const plural = a === a.toUpperCase() ? "BOMBEIROS" : capitalizar(a) === a ? "Bombeiros" : "bombeiros";
+    return plural + b;
+  });
+  out = out.replace(/(\d+)\s*([ºª°])\s*([\p{L}]+)/gu, (m, num: string, ord: string, palavra: string) => {
+    const k = chave(palavra);
+    let alvo = ord === "°" ? "º" : ord;
+    if (FEMININOS.has(k)) alvo = "ª";
+    else if (MASCULINOS.has(k)) alvo = "º";
+    const colado = /^\d+\s*[ºª°]\S/.test(m);
+    return `${num}${alvo}${colado ? "" : " "}${palavra}`;
+  });
+  return out;
+}
+
+/**
  * Analisa a expressão completa de um campo institucional e devolve a grafia
  * administrativa sugerida. Retorna null quando nada muda.
  */
