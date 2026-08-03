@@ -95,6 +95,17 @@ export const proximoNumeroPrevisto = createServerFn({ method: "GET" })
 // =============================================================
 // 3. GERAR DOCX — reserva (se necessário) → renderiza → upload → generated_at
 // =============================================================
+interface SnapshotSubstituicao {
+  papel: "assuncao" | "dispensa";
+  substituicao_id?: string | null;
+  funcao?: string | null;
+  motivo?: string | null;
+  data_inicio?: string | null;
+  data_fim_prevista?: string | null;
+  substituto_militar_id?: string | null;
+  titular_militar_id?: string | null;
+}
+
 interface SnapshotAssunto {
   tipo: string;
   titulo: string;
@@ -104,7 +115,9 @@ interface SnapshotAssunto {
   campos?: Record<string, unknown>;
   campos_ausentes?: string[];
   pendencias?: string[];
+  substituicao?: SnapshotSubstituicao | null;
 }
+
 
 interface SnapshotResponsaveis {
   unidade?: { nome?: string; sigla?: string };
