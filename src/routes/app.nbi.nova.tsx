@@ -74,8 +74,25 @@ interface AssuntoLocal {
   militar_id: string | null;
   militar_titular_id: string | null;
   ferias_id: string | null;
+  /** Bloco 8C — origem dos dados de Assunção/Dispensa. */
+  origem_dados?: "manual" | "ferias" | "assuncao";
+  /** Substituição aberta vinculada (apenas Dispensa a partir de Assunção). */
+  substituicao_id?: string | null;
   campos: Record<string, string | boolean>;
 }
+
+/** Substituição em aberto (nbi_substituicoes) — exclusiva do módulo NBI. */
+export interface SubstituicaoAberta {
+  id: string;
+  assuncao_documento_id: string | null;
+  substituto_militar_id: string | null;
+  titular_militar_id: string | null;
+  funcao: string | null;
+  motivo: string | null;
+  data_inicio: string | null;
+  data_fim_prevista: string | null;
+}
+
 
 interface ResponsavelSnap {
   nome: string;
