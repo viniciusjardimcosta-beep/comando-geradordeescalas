@@ -47,4 +47,9 @@ export const CODIGOS_HOMOLOGADOS: ReadonlySet<string> = new Set([
   "viagem",
   "assuncao_funcao",
   "dispensa_funcao",
+  "servico_extraordinario",
+  "dispensa_recompensa",
+  "nomeacao_comissao",
+  "licenca_paternidade",
 ]);
+

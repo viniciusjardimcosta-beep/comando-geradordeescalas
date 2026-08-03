@@ -9,6 +9,9 @@ import { motorViagem } from "./viagem";
 import { motorAssuncaoFuncao } from "./assuncaoFuncao";
 import { motorDispensaFuncao } from "./dispensaFuncao";
 import { motorLicencaPaternidade } from "./licencaPaternidade";
+import { motorServicoExtraordinario } from "./servicoExtraordinario";
+import { motorDispensaRecompensa } from "./dispensaRecompensa";
+import { motorNomeacaoComissao } from "./nomeacaoComissao";
 
 export * from "./tipos";
 
@@ -19,7 +22,11 @@ const MOTORES: MotorNbi[] = [
   motorAssuncaoFuncao,
   motorDispensaFuncao,
   motorLicencaPaternidade,
+  motorServicoExtraordinario,
+  motorDispensaRecompensa,
+  motorNomeacaoComissao,
 ];
+
 
 const POR_CODIGO = new Map<string, MotorNbi>(MOTORES.map((m) => [m.codigo, m]));
 

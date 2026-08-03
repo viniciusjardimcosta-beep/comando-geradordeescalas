@@ -44,7 +44,14 @@ export interface MotorNbi {
   validar(ctx: ContextoMotor): string[];
   resolverCampos(ctx: ContextoMotor): Record<string, string>;
   montarPlaceholders(ctx: ContextoMotor): Record<string, string>;
+  /**
+   * Redações oficiais alternativas do mesmo assunto (nunca mescladas):
+   * devolve o código do template de nbi_templates cuja redação deve ser usada.
+   * Ausente = usa o template do próprio código do motor.
+   */
+  codigoTemplateEfetivo?(ctx: ContextoMotor): string;
   exemplo(): ExemploMotor;
+
 
   // Metadados internos de homologação
   nivelHomologacao: NivelHomologacao;
