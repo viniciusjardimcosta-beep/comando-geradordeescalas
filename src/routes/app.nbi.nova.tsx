@@ -245,6 +245,9 @@ function NovaNbiPage() {
         militar_id: null,
         militar_titular_id: null,
         ferias_id: null,
+        origem_dados: "manual",
+        substituicao_id: null,
+
         campos,
       }],
     }));
