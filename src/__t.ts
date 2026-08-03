@@ -4,7 +4,8 @@ const mil:any = { id:"1", nome:"SOLDADO SILVA", matricula:"1234567", posto_gradu
 const tit:any = { ...mil, id:"2", nome:"SARGENTO SOUZA", matricula:"7654321", posto_graduacao:"1ºSGT" };
 for (const m of listarMotores()) {
   const ex = m.exemplo();
-  const base:any = { campos: { ...ex.contexto.campos, FUNCAO_ASSUMIDA:"1º Sgt do 1ºGBM", FUNCAO_DISPENSADA:"1º Sgt do 1ºGBM", MOTIVO_TITULAR:"férias regulamentares", MOTIVO_RETORNO:"férias regulamentares", ORIGEM:"Panambi/RS", DESTINO:"Santa Maria/RS", MISSAO: ex.contexto.campos.MISSAO ?? "Participar de reunião" }, militar: mil, titular: tit, camposTemplate: [] };
+  const base:any = { campos: { ...ex.contexto.campos, FUNCAO_ASSUMIDA:"1º Sgt do 1ºGBM", FUNCAO_DISPENSADA:"1º Sgt do 1ºGBM", MOTIVO_TITULAR:"férias regulamentares", MOTIVO_RETORNO:"férias regulamentares", ORIGEM:"Panambi/RS", DESTINO:"Santa Maria/RS", MISSAO: ex.contexto.campos.MISSAO ?? "Participar de reunião" }, militar: mil, titular: tit, camposTemplate: [] as any };
+  base.camposTemplate = Object.keys(base.campos).map((k)=>({chave:k,label:k,tipo:"texto",obrigatorio:false}));
   const variantes:any[] = m.codigo === "dispensa_recompensa" ? [{...base, campos:{...base.campos, com_apresentacao:true}}, {...base, campos:{...base.campos, com_apresentacao:false}}] : [base];
   for (const ctx of variantes) {
     const code = (m as any).codigoTemplateEfetivo?.(ctx) ?? m.codigo;
