@@ -140,12 +140,47 @@ export function validarTitular(ctx: ContextoMotor): string[] {
   return out;
 }
 
+/**
+ * Bloco 9B — texto provisório nunca pode chegar ao documento oficial.
+ * Não bloqueia nomes próprios nem termos institucionais: apenas marcadores
+ * explícitos de pendência e resíduos técnicos.
+ */
+const PADROES_PROVISORIOS: RegExp[] = [
+  /n[ãa]o\s+sei/i,
+  /n[ãa]o\s+tenho\s+(o\s+)?texto/i,
+  /texto\s+provis[óo]rio/i,
+  /preencher\s+depois/i,
+  /a\s+definir\b/i,
+  /\bTBD\b/i,
+  /\bXXX+/i,
+  /\bundefined\b/i,
+  /\bnull\b/i,
+  /\{\{|\}\}/,
+];
+
+export function validarTextoProvisorio(ctx: ContextoMotor): string[] {
+  const out: string[] = [];
+  for (const c of ctx.camposTemplate) {
+    const val = ctx.campos[c.chave];
+    if (typeof val !== "string" || !val.trim()) continue;
+    for (const re of PADROES_PROVISORIOS) {
+      if (re.test(val)) {
+        out.push(`${c.label}: contém texto provisório ou resíduo técnico ("${val.trim().slice(0, 40)}")`);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /** Campos obrigatórios declarados no template (exceto automáticos/derivados). */
+
 export function validarCamposTemplate(
   ctx: ContextoMotor,
   opts: { viagem?: boolean } = {},
 ): string[] {
-  const out: string[] = [];
+  const out: string[] = [...validarTextoProvisorio(ctx)];
+
   for (const c of ctx.camposTemplate) {
     if (CHAVES_AUTO.has(c.chave) || CHAVES_MILITAR.has(c.chave) || CHAVES_TITULAR.has(c.chave)) continue;
     const val = ctx.campos[c.chave];

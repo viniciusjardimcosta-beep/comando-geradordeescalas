@@ -33,9 +33,16 @@ import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
 import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
+import { CampoDerivado } from "@/components/nbi/CampoDerivado";
+import { MissaoField } from "@/components/nbi/MissaoField";
+import { ComissaoBuilder } from "@/components/nbi/ComissaoBuilder";
+import {
+  calcularDerivados, estaManual, chaveManual, origensDeAssunto,
+} from "@/lib/nbi/derivados";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
 import { sugestoesTexto, aplicarSugestao as aplicarSugestaoTexto } from "@/utils/nbi-corretor";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
+
 
 export const Route = createFileRoute("/app/nbi/nova")({
   component: NovaNbiPage,
@@ -408,9 +415,15 @@ function NovaNbiPage() {
             titular_militar_id: a.militar_titular_id,
           } : null,
           campos: a.campos,
+          // Bloco 9B — origem de cada campo derivado e marcação de substituição manual.
+          origens_campos: origensDeAssunto(a.tipo, a.campos, {
+            unidadeSigla: rascunho.unidade.sigla,
+            unidadeNome: rascunho.unidade.nome,
+          }),
           texto_final: texto,
           campos_ausentes: ausentes,
           pendencias: pendencias(a),
+
 
         };
       });
@@ -678,6 +691,8 @@ function Etapa2({
               ferias={ferias}
               substituicoes={substituicoes}
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
+              unidade={rascunho.unidade}
+
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
               onRemove={() => remover(a.id)}
@@ -712,7 +727,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias, substituicoes, anoNbi,
+  index, assunto, template, militares, ferias, substituicoes, anoNbi, unidade,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -722,6 +737,7 @@ function AssuntoCard({
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
   anoNbi: number;
+  unidade: { nome: string; sigla: string };
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
   onRemove: () => void;
@@ -734,6 +750,28 @@ function AssuntoCard({
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
 
+  // ── Bloco 9B — campos derivados (cálculo/banco/configurações) ──
+  const derivados = useMemo(
+    () => calcularDerivados(assunto.tipo, assunto.campos, {
+      unidadeSigla: unidade.sigla, unidadeNome: unidade.nome,
+    }),
+    [assunto.tipo, assunto.campos, unidade.sigla, unidade.nome],
+  );
+  const derivadoPor = useMemo(() => {
+    const m = new Map<string, (typeof derivados)[number]>();
+    for (const d of derivados) m.set(d.chave, d);
+    return m;
+  }, [derivados]);
+
+  // Escreve o valor calculado no assunto sempre que ele mudar,
+  // exceto quando o operador assumiu o campo manualmente.
+  useEffect(() => {
+    for (const d of derivados) {
+      if (estaManual(assunto.campos, d.chave)) continue;
+      if (String(assunto.campos[d.chave] ?? "") !== d.valor) onCampo(d.chave, d.valor);
+    }
+  }, [derivados]);
+
   // Dicionário dinâmico: nomes cadastrados + siglas militares fixas.
   // Palavras aqui não são marcadas como erro pelo corretor ortográfico.
   const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
@@ -741,6 +779,7 @@ function AssuntoCard({
     militaresNomeGuerra: militares.map((m) => m.nome_guerra),
     lotacoes: militares.map((m) => m.lotacao_nbi),
   }), [militares]);
+
 
   function interpretarFrase() {
     setSugestoes([]);
@@ -961,10 +1000,73 @@ function AssuntoCard({
       )}
 
 
+
+      {/* Bloco 9B — Serviço extraordinário: mês de referência gera o período. */}
+      {assunto.tipo === "servico_extraordinario" && (
+        <div className="mb-3 rounded-md border border-dashed p-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Mês de referência</Label>
+          <Input
+            type="month"
+            className="mt-2 max-w-[220px]"
+            value={String(assunto.campos.mes_referencia_sel ?? "")}
+            onChange={(e) => onCampo("mes_referencia_sel", e.target.value)}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            O período (início, fim, mês por extenso e ano) é calculado automaticamente
+            a partir do mês selecionado. Altere manualmente apenas se o serviço abranger
+            período diferente do mês completo.
+          </p>
+        </div>
+      )}
+
+      {/* Bloco 9B — Nomeação de comissão: formulário integralmente estruturado. */}
+      {assunto.tipo === "nomeacao_comissao" && (
+        <div className="mb-3">
+          <ComissaoBuilder campos={assunto.campos} militares={militares} onCampo={onCampo} />
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
-          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR"].includes(c.chave))
+          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR", "ARTIGO_O_A_CAP", "TERMO_DIA"].includes(c.chave))
+          // A comissão é montada pelo ComissaoBuilder — sem texto livre.
+          .filter((c) => !(assunto.tipo === "nomeacao_comissao" && ["COMPOSICAO", "FINALIDADE"].includes(c.chave)))
           .map((c) => {
+            const derivado = derivadoPor.get(c.chave);
+            if (derivado) {
+              const manual = estaManual(assunto.campos, c.chave);
+              return (
+                <CampoDerivado
+                  key={c.chave}
+                  label={c.label}
+                  obrigatorio={!!c.obrigatorio}
+                  valor={String(assunto.campos[c.chave] ?? derivado.valor)}
+                  origem={derivado.origem}
+                  detalhe={derivado.detalhe}
+                  manual={manual}
+                  tipo={c.tipo === "data" ? "date" : c.tipo === "inteiro" ? "number" : "text"}
+                  onAlterarManual={() => onCampo(chaveManual(c.chave), true)}
+                  onVoltarDerivado={() => {
+                    onCampo(chaveManual(c.chave), false);
+                    onCampo(c.chave, derivado.valor);
+                  }}
+                  onChange={(v) => onCampo(c.chave, v)}
+                />
+              );
+            }
+            if (assunto.tipo === "servico_extraordinario" && c.chave === "MISSAO") {
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <MissaoField
+                    label={c.label}
+                    obrigatorio={!!c.obrigatorio}
+                    valor={String(assunto.campos[c.chave] ?? "")}
+                    onChange={(v) => onCampo(c.chave, v)}
+                  />
+                </div>
+              );
+            }
+
             const val = assunto.campos[c.chave];
             if (c.tipo === "boolean") {
               return (

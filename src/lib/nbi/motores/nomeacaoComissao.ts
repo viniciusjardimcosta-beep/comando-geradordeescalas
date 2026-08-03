@@ -23,10 +23,33 @@ export const motorNomeacaoComissao: MotorNbi = {
     const out = [...validarCamposTemplate(ctx)];
     const v = resolverBase(ctx);
     if (!v.DATA_INICIO) out.push("data da nomeação ausente");
-    if (!v.COMPOSICAO) out.push("composição da comissão ausente");
-    if (!v.FINALIDADE) out.push("finalidade da comissão ausente");
+    if (!v.FINALIDADE) out.push("finalidade da comissão não selecionada");
+
+    // Bloco 9B: a composição é montada pelo formulário estruturado.
+    let integrantes: Array<Record<string, unknown>> = [];
+    try {
+      const raw = String(ctx.campos.integrantes_json ?? "");
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) integrantes = arr as Array<Record<string, unknown>>;
+    } catch { integrantes = []; }
+
+    if (integrantes.length === 0) {
+      if (!v.COMPOSICAO) out.push("nenhum integrante informado na comissão");
+    } else {
+      integrantes.forEach((i, idx) => {
+        const pos = idx === 0 ? "presidente" : `${idx + 1}º integrante`;
+        if (i.tipo === "militar") {
+          if (!i.militar_id) out.push(`${pos}: militar não selecionado`);
+        } else {
+          if (!String(i.nome ?? "").trim()) out.push(`${pos}: nome do integrante externo ausente`);
+          if (!String(i.documento ?? "").trim()) out.push(`${pos}: CPF/RG do integrante externo ausente`);
+        }
+      });
+      if (!v.COMPOSICAO) out.push("composição da comissão não pôde ser montada");
+    }
     return out;
   },
+
 
   exemplo() {
     return {
