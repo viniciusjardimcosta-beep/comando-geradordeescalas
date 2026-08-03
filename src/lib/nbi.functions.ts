@@ -95,6 +95,17 @@ export const proximoNumeroPrevisto = createServerFn({ method: "GET" })
 // =============================================================
 // 3. GERAR DOCX — reserva (se necessário) → renderiza → upload → generated_at
 // =============================================================
+interface SnapshotSubstituicao {
+  papel: "assuncao" | "dispensa";
+  substituicao_id?: string | null;
+  funcao?: string | null;
+  motivo?: string | null;
+  data_inicio?: string | null;
+  data_fim_prevista?: string | null;
+  substituto_militar_id?: string | null;
+  titular_militar_id?: string | null;
+}
+
 interface SnapshotAssunto {
   tipo: string;
   titulo: string;
@@ -104,7 +115,9 @@ interface SnapshotAssunto {
   campos?: Record<string, unknown>;
   campos_ausentes?: string[];
   pendencias?: string[];
+  substituicao?: SnapshotSubstituicao | null;
 }
+
 
 interface SnapshotResponsaveis {
   unidade?: { nome?: string; sigla?: string };
@@ -471,6 +484,40 @@ export const gerarNbi = createServerFn({ method: "POST" })
     await auditar(data.documento_id, userId, "gerou", {
       numero, ano, storage_path: path,
     });
+
+    // 8. Bloco 8C — ciclo de vida das substituições (não altera o DOCX gerado).
+    for (const a of assuntosRaw) {
+      const s = a.substituicao;
+      if (!s) continue;
+      try {
+        if (s.papel === "assuncao") {
+          await supabaseAdmin.from("nbi_substituicoes").insert({
+            user_id: userId,
+            assuncao_documento_id: data.documento_id,
+            substituto_militar_id: s.substituto_militar_id ?? null,
+            titular_militar_id: s.titular_militar_id ?? null,
+            funcao: s.funcao ?? null,
+            motivo: s.motivo ?? null,
+            data_inicio: s.data_inicio || null,
+            data_fim_prevista: s.data_fim_prevista || null,
+            status: "aberta",
+          });
+        } else if (s.substituicao_id) {
+          await supabaseAdmin
+            .from("nbi_substituicoes")
+            .update({
+              status: "encerrada",
+              dispensa_documento_id: data.documento_id,
+              data_fim_efetiva: s.data_inicio || null,
+            })
+            .eq("id", s.substituicao_id)
+            .eq("user_id", userId);
+        }
+      } catch {
+        // Falha no vínculo nunca invalida o documento já gerado e numerado.
+      }
+    }
+
 
     return { ok: true as const, numero, ano, storage_path: path };
   });

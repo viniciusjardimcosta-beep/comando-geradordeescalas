@@ -664,6 +664,89 @@ export type Database = {
           },
         ]
       }
+      nbi_substituicoes: {
+        Row: {
+          assuncao_documento_id: string | null
+          created_at: string
+          data_fim_efetiva: string | null
+          data_fim_prevista: string | null
+          data_inicio: string | null
+          dispensa_documento_id: string | null
+          funcao: string | null
+          id: string
+          motivo: string | null
+          snapshot: Json
+          status: string
+          substituto_militar_id: string | null
+          titular_militar_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assuncao_documento_id?: string | null
+          created_at?: string
+          data_fim_efetiva?: string | null
+          data_fim_prevista?: string | null
+          data_inicio?: string | null
+          dispensa_documento_id?: string | null
+          funcao?: string | null
+          id?: string
+          motivo?: string | null
+          snapshot?: Json
+          status?: string
+          substituto_militar_id?: string | null
+          titular_militar_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assuncao_documento_id?: string | null
+          created_at?: string
+          data_fim_efetiva?: string | null
+          data_fim_prevista?: string | null
+          data_inicio?: string | null
+          dispensa_documento_id?: string | null
+          funcao?: string | null
+          id?: string
+          motivo?: string | null
+          snapshot?: Json
+          status?: string
+          substituto_militar_id?: string | null
+          titular_militar_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nbi_substituicoes_assuncao_documento_id_fkey"
+            columns: ["assuncao_documento_id"]
+            isOneToOne: false
+            referencedRelation: "nbi_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nbi_substituicoes_dispensa_documento_id_fkey"
+            columns: ["dispensa_documento_id"]
+            isOneToOne: false
+            referencedRelation: "nbi_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nbi_substituicoes_substituto_militar_id_fkey"
+            columns: ["substituto_militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nbi_substituicoes_titular_militar_id_fkey"
+            columns: ["titular_militar_id"]
+            isOneToOne: false
+            referencedRelation: "militares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nbi_template_versions: {
         Row: {
           created_at: string
