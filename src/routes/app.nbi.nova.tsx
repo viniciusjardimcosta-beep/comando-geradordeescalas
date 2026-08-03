@@ -940,6 +940,19 @@ function AssuntoCard({
         </div>
       )}
 
+      {(assunto.tipo === "dispensa_funcao" || assunto.tipo === "assuncao_funcao") && (
+        <OrigemDadosFuncao
+          assunto={assunto}
+          militares={militares}
+          ferias={ferias}
+          substituicoes={substituicoes}
+          anoNbi={anoNbi}
+          onChange={onChange}
+          onCampo={onCampo}
+        />
+      )}
+
+
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
           .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR"].includes(c.chave))
