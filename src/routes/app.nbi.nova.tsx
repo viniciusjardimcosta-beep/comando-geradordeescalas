@@ -159,15 +159,20 @@ function NovaNbiPage() {
   async function carregar(uid: string, rascId: string | null) {
     setLoading(true);
     try {
-      const [tpl, mil, fer, cfg] = await Promise.all([
+      const [tpl, mil, fer, cfg, sub] = await Promise.all([
         supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
         supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical,gbm_nbi,companhia_nbi,pelotao_nbi,secao_nbi,subsecao_nbi,setor_nbi,cidade_nbi,batalhao_nbi,funcao_administrativa_nbi,funcao_documental_nbi").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
+        supabase.from("nbi_substituicoes")
+          .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista")
+          .eq("user_id", uid).eq("status", "aberta").order("created_at", { ascending: false }),
       ]);
       if (tpl.data) setTemplates(tpl.data as unknown as TemplateRow[]);
       if (mil.data) setMilitares(mil.data as MilitarNbi[]);
       if (fer.data) setFerias(fer.data as FeriasReg[]);
+      if (sub.data) setSubstituicoes(sub.data as SubstituicaoAberta[]);
+
       if (cfg.data) {
         const d = cfg.data;
         setRascunho((r) => ({
