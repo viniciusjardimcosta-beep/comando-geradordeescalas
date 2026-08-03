@@ -1374,21 +1374,8 @@ function RevisaoOrtografica({
 }
 
 // ============ Motivo controlado (Assunção/Dispensa) ============
-const MOTIVOS_AFASTAMENTO = [
-  "Férias Regulamentares",
-  "Licença-paternidade",
-  "Luto regulamentar",
-  "Curso",
-  "Licença",
-];
-const MOTIVOS_RETORNO = [
-  "Término das Férias Regulamentares",
-  "Término da Licença-paternidade",
-  "Término do Luto regulamentar",
-  "Término do Curso",
-  "Término da Licença",
-];
-
+// Bloco 8C: o rótulo da interface NUNCA vai para a frase. O valor gravado é
+// sempre o texto oficial do motivo (texto_assuncao / texto_dispensa).
 function MotivoTitularField({
   chave, label, obrigatorio, valor, onChange, contexto,
 }: {
@@ -1399,23 +1386,27 @@ function MotivoTitularField({
   onChange: (v: string) => void;
   contexto: "afastamento" | "retorno";
 }) {
-  const opcoes = contexto === "afastamento" ? MOTIVOS_AFASTAMENTO : MOTIVOS_RETORNO;
-  const isOutro = valor !== "" && !opcoes.includes(valor);
+  const conhecido = motivoPorTexto(valor, contexto);
+  const isOutro = valor !== "" && !conhecido;
   const [modo, setModo] = useState<"lista" | "outro">(isOutro ? "outro" : "lista");
+  const preview = contexto === "afastamento"
+    ? `…encontrar-se em ${valor || "…"}.`
+    : `…retornou de ${valor || "…"}.`;
   return (
     <div className="rounded-md border p-3">
       <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
       <div className="mt-2 grid gap-2">
         <Select
-          value={modo === "outro" ? "__outro__" : (opcoes.includes(valor) ? valor : "")}
+          value={modo === "outro" ? "__outro__" : (conhecido?.id ?? "")}
           onValueChange={(v) => {
-            if (v === "__outro__") { setModo("outro"); onChange(""); }
-            else { setModo("lista"); onChange(v); }
+            if (v === "__outro__") { setModo("outro"); onChange(""); return; }
+            setModo("lista");
+            onChange(textoMotivo(v, contexto) ?? "");
           }}
         >
           <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
           <SelectContent>
-            {opcoes.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+            {MOTIVOS_FUNCAO.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}
             <SelectItem value="__outro__">— Outro (texto livre) —</SelectItem>
           </SelectContent>
         </Select>
@@ -1423,16 +1414,181 @@ function MotivoTitularField({
           <Input
             value={valor}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Descreva o motivo exatamente como deve constar na NBI"
+            placeholder='Ex.: "licença para tratamento de saúde" (somente a expressão que entra na frase)'
           />
         )}
         <p className="text-[11px] text-muted-foreground">
-          Chave interna: <code>{chave}</code>. O texto oficial recebe exatamente o motivo confirmado.
+          Chave interna: <code>{chave}</code> · frase resultante: <em>{preview}</em>
         </p>
       </div>
     </div>
   );
 }
+
+// ============ Origem dos dados de Assunção/Dispensa (Bloco 8C) ============
+function OrigemDadosFuncao({
+  assunto, militares, ferias, substituicoes, anoNbi, onChange, onCampo,
+}: {
+  assunto: AssuntoLocal;
+  militares: MilitarNbi[];
+  ferias: FeriasReg[];
+  substituicoes: SubstituicaoAberta[];
+  anoNbi: number;
+  onChange: (patch: Partial<AssuntoLocal>) => void;
+  onCampo: (chave: string, v: string | boolean) => void;
+}) {
+  const ehAssuncao = assunto.tipo === "assuncao_funcao";
+  const origem = assunto.origem_dados ?? "manual";
+  const titular = militares.find((m) => m.id === assunto.militar_titular_id) ?? null;
+  const nomeDe = (id: string | null) => {
+    const m = militares.find((x) => x.id === id);
+    return m ? `${m.posto_graduacao ?? ""} ${m.nome}`.trim() : "—";
+  };
+
+  const periodos = useMemo(
+    () => ferias
+      .filter((f) => f.militar_id === assunto.militar_titular_id && f.ano === anoNbi)
+      .sort((a, b) => a.periodo - b.periodo),
+    [ferias, assunto.militar_titular_id, anoNbi],
+  );
+
+  function aplicarFerias(f: FeriasReg) {
+    onChange({ ferias_id: f.id });
+    if (ehAssuncao) {
+      onCampo("DATA_INICIO", f.data_inicio);
+      onCampo("MOTIVO_TITULAR", TEXTO_FERIAS);
+      onCampo("DATA_DISPENSA_PREVISTA", somarDiasISO(f.data_fim, 1));
+      if (titular && !String(assunto.campos.FUNCAO_ASSUMIDA ?? "")) {
+        const fx = funcaoDocumentalDe(titular);
+        if (fx) onCampo("FUNCAO_ASSUMIDA", fx);
+      }
+    } else {
+      onCampo("DATA_INICIO", somarDiasISO(f.data_fim, 1));
+      onCampo("MOTIVO_RETORNO", TEXTO_FERIAS);
+      if (titular && !String(assunto.campos.FUNCAO_DISPENSADA ?? "")) {
+        const fx = funcaoDocumentalDe(titular);
+        if (fx) onCampo("FUNCAO_DISPENSADA", fx);
+      }
+    }
+    toast.success(`Período ${periodoOrdinal(f.periodo)} aplicado — confira a data antes de gerar.`);
+  }
+
+  function aplicarSubstituicao(s: SubstituicaoAberta) {
+    // Função é reaproveitada EXATAMENTE como congelada na Assunção original.
+    onChange({
+      substituicao_id: s.id,
+      militar_id: s.substituto_militar_id ?? assunto.militar_id,
+      militar_titular_id: s.titular_militar_id ?? assunto.militar_titular_id,
+    });
+    if (s.funcao) onCampo("FUNCAO_DISPENSADA", s.funcao);
+    if (s.motivo) onCampo("MOTIVO_RETORNO", s.motivo);
+    if (s.data_fim_prevista) onCampo("DATA_INICIO", s.data_fim_prevista);
+    toast.success("Assunção vinculada — confirme a data de dispensa antes de gerar.");
+  }
+
+  const opcoes: Array<{ v: NonNullable<AssuntoLocal["origem_dados"]>; label: string }> = ehAssuncao
+    ? [
+      { v: "ferias", label: "Férias cadastradas" },
+      { v: "manual", label: "Preenchimento manual" },
+    ]
+    : [
+      { v: "assuncao", label: "Assunção anterior" },
+      { v: "ferias", label: "Férias cadastradas" },
+      { v: "manual", label: "Preenchimento manual" },
+    ];
+
+  return (
+    <div className="mb-3 rounded-md border border-dashed p-3">
+      <Label className="text-xs uppercase tracking-wide text-muted-foreground">Origem dos dados</Label>
+      <div className="mt-2 flex flex-wrap gap-4">
+        {opcoes.map((o) => (
+          <label key={o.v} className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name={`origem-${assunto.id}`}
+              checked={origem === o.v}
+              onChange={() => onChange({ origem_dados: o.v, substituicao_id: o.v === "assuncao" ? assunto.substituicao_id ?? null : null })}
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+
+      {origem === "ferias" && (
+        <div className="mt-3 space-y-2">
+          {!assunto.militar_titular_id ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Selecione o titular acima para consultar os períodos de férias cadastrados.
+            </p>
+          ) : periodos.length === 0 ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Nenhum período de férias cadastrado para {nomeDe(assunto.militar_titular_id)} em {anoNbi}.
+              Use o preenchimento manual ou cadastre o plano de férias.
+            </p>
+          ) : (
+            <>
+              <p className="text-[11px] text-muted-foreground">
+                {periodos.length > 1
+                  ? "Mais de um período encontrado — confirme qual deve ser usado."
+                  : "Confirme o período antes de aplicar."}
+              </p>
+              {periodos.map((f) => {
+                const dias = diasEntreISO(f.data_inicio, f.data_fim);
+                const ativo = assunto.ferias_id === f.id;
+                return (
+                  <div key={f.id} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
+                    <span>
+                      <strong>{periodoOrdinal(f.periodo)} período/{f.ano}</strong>
+                      {" · "}{formatarDataBR(f.data_inicio)} a {formatarDataBR(f.data_fim)}
+                      {" · "}{dias} dia{dias === 1 ? "" : "s"}
+                      {" · "}dispensa prevista em {formatarDataBR(somarDiasISO(f.data_fim, 1))}
+                    </span>
+                    <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} onClick={() => aplicarFerias(f)}>
+                      {ativo ? "Reaplicar" : "Confirmar este período"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {origem === "assuncao" && !ehAssuncao && (
+        <div className="mt-3 space-y-2">
+          {substituicoes.length === 0 ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Nenhuma assunção de função em aberto. Use férias cadastradas ou preenchimento manual.
+            </p>
+          ) : (
+            substituicoes.map((s) => {
+              const ativo = assunto.substituicao_id === s.id;
+              return (
+                <div key={s.id} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
+                  <span>
+                    <strong>{nomeDe(s.substituto_militar_id)}</strong> substituindo {nomeDe(s.titular_militar_id)}
+                    {s.funcao ? ` · ${s.funcao}` : ""}
+                    {s.data_inicio ? ` · desde ${formatarDataBR(s.data_inicio)}` : ""}
+                    {s.data_fim_prevista ? ` · retorno previsto ${formatarDataBR(s.data_fim_prevista)}` : ""}
+                  </span>
+                  <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} onClick={() => aplicarSubstituicao(s)}>
+                    {ativo ? "Vinculada" : "Usar esta assunção"}
+                  </Button>
+                </div>
+              );
+            })
+          )}
+          {assunto.substituicao_id && (
+            <p className="text-[11px] text-muted-foreground">
+              A função dispensada vem congelada da assunção original e não é recomposta pelo cadastro atual.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 // ============ Composição de função (Assunção/Dispensa) ============
 function FuncaoComposta({
