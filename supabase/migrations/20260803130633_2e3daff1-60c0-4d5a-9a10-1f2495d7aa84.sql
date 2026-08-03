@@ -1,0 +1,1 @@
+ALTER TABLE public.nbi_substituicoes ADD COLUMN IF NOT EXISTS data_fim_efetiva date;

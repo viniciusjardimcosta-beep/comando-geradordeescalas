@@ -668,6 +668,7 @@ export type Database = {
         Row: {
           assuncao_documento_id: string | null
           created_at: string
+          data_fim_efetiva: string | null
           data_fim_prevista: string | null
           data_inicio: string | null
           dispensa_documento_id: string | null
@@ -684,6 +685,7 @@ export type Database = {
         Insert: {
           assuncao_documento_id?: string | null
           created_at?: string
+          data_fim_efetiva?: string | null
           data_fim_prevista?: string | null
           data_inicio?: string | null
           dispensa_documento_id?: string | null
@@ -700,6 +702,7 @@ export type Database = {
         Update: {
           assuncao_documento_id?: string | null
           created_at?: string
+          data_fim_efetiva?: string | null
           data_fim_prevista?: string | null
           data_inicio?: string | null
           dispensa_documento_id?: string | null
