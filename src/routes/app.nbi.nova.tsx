@@ -1042,13 +1042,52 @@ function AssuntoCard({
             }
             if (c.tipo === "data" || c.tipo === "inteiro") {
               const inputType = c.tipo === "data" ? "date" : "number";
+              // Data da dispensa derivada: quando a origem é férias cadastradas
+              // (ou assunção anterior), a data vem calculada e fica somente
+              // leitura até que o operador peça alteração manual explícita.
+              const derivada =
+                assunto.tipo === "dispensa_funcao" &&
+                chaveUp === "DATA_INICIO" &&
+                (assunto.origem_dados === "ferias" || assunto.origem_dados === "assuncao") &&
+                assunto.campos.data_dispensa_manual !== true;
+              if (derivada) {
+                return (
+                  <div key={c.chave}>
+                    <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input type="date" value={String(val ?? "")} readOnly disabled className="bg-muted" />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onCampo("data_dispensa_manual", true)}
+                      >
+                        Alterar manualmente
+                      </Button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Campo derivado: dia seguinte ao término do período do titular.
+                    </p>
+                  </div>
+                );
+              }
               return (
                 <div key={c.chave}>
                   <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
                   <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+                  {assunto.tipo === "dispensa_funcao" && chaveUp === "DATA_INICIO" && assunto.campos.data_dispensa_manual === true && (
+                    <button
+                      type="button"
+                      className="mt-1 text-[11px] text-muted-foreground underline"
+                      onClick={() => onCampo("data_dispensa_manual", false)}
+                    >
+                      Voltar ao valor derivado
+                    </button>
+                  )}
                 </div>
               );
             }
+
             return (
               <div key={c.chave}>
                 <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
