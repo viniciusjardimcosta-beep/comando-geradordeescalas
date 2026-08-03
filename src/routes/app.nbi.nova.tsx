@@ -305,8 +305,14 @@ function NovaNbiPage() {
   function textoFinal(a: AssuntoLocal): { texto: string; ausentes: string[] } {
     const t = templatePor.get(a.tipo);
     if (!t) return { texto: "", ausentes: [] };
-    return interpolarTexto(t.texto_modelo, resolverValores(a));
+    // Assuntos com mais de uma redação oficial: o motor indica qual template
+    // (linha de nbi_templates) contém a redação correta para este contexto.
+    const motor = obterMotor(a.tipo);
+    const codigoEfetivo = motor?.codigoTemplateEfetivo?.(contextoDe(a)) ?? t.codigo;
+    const tEfetivo = templatePor.get(codigoEfetivo) ?? t;
+    return interpolarTexto(tEfetivo.texto_modelo, resolverValores(a));
   }
+
 
   // Pendências bloqueantes por assunto — delegadas ao motor do assunto.
   function pendencias(a: AssuntoLocal): string[] {
