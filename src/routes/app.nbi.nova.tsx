@@ -27,6 +27,8 @@ import {
 } from "@/utils/nbi";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 import { funcaoDocumentalDe, lotacaoDocumentalDe, comporFuncaoDocumental } from "@/lib/nbi/formatacao";
+import { MOTIVOS_FUNCAO, textoMotivo, motivoPorTexto, TEXTO_FERIAS } from "@/lib/nbi/motivos";
+
 import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
 import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
 import { AssuntoPicker, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
