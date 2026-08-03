@@ -136,6 +136,8 @@ function NovaNbiPage() {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
+  const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
+
 
   const [rascunho, setRascunho] = useState<Rascunho>({
     modo_numeracao: "automatico",
