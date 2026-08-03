@@ -475,6 +475,7 @@ function NovaNbiPage() {
           templates={templates}
           militares={militares}
           ferias={ferias}
+          substituicoes={substituicoes}
           adicionar={adicionarAssunto}
           atualizar={atualizarAssunto}
           atualizarCampo={atualizarCampo}
@@ -612,7 +613,7 @@ function Etapa1({
 // ============ ETAPA 2 ============
 
 function Etapa2({
-  rascunho, templates, militares, ferias,
+  rascunho, templates, militares, ferias, substituicoes,
   adicionar, atualizar, atualizarCampo, remover, mover,
   onBack, onNext,
 }: {
@@ -620,6 +621,7 @@ function Etapa2({
   templates: TemplateRow[];
   militares: MilitarNbi[];
   ferias: FeriasReg[];
+  substituicoes: SubstituicaoAberta[];
   adicionar: (codigo: string) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
@@ -666,6 +668,7 @@ function Etapa2({
               template={t}
               militares={militares}
               ferias={ferias}
+              substituicoes={substituicoes}
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
@@ -701,7 +704,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias, anoNbi,
+  index, assunto, template, militares, ferias, substituicoes, anoNbi,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -709,6 +712,7 @@ function AssuntoCard({
   template: TemplateRow;
   militares: MilitarNbi[];
   ferias: FeriasReg[];
+  substituicoes: SubstituicaoAberta[];
   anoNbi: number;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
