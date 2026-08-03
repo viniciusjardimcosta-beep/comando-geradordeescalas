@@ -386,10 +386,24 @@ function NovaNbiPage() {
           militar_snapshot: dadosMilitar,
           titular_snapshot: dadosTitular,
           ferias_id: a.ferias_id,
+          origem_dados: a.origem_dados ?? "manual",
+          // Bloco 8C — vínculo Assunção ⇄ Dispensa (isolado no snapshot; o
+          // backend replica em nbi_substituicoes ao gerar o documento).
+          substituicao: (a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao") ? {
+            papel: a.tipo === "assuncao_funcao" ? "assuncao" : "dispensa",
+            substituicao_id: a.substituicao_id ?? null,
+            funcao: String(a.campos.FUNCAO_ASSUMIDA ?? a.campos.FUNCAO_DISPENSADA ?? ""),
+            motivo: String(a.campos.MOTIVO_TITULAR ?? a.campos.MOTIVO_RETORNO ?? ""),
+            data_inicio: String(a.campos.DATA_INICIO ?? "") || null,
+            data_fim_prevista: String(a.campos.DATA_DISPENSA_PREVISTA ?? "") || null,
+            substituto_militar_id: a.militar_id,
+            titular_militar_id: a.militar_titular_id,
+          } : null,
           campos: a.campos,
           texto_final: texto,
           campos_ausentes: ausentes,
           pendencias: pendencias(a),
+
         };
       });
       const payload = {
