@@ -397,6 +397,29 @@ function NbiConfiguracoesPage() {
                   modoToponimo
                   placeholder="Ex.: Porto Alegre" />
               </div>
+
+              {/* RF-06 — nomenclatura do boletim da unidade */}
+              <div className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="bol_nome">Nome do boletim</Label>
+                  <Input id="bol_nome" value={form.boletim_nome}
+                    onChange={(e) => setForm({ ...form, boletim_nome: e.target.value })}
+                    placeholder="Ex.: Boletim Interno" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Usado no rodapé: "Publicado no <em>{form.boletim_nome.trim() || "Boletim"}</em> nº ____".
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="bol_sigla">Sigla do boletim</Label>
+                  <Input id="bol_sigla" value={form.boletim_sigla}
+                    onChange={(e) => setForm({ ...form, boletim_sigla: e.target.value })}
+                    placeholder="Ex.: BI" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Usada na abertura: "Solicito-lhe publicação em <em>{form.boletim_sigla.trim() || "BI"}</em>…".
+                  </p>
+                </div>
+              </div>
+
               <div className="grid gap-2">
                 <Label htmlFor="uni_nome">Nome da unidade (uso interno)</Label>
                 <Input id="uni_nome" value={form.unidade_nome}
