@@ -99,7 +99,14 @@ export function calcularDerivados(
     }
   } else {
     const inicio = s("DATA_INICIO");
-    const dias = diasDe();
+    // Licença-paternidade: 30 dias é o padrão da redação oficial homologada.
+    const dias = diasDe() ?? (tipo === "licenca_paternidade" ? 30 : null);
+    if (tipo === "licenca_paternidade" && dias) {
+      push({
+        chave: "QTD_DIAS", valor: String(dias), origem: "Modelo oficial",
+        detalhe: "Padrão da redação oficial (30 dias)",
+      });
+    }
     const fimCalculado = inicio && dias ? somarDiasISO(inicio, dias - 1) : "";
     if (fimCalculado) {
       push({
