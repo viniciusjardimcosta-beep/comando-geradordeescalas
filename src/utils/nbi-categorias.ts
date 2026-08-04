@@ -17,12 +17,13 @@ const MAPA: Record<string, CategoriaNbi> = {
   apresentacao: "AFASTAMENTOS",
   licenca_paternidade: "AFASTAMENTOS",
   luto: "AFASTAMENTOS",
+  dispensa_recompensa: "AFASTAMENTOS",
 
   assuncao_funcao: "MOVIMENTAÇÕES",
   assuncao_cargo_vago: "MOVIMENTAÇÕES",
   dispensa_funcao: "MOVIMENTAÇÕES",
   dispensa_cargo_vago: "MOVIMENTAÇÕES",
-  dispensa_recompensa: "MOVIMENTAÇÕES",
+
 
   servico_extraordinario: "SERVIÇO",
   viagem: "SERVIÇO",
@@ -36,6 +37,37 @@ const MAPA: Record<string, CategoriaNbi> = {
 export function categoriaDoCodigo(codigo: string): CategoriaNbi {
   return MAPA[codigo] ?? "ADMINISTRATIVO";
 }
+
+// RF-04 — sequência administrativa oficial dentro de cada categoria.
+// Códigos ausentes desta lista vão para o fim do grupo, em ordem alfabética.
+const ORDEM_ADMINISTRATIVA: string[] = [
+  // AFASTAMENTOS
+  "ferias",
+  "apresentacao",
+  "licenca_paternidade",
+  "luto",
+  "dispensa_recompensa",
+  // MOVIMENTAÇÕES
+  "assuncao_funcao",
+  "dispensa_funcao",
+  "assuncao_cargo_vago",
+  "dispensa_cargo_vago",
+  // SERVIÇO
+  "viagem",
+  "servico_extraordinario",
+  "nomeacao_comissao",
+  // ADMINISTRATIVO
+  "renovacao_tempo",
+  "situacao_sanitaria",
+  "comunicado",
+];
+
+/** Peso de ordenação do assunto dentro da sua categoria. */
+export function ordemDoCodigo(codigo: string): number {
+  const i = ORDEM_ADMINISTRATIVA.indexOf(codigo);
+  return i === -1 ? 999 : i;
+}
+
 
 // Códigos já homologados (com formulário validado e DOCX aprovado).
 // A lista real de disponíveis vem de nbi_templates.disponivel; esta constante

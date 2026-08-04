@@ -1223,6 +1223,24 @@ function Etapa3({
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
 
+  // RF-07 — datas informadas nos assuntos cujo ano diverge do ano do documento.
+  const divergenciasAno = rascunho.assuntos.flatMap((a) => {
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const achados: string[] = [];
+    for (const [chave, valor] of Object.entries(a.campos)) {
+      if (typeof valor !== "string") continue;
+      const m = /^(\d{4})-\d{2}-\d{2}$/.exec(valor.trim());
+      if (!m) continue;
+      const ano = parseInt(m[1], 10);
+      if (Number.isFinite(anoDoc) && ano !== anoDoc) {
+        const label = t?.campos.find((c) => c.chave === chave)?.label ?? chave;
+        achados.push(`${t?.titulo ?? a.tipo} · ${label}: ${ano}`);
+      }
+    }
+    return achados;
+  });
+
+
   async function handleGerar() {
     if (!documentoId) {
       toast.error("Salve o rascunho antes de gerar.");
@@ -1310,6 +1328,24 @@ function Etapa3({
             </label>
           </div>
         )}
+
+        {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
+        {divergenciasAno.length > 0 && !gerado && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              Datas com ano diferente do documento ({anoDoc})
+            </div>
+            <ul className="list-disc pl-5 text-xs">
+              {divergenciasAno.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Confira se as datas estão corretas. Situações legítimas (férias iniciadas no ano anterior,
+              por exemplo) podem prosseguir normalmente.
+            </p>
+          </div>
+        )}
+
 
         <RevisaoOrtografica
           assuntos={rascunho.assuntos}

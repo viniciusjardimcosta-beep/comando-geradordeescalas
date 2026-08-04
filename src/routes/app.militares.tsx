@@ -10,6 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
+
+import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -372,229 +376,247 @@ function MilitaresPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        {/* RF-01 — modal com altura máxima da viewport, cabeçalho e rodapé fixos
+            e apenas a área central rolável. O usuário nunca perde os botões. */}
+        <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-3xl">
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
             <DialogTitle>{editing ? "Editar militar" : "Novo militar"}</DialogTitle>
             <DialogDescription>
               Marque as funções aplicáveis. Se não marcar nenhuma, o militar é um BM comum (entra na
               escala operacional sem restrição de função).
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="nome">Nome *</Label>
-              <Input id="nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="posto">Posto / Graduação</Label>
-                <Input id="posto" value={form.posto_graduacao}
-                  onChange={(e) => setForm({ ...form, posto_graduacao: e.target.value })}
-                  placeholder="Ex: SGT, CB, SD" />
+                <Label htmlFor="nome">Nome *</Label>
+                <Input id="nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="mat">Matrícula</Label>
-                <Input id="mat" value={form.matricula}
-                  onChange={(e) => setForm({ ...form, matricula: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="grid gap-3 rounded-md border border-border p-3">
-              <Label className="text-sm">Funções</Label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox checked={form.is_cg}
-                  onCheckedChange={(v) => setForm({ ...form, is_cg: !!v })} className="mt-1" />
-                <div>
-                  <p className="font-medium text-sm">CG — Comandante de Guarnição</p>
-                  <p className="text-xs text-muted-foreground">Pode ser escalado como CG no serviço 24h.</p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox checked={form.is_cov}
-                  onCheckedChange={(v) => setForm({ ...form, is_cov: !!v })} className="mt-1" />
-                <div>
-                  <p className="font-medium text-sm">COV — Condutor e Operador de Viatura</p>
-                  <p className="text-xs text-muted-foreground">Motorista da viatura; pode ser marcado junto com CG.</p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox checked={form.is_adm}
-                  onCheckedChange={(v) => setForm({ ...form, is_adm: !!v })} className="mt-1" />
-                <div>
-                  <p className="font-medium text-sm">ADM — Expediente</p>
-                  <p className="text-xs text-muted-foreground">Não entra na escala operacional; apenas EXP.</p>
-                </div>
-              </label>
-            </div>
-
-            <div className="grid gap-2 rounded-md border border-border p-3">
-              <Label htmlFor="tipo_escala">Tipo de escala</Label>
-              <Select
-                value={form.tipo_escala}
-                onValueChange={(v) => setForm({ ...form, tipo_escala: v as TipoEscala })}
-              >
-                <SelectTrigger id="tipo_escala"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="24h">24h — serviço operacional 08h–08h</SelectItem>
-                  <SelectItem value="parcial">Parcial — apenas turnos curtos (2/23/3) em dias úteis</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                "Parcial" é típico de oficiais administrativos que não entram no serviço 24h
-                (recebem apenas turnos parciais durante o expediente).
-              </p>
-            </div>
-
-            <div className="grid gap-3 rounded-md border-2 border-dashed border-primary/40 bg-primary/5 p-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold text-primary">Dados para NBI</Label>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Opcional · não afeta escala</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Utilizados apenas na geração de Notas para Boletim Interno. Não interferem no motor
-                de escalas nem nas funções operacionais (CG/COV/ADM).
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="quadro">Quadro</Label>
-                  <Input
-                    id="quadro"
-                    list="quadros-sugeridos"
-                    value={form.quadro}
-                    onChange={(e) => setForm({ ...form, quadro: e.target.value })}
-                    placeholder="Ex.: QPBM, QOEM"
-                  />
-                  <datalist id="quadros-sugeridos">
-                    {QUADROS_SUGERIDOS.map((q) => <option key={q} value={q} />)}
-                  </datalist>
+                  <Label htmlFor="posto">Posto / Graduação</Label>
+                  <Input id="posto" value={form.posto_graduacao}
+                    onChange={(e) => setForm({ ...form, posto_graduacao: e.target.value })}
+                    placeholder="Ex: SGT, CB, SD" />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="genero">Gênero gramatical</Label>
-                  <Select
-                    value={form.genero_gramatical || "__none__"}
-                    onValueChange={(v) => setForm({ ...form, genero_gramatical: (v === "__none__" ? "" : v) as Genero })}
-                  >
-                    <SelectTrigger id="genero"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— Não informado —</SelectItem>
-                      <SelectItem value="M">Masculino (o / ao)</SelectItem>
-                      <SelectItem value="F">Feminino (a / à)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="mat">Matrícula</Label>
+                  <Input id="mat" value={form.matricula}
+                    onChange={(e) => setForm({ ...form, matricula: e.target.value })} />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="lotacao_nbi">Lotação para NBI</Label>
-                <Input
-                  id="lotacao_nbi"
-                  value={form.lotacao_nbi}
-                  onChange={(e) => setForm({ ...form, lotacao_nbi: e.target.value })}
-                  placeholder="Ex.: 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="funcao_atual">Função administrativa atual</Label>
-                <Input
-                  id="funcao_atual"
-                  value={form.funcao_atual}
-                  onChange={(e) => setForm({ ...form, funcao_atual: e.target.value })}
-                  placeholder="Ex.: Sgte do 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Cargo/função administrativa — diferente do papel operacional CG/COV.
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="distribuicao_interna_nbi">Distribuição interna (NBI)</Label>
-                <Input
-                  id="distribuicao_interna_nbi"
-                  value={form.distribuicao_interna_nbi}
-                  onChange={(e) => setForm({ ...form, distribuicao_interna_nbi: e.target.value })}
-                  placeholder="Ex.: 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
-                </p>
-              </div>
 
-              {/* Estrutura institucional (Bloco 8B) — usada apenas pelas NBIs */}
-              <div className="rounded-md border border-dashed p-3 space-y-3">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Topologia institucional (NBI)
-                </Label>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {([
-                    ["gbm_nbi", "GBM", "Ex.: 2 ou 2ºGBM"],
-                    ["pelotao_nbi", "Pelotão", "Ex.: 6 ou 6ºPelBM"],
-                    ["companhia_nbi", "Companhia", "Ex.: 8 ou 8ªCiaBM"],
-                    ["batalhao_nbi", "Batalhão", "Ex.: 15 ou 15ºBBM"],
-                    ["secao_nbi", "Seção", "Ex.: 2ª Seção"],
-                    ["subsecao_nbi", "Subseção", "Ex.: SSeg"],
-                    ["setor_nbi", "Setor", "Ex.: Setor de Vistorias"],
-                    ["cidade_nbi", "Cidade", "Ex.: IJUÍ"],
-                  ] as const).map(([campo, label, ph]) => (
-                    <div key={campo} className="grid gap-2">
-                      <Label htmlFor={campo}>{label}</Label>
+              {/* RF-02 — seções recolhíveis por grupo lógico */}
+              <Accordion type="multiple" defaultValue={["operacionais"]} className="w-full">
+                <AccordionItem value="operacionais">
+                  <AccordionTrigger className="text-sm font-semibold">Dados operacionais</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-1">
+                    <div className="grid gap-3 rounded-md border border-border p-3">
+                      <Label className="text-sm">Funções</Label>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <Checkbox checked={form.is_cg}
+                          onCheckedChange={(v) => setForm({ ...form, is_cg: !!v })} className="mt-1" />
+                        <div>
+                          <p className="font-medium text-sm">CG — Comandante de Guarnição</p>
+                          <p className="text-xs text-muted-foreground">Pode ser escalado como CG no serviço 24h.</p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <Checkbox checked={form.is_cov}
+                          onCheckedChange={(v) => setForm({ ...form, is_cov: !!v })} className="mt-1" />
+                        <div>
+                          <p className="font-medium text-sm">COV — Condutor e Operador de Viatura</p>
+                          <p className="text-xs text-muted-foreground">Motorista da viatura; pode ser marcado junto com CG.</p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <Checkbox checked={form.is_adm}
+                          onCheckedChange={(v) => setForm({ ...form, is_adm: !!v })} className="mt-1" />
+                        <div>
+                          <p className="font-medium text-sm">ADM — Expediente</p>
+                          <p className="text-xs text-muted-foreground">Não entra na escala operacional; apenas EXP.</p>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="grid gap-2 rounded-md border border-border p-3">
+                      <Label htmlFor="tipo_escala">Tipo de escala</Label>
+                      <Select
+                        value={form.tipo_escala}
+                        onValueChange={(v) => setForm({ ...form, tipo_escala: v as TipoEscala })}
+                      >
+                        <SelectTrigger id="tipo_escala"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="24h">24h — serviço operacional 08h–08h</SelectItem>
+                          <SelectItem value="parcial">Parcial — apenas turnos curtos (2/23/3) em dias úteis</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        "Parcial" é típico de oficiais administrativos que não entram no serviço 24h
+                        (recebem apenas turnos parciais durante o expediente).
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-md border border-border p-3">
+                      <div>
+                        <Label htmlFor="ativo" className="cursor-pointer">Ativo</Label>
+                        <p className="text-xs text-muted-foreground">Apenas ativos entram na escala.</p>
+                      </div>
+                      <Switch id="ativo" checked={form.ativo}
+                        onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="nbi">
+                  <AccordionTrigger className="text-sm font-semibold">
+                    Dados para NBI
+                    <span className="ml-2 text-[10px] font-normal uppercase tracking-wider text-muted-foreground">
+                      opcional · não afeta escala
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="space-y-3 pt-1">
+                    <p className="text-xs text-muted-foreground">
+                      Utilizados apenas na geração de Notas para Boletim Interno. Não interferem no motor
+                      de escalas nem nas funções operacionais (CG/COV/ADM).
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-2">
+                        <Label htmlFor="quadro">Quadro</Label>
+                        <Input
+                          id="quadro"
+                          list="quadros-sugeridos"
+                          value={form.quadro}
+                          onChange={(e) => setForm({ ...form, quadro: e.target.value })}
+                          placeholder="Ex.: QPBM, QOEM"
+                        />
+                        <datalist id="quadros-sugeridos">
+                          {QUADROS_SUGERIDOS.map((q) => <option key={q} value={q} />)}
+                        </datalist>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="genero">Gênero gramatical</Label>
+                        <Select
+                          value={form.genero_gramatical || "__none__"}
+                          onValueChange={(v) => setForm({ ...form, genero_gramatical: (v === "__none__" ? "" : v) as Genero })}
+                        >
+                          <SelectTrigger id="genero"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Não informado —</SelectItem>
+                            <SelectItem value="M">Masculino (o / ao)</SelectItem>
+                            <SelectItem value="F">Feminino (a / à)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="lotacao_nbi">Lotação para NBI</Label>
                       <Input
-                        id={campo}
-                        value={form[campo]}
-                        onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
-                        placeholder={ph}
+                        id="lotacao_nbi"
+                        value={form.lotacao_nbi}
+                        onChange={(e) => setForm({ ...form, lotacao_nbi: e.target.value })}
+                        placeholder="Ex.: 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
                       />
                     </div>
-                  ))}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="funcao_administrativa_nbi">Função administrativa (NBI)</Label>
-                  <Input
-                    id="funcao_administrativa_nbi"
-                    value={form.funcao_administrativa_nbi}
-                    onChange={(e) => setForm({ ...form, funcao_administrativa_nbi: e.target.value })}
-                    placeholder="Ex.: Sargenteante"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="funcao_documental_nbi">Função documental (NBI)</Label>
-                  <Input
-                    id="funcao_documental_nbi"
-                    value={form.funcao_documental_nbi}
-                    onChange={(e) => setForm({ ...form, funcao_documental_nbi: e.target.value })}
-                    placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 12ºBBM"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    Texto oficial usado em Assunção, Dispensa, Cargo Vago e Comissão. Quando
-                    preenchido, o sistema nunca monta a função automaticamente.
-                  </p>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="nome_guerra">Nome de guerra</Label>
-                <Input
-                  id="nome_guerra"
-                  value={form.nome_guerra}
-                  onChange={(e) => setForm({ ...form, nome_guerra: e.target.value })}
-                  placeholder="Uso interno · o Word sempre usa o nome completo"
-                />
-              </div>
-            </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="funcao_atual">Função administrativa atual</Label>
+                      <Input
+                        id="funcao_atual"
+                        value={form.funcao_atual}
+                        onChange={(e) => setForm({ ...form, funcao_atual: e.target.value })}
+                        placeholder="Ex.: Sgte do 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Cargo/função administrativa — diferente do papel operacional CG/COV.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="distribuicao_interna_nbi">Distribuição interna (NBI)</Label>
+                      <Input
+                        id="distribuicao_interna_nbi"
+                        value={form.distribuicao_interna_nbi}
+                        onChange={(e) => setForm({ ...form, distribuicao_interna_nbi: e.target.value })}
+                        placeholder="Ex.: 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="funcao_administrativa_nbi">Função administrativa (NBI)</Label>
+                      <Input
+                        id="funcao_administrativa_nbi"
+                        value={form.funcao_administrativa_nbi}
+                        onChange={(e) => setForm({ ...form, funcao_administrativa_nbi: e.target.value })}
+                        placeholder="Ex.: Sargenteante"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="funcao_documental_nbi">Função documental (NBI)</Label>
+                      <Input
+                        id="funcao_documental_nbi"
+                        value={form.funcao_documental_nbi}
+                        onChange={(e) => setForm({ ...form, funcao_documental_nbi: e.target.value })}
+                        placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 12ºBBM"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Texto oficial usado em Assunção, Dispensa, Cargo Vago e Comissão. Quando
+                        preenchido, o sistema nunca monta a função automaticamente.
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="nome_guerra">Nome de guerra</Label>
+                      <Input
+                        id="nome_guerra"
+                        value={form.nome_guerra}
+                        onChange={(e) => setForm({ ...form, nome_guerra: e.target.value })}
+                        placeholder="Uso interno · o Word sempre usa o nome completo"
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
+                <AccordionItem value="topologia">
+                  <AccordionTrigger className="text-sm font-semibold">Topologia institucional (NBI)</AccordionTrigger>
+                  <AccordionContent className="space-y-3 pt-1">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {([
+                        ["gbm_nbi", "GBM", "Ex.: 2 ou 2ºGBM"],
+                        ["pelotao_nbi", "Pelotão", "Ex.: 6 ou 6ºPelBM"],
+                        ["companhia_nbi", "Companhia", "Ex.: 8 ou 8ªCiaBM"],
+                        ["batalhao_nbi", "Batalhão", "Ex.: 15 ou 15ºBBM"],
+                        ["secao_nbi", "Seção", "Ex.: 2ª Seção"],
+                        ["subsecao_nbi", "Subseção", "Ex.: SSeg"],
+                        ["setor_nbi", "Setor", "Ex.: Setor de Vistorias"],
+                        ["cidade_nbi", "Cidade", "Ex.: IJUÍ"],
+                      ] as const).map(([campo, label, ph]) => (
+                        <div key={campo} className="grid gap-2">
+                          <Label htmlFor={campo}>{label}</Label>
+                          <Input
+                            id={campo}
+                            value={form[campo]}
+                            onChange={(e) => setForm({ ...form, [campo]: e.target.value })}
+                            placeholder={ph}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
 
-
-            <div className="flex items-center justify-between rounded-md border border-border p-3">
-              <div>
-                <Label htmlFor="ativo" className="cursor-pointer">Ativo</Label>
-                <p className="text-xs text-muted-foreground">Apenas ativos entram na escala.</p>
-              </div>
-              <Switch id="ativo" checked={form.ativo}
-                onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="obs">Observações</Label>
-              <Textarea id="obs" value={form.observacoes}
-                onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} />
+                <AccordionItem value="observacoes">
+                  <AccordionTrigger className="text-sm font-semibold">Observações</AccordionTrigger>
+                  <AccordionContent className="pt-1">
+                    <Textarea id="obs" value={form.observacoes}
+                      onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-4">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar
@@ -602,6 +624,7 @@ function MilitaresPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>

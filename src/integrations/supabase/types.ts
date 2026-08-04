@@ -559,6 +559,8 @@ export type Database = {
           autoridade_militar_id: string | null
           autoridade_nome: string | null
           autoridade_posto_quadro: string | null
+          boletim_nome: string | null
+          boletim_sigla: string | null
           cabecalho_batalhao: string | null
           cabecalho_cidade: string | null
           cabecalho_corporacao: string | null
@@ -588,6 +590,8 @@ export type Database = {
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
           autoridade_posto_quadro?: string | null
+          boletim_nome?: string | null
+          boletim_sigla?: string | null
           cabecalho_batalhao?: string | null
           cabecalho_cidade?: string | null
           cabecalho_corporacao?: string | null
@@ -617,6 +621,8 @@ export type Database = {
           autoridade_militar_id?: string | null
           autoridade_nome?: string | null
           autoridade_posto_quadro?: string | null
+          boletim_nome?: string | null
+          boletim_sigla?: string | null
           cabecalho_batalhao?: string | null
           cabecalho_cidade?: string | null
           cabecalho_corporacao?: string | null

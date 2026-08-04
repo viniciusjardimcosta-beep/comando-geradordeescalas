@@ -59,12 +59,15 @@ interface Responsavel {
 interface NbiSettingsForm {
   unidade_nome: string;
   unidade_sigla: string;
+  boletim_nome: string;
+  boletim_sigla: string;
   cabecalho_estado: string;
   cabecalho_secretaria: string;
   cabecalho_corporacao: string;
   cabecalho_batalhao: string;
   cabecalho_subunidade: string;
   cabecalho_cidade: string;
+
   digitador: Responsavel;
   comandante: Responsavel;
   autoridade: Responsavel;
@@ -81,6 +84,9 @@ const emptyResp: Responsavel = {
 const emptySettings: NbiSettingsForm = {
   unidade_nome: "",
   unidade_sigla: "",
+  boletim_nome: "",
+  boletim_sigla: "",
+
   cabecalho_estado: "",
   cabecalho_secretaria: "",
   cabecalho_corporacao: "",
@@ -150,6 +156,9 @@ function NbiConfiguracoesPage() {
         setForm({
           unidade_nome: s.unidade_nome ?? "",
           unidade_sigla: s.unidade_sigla ?? "",
+          boletim_nome: (s as { boletim_nome?: string | null }).boletim_nome ?? "",
+          boletim_sigla: (s as { boletim_sigla?: string | null }).boletim_sigla ?? "",
+
           cabecalho_estado: (s as { cabecalho_estado?: string | null }).cabecalho_estado ?? "",
           cabecalho_secretaria: (s as { cabecalho_secretaria?: string | null }).cabecalho_secretaria ?? "",
           cabecalho_corporacao: (s as { cabecalho_corporacao?: string | null }).cabecalho_corporacao ?? "",
@@ -280,6 +289,9 @@ function NbiConfiguracoesPage() {
       user_id: session.user.id,
       unidade_nome: form.unidade_nome.trim() || null,
       unidade_sigla: form.unidade_sigla.trim() || null,
+      boletim_nome: form.boletim_nome.trim() || null,
+      boletim_sigla: form.boletim_sigla.trim() || null,
+
       cabecalho_estado: normalizarInstitucional(form.cabecalho_estado) || null,
       cabecalho_secretaria: normalizarInstitucional(form.cabecalho_secretaria) || null,
       cabecalho_corporacao: normalizarInstitucional(form.cabecalho_corporacao) || null,
@@ -385,6 +397,29 @@ function NbiConfiguracoesPage() {
                   modoToponimo
                   placeholder="Ex.: Porto Alegre" />
               </div>
+
+              {/* RF-06 — nomenclatura do boletim da unidade */}
+              <div className="grid gap-3 rounded-md border border-dashed p-3 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="bol_nome">Nome do boletim</Label>
+                  <Input id="bol_nome" value={form.boletim_nome}
+                    onChange={(e) => setForm({ ...form, boletim_nome: e.target.value })}
+                    placeholder="Ex.: Boletim Interno" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Usado no rodapé: "Publicado no <em>{form.boletim_nome.trim() || "Boletim"}</em> nº ____".
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="bol_sigla">Sigla do boletim</Label>
+                  <Input id="bol_sigla" value={form.boletim_sigla}
+                    onChange={(e) => setForm({ ...form, boletim_sigla: e.target.value })}
+                    placeholder="Ex.: BI" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Usada na abertura: "Solicito-lhe publicação em <em>{form.boletim_sigla.trim() || "BI"}</em>…".
+                  </p>
+                </div>
+              </div>
+
               <div className="grid gap-2">
                 <Label htmlFor="uni_nome">Nome da unidade (uso interno)</Label>
                 <Input id="uni_nome" value={form.unidade_nome}

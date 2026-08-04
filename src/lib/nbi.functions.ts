@@ -284,14 +284,14 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: modelo, error: eM } = await supabaseAdmin.storage
       .from("nbi-documentos")
-      .download("_sistema/nbi-mestre-v2.docx");
+      .download("_sistema/nbi-mestre-v3.docx");
     if (eM || !modelo) throw new Error("Modelo mestre indisponível");
     const modeloBuf = Buffer.from(await modelo.arrayBuffer());
 
     // 3.1 Cabeçalho oficial — fonte única: nbi_settings da unidade emissora.
     const { data: settings } = await supabase
       .from("nbi_settings")
-      .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla")
+      .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla, boletim_nome, boletim_sigla")
       .eq("user_id", userId)
       .maybeSingle();
     const cabecalho = {
@@ -383,6 +383,10 @@ export const gerarNbi = createServerFn({ method: "POST" })
       BATALHAO_CABECALHO: cabecalho.batalhao,
       UNIDADE_CABECALHO: cabecalho.subunidade,
       UNIDADE_SIGLA: settings?.unidade_sigla ?? "",
+
+      // RF-06 — nomenclatura do boletim definida em Configurações NBI.
+      BOLETIM_NOME: ((settings as { boletim_nome?: string | null } | null)?.boletim_nome ?? "").trim() || "Boletim",
+      BOLETIM_SIGLA: ((settings as { boletim_sigla?: string | null } | null)?.boletim_sigla ?? "").trim() || "BI",
       LOCAL_DATA: `${cabecalho.cidade || settings?.unidade_sigla || ""}, ${dataExtenso(doc.data_documento)}`.trim(),
 
       NOME_DIGITADOR: resp.digitador?.nome ?? "",
