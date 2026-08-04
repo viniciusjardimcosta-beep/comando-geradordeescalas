@@ -39,6 +39,7 @@ import { ComissaoBuilder } from "@/components/nbi/ComissaoBuilder";
 import {
   calcularDerivados, estaManual, chaveManual, origensDeAssunto,
 } from "@/lib/nbi/derivados";
+import { campoOculto } from "@/lib/nbi/campos";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
 import { sugestoesTexto, aplicarSugestao as aplicarSugestaoTexto } from "@/utils/nbi-corretor";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
