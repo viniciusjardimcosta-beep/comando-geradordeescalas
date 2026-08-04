@@ -17,12 +17,13 @@ const MAPA: Record<string, CategoriaNbi> = {
   apresentacao: "AFASTAMENTOS",
   licenca_paternidade: "AFASTAMENTOS",
   luto: "AFASTAMENTOS",
+  dispensa_recompensa: "AFASTAMENTOS",
 
   assuncao_funcao: "MOVIMENTAÇÕES",
   assuncao_cargo_vago: "MOVIMENTAÇÕES",
   dispensa_funcao: "MOVIMENTAÇÕES",
   dispensa_cargo_vago: "MOVIMENTAÇÕES",
-  dispensa_recompensa: "MOVIMENTAÇÕES",
+
 
   servico_extraordinario: "SERVIÇO",
   viagem: "SERVIÇO",
