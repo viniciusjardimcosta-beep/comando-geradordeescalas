@@ -755,8 +755,9 @@ function AssuntoCard({
   const derivados = useMemo(
     () => calcularDerivados(assunto.tipo, assunto.campos, {
       unidadeSigla: unidade.sigla, unidadeNome: unidade.nome,
+      origemDados: assunto.origem_dados ?? "manual",
     }),
-    [assunto.tipo, assunto.campos, unidade.sigla, unidade.nome],
+    [assunto.tipo, assunto.campos, assunto.origem_dados, unidade.sigla, unidade.nome],
   );
   const derivadoPor = useMemo(() => {
     const m = new Map<string, (typeof derivados)[number]>();
