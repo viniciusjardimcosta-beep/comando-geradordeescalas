@@ -289,6 +289,9 @@ function NbiConfiguracoesPage() {
       user_id: session.user.id,
       unidade_nome: form.unidade_nome.trim() || null,
       unidade_sigla: form.unidade_sigla.trim() || null,
+      boletim_nome: form.boletim_nome.trim() || null,
+      boletim_sigla: form.boletim_sigla.trim() || null,
+
       cabecalho_estado: normalizarInstitucional(form.cabecalho_estado) || null,
       cabecalho_secretaria: normalizarInstitucional(form.cabecalho_secretaria) || null,
       cabecalho_corporacao: normalizarInstitucional(form.cabecalho_corporacao) || null,
