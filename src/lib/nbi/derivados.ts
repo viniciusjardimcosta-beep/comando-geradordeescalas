@@ -175,17 +175,27 @@ export function origensDeAssunto(
   return reg;
 }
 
-/** Missões padronizadas do serviço extraordinário (opção "Outro" no formulário). */
+/**
+ * RF-05 — catálogo reutilizável de missões do serviço extraordinário.
+ * O operador escolhe na lista; "Outra missão" pode ser salva e passa a
+ * integrar o catálogo local da unidade.
+ */
 export const MISSOES_PADRAO: string[] = [
-  "Cmt de GU",
+  "Cmt GU",
   "COV",
   "Cmt de GU, COV",
+  "Instrutor",
+  "Fiscalização",
+  "Operação Golfinho",
+  "Apoio Operacional",
+  "Plantão Reforçado",
   "Guarnição de socorro",
   "Serviço de sobreaviso",
   "Apoio administrativo",
   "Segurança de evento",
   "Instrução",
 ];
+
 
 const CHAVE_MISSOES_LOCAIS = "nbi_missoes_personalizadas";
 
