@@ -84,6 +84,9 @@ const emptyResp: Responsavel = {
 const emptySettings: NbiSettingsForm = {
   unidade_nome: "",
   unidade_sigla: "",
+  boletim_nome: "",
+  boletim_sigla: "",
+
   cabecalho_estado: "",
   cabecalho_secretaria: "",
   cabecalho_corporacao: "",
