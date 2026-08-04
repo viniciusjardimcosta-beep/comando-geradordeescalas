@@ -1030,9 +1030,9 @@ function AssuntoCard({
 
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
-          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR", "ARTIGO_O_A_CAP", "TERMO_DIA"].includes(c.chave))
-          // A comissão é montada pelo ComissaoBuilder — sem texto livre.
-          .filter((c) => !(assunto.tipo === "nomeacao_comissao" && ["COMPOSICAO", "FINALIDADE"].includes(c.chave)))
+          // Bloco 10 — fonte única: cadastro, gramática, cálculos e campos
+          // estruturados nunca são digitados pelo operador.
+          .filter((c) => !campoOculto(assunto.tipo, c.chave))
           .map((c) => {
             const derivado = derivadoPor.get(c.chave);
             if (derivado) {
