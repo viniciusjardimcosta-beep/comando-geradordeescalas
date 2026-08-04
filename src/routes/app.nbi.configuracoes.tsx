@@ -156,6 +156,9 @@ function NbiConfiguracoesPage() {
         setForm({
           unidade_nome: s.unidade_nome ?? "",
           unidade_sigla: s.unidade_sigla ?? "",
+          boletim_nome: (s as { boletim_nome?: string | null }).boletim_nome ?? "",
+          boletim_sigla: (s as { boletim_sigla?: string | null }).boletim_sigla ?? "",
+
           cabecalho_estado: (s as { cabecalho_estado?: string | null }).cabecalho_estado ?? "",
           cabecalho_secretaria: (s as { cabecalho_secretaria?: string | null }).cabecalho_secretaria ?? "",
           cabecalho_corporacao: (s as { cabecalho_corporacao?: string | null }).cabecalho_corporacao ?? "",
