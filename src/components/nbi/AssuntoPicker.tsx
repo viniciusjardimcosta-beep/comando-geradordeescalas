@@ -56,7 +56,15 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default" }
     for (const t of filtrados) {
       map[categoriaDoCodigo(t.codigo)].push(t);
     }
+    // RF-04 — sequência administrativa dentro de cada categoria.
+    for (const cat of CATEGORIAS_ORDEM) {
+      map[cat].sort((a, b) => {
+        const d = ordemDoCodigo(a.codigo) - ordemDoCodigo(b.codigo);
+        return d !== 0 ? d : a.titulo.localeCompare(b.titulo, "pt-BR");
+      });
+    }
     return map;
+
   }, [templates, busca]);
 
   const nenhum = CATEGORIAS_ORDEM.every((c) => porCategoria[c].length === 0);
