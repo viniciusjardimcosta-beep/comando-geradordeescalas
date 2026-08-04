@@ -1329,6 +1329,24 @@ function Etapa3({
           </div>
         )}
 
+        {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
+        {divergenciasAno.length > 0 && !gerado && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              Datas com ano diferente do documento ({anoDoc})
+            </div>
+            <ul className="list-disc pl-5 text-xs">
+              {divergenciasAno.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Confira se as datas estão corretas. Situações legítimas (férias iniciadas no ano anterior,
+              por exemplo) podem prosseguir normalmente.
+            </p>
+          </div>
+        )}
+
+
         <RevisaoOrtografica
           assuntos={rascunho.assuntos}
           templates={templates}
