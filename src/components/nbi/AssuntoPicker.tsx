@@ -11,9 +11,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, Lock } from "lucide-react";
 import {
-  CATEGORIAS_ORDEM, categoriaDoCodigo, CODIGOS_HOMOLOGADOS,
+  CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS,
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
+
 
 export interface TemplatePickable {
   codigo: string;
