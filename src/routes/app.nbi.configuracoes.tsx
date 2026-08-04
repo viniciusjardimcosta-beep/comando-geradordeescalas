@@ -59,12 +59,15 @@ interface Responsavel {
 interface NbiSettingsForm {
   unidade_nome: string;
   unidade_sigla: string;
+  boletim_nome: string;
+  boletim_sigla: string;
   cabecalho_estado: string;
   cabecalho_secretaria: string;
   cabecalho_corporacao: string;
   cabecalho_batalhao: string;
   cabecalho_subunidade: string;
   cabecalho_cidade: string;
+
   digitador: Responsavel;
   comandante: Responsavel;
   autoridade: Responsavel;
