@@ -56,7 +56,14 @@ export interface ContextoDerivacao {
   /** Sigla/nome da unidade vinda das Configurações NBI. */
   unidadeSigla?: string;
   unidadeNome?: string;
+  /** Origem escolhida nos assuntos de função ("ferias" | "assuncao" | "manual"). */
+  origemDados?: string;
 }
+
+/** Assuntos cuja redação oficial imprime a data de apresentação. */
+const TIPOS_COM_APRESENTACAO = new Set([
+  "ferias", "apresentacao", "licenca_paternidade", "dispensa_recompensa",
+]);
 
 /**
  * Calcula todos os campos derivados de um assunto.
@@ -70,52 +77,77 @@ export function calcularDerivados(
 ): CampoDerivadoInfo[] {
   const s = (k: string) => String(campos[k] ?? "").trim();
   const out: CampoDerivadoInfo[] = [];
+  const push = (d: CampoDerivadoInfo) => {
+    if (!d.valor) return;
+    if (out.some((x) => x.chave === d.chave)) return;
+    out.push(d);
+  };
 
   const diasDe = (k = "QTD_DIAS") => {
     const n = parseInt(s(k), 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  if (tipo === "licenca_paternidade") {
+  // ── Bloco 10 — derivações genéricas (valem para todos os assuntos) ──
+  if (tipo === "servico_extraordinario") {
+    const lim = limitesDoMes(s("mes_referencia_sel"));
+    if (lim) {
+      push({ chave: "DATA_INICIO", valor: lim.inicio, origem: "Cálculo automático", detalhe: "Primeiro dia do mês selecionado" });
+      push({ chave: "DATA_FIM", valor: lim.fim, origem: "Cálculo automático", detalhe: "Último dia do mês selecionado" });
+      push({ chave: "MES_REFERENCIA", valor: lim.mesExtenso, origem: "Cálculo automático", detalhe: "Mês por extenso" });
+      push({ chave: "ANO", valor: lim.ano, origem: "Cálculo automático", detalhe: "Ano do mês selecionado" });
+    }
+  } else {
     const inicio = s("DATA_INICIO");
-    const dias = diasDe();
-    if (inicio && dias) {
-      const fim = somarDiasISO(inicio, dias - 1);
-      out.push({
-        chave: "DATA_FIM", valor: fim, origem: "Cálculo automático",
+    // Licença-paternidade: 30 dias é o padrão da redação oficial homologada.
+    const dias = diasDe() ?? (tipo === "licenca_paternidade" ? 30 : null);
+    if (tipo === "licenca_paternidade" && dias) {
+      push({
+        chave: "QTD_DIAS", valor: String(dias), origem: "Modelo oficial",
+        detalhe: "Padrão da redação oficial (30 dias)",
+      });
+    }
+    const fimCalculado = inicio && dias ? somarDiasISO(inicio, dias - 1) : "";
+    if (fimCalculado) {
+      push({
+        chave: "DATA_FIM", valor: fimCalculado, origem: "Cálculo automático",
         detalhe: `Início + ${dias} dia(s) − 1`,
       });
-      out.push({
+    }
+    const fim = s("DATA_FIM") || fimCalculado;
+    if (fim && TIPOS_COM_APRESENTACAO.has(tipo) && campos.com_apresentacao !== false) {
+      push({
         chave: "DATA_APRESENTACAO", valor: somarDiasISO(fim, 1), origem: "Cálculo automático",
         detalhe: `Dia seguinte ao término (${formatarDataBR(fim)})`,
       });
     }
+    const baseAno = inicio || fim || s("DATA_APRESENTACAO");
+    if (/^\d{4}-/.test(baseAno)) {
+      push({
+        chave: "ANO", valor: baseAno.slice(0, 4), origem: "Cálculo automático",
+        detalhe: "Ano da data informada",
+      });
+    }
   }
 
-  if (tipo === "servico_extraordinario") {
-    const lim = limitesDoMes(s("mes_referencia_sel"));
-    if (lim) {
-      out.push({ chave: "DATA_INICIO", valor: lim.inicio, origem: "Cálculo automático", detalhe: "Primeiro dia do mês selecionado" });
-      out.push({ chave: "DATA_FIM", valor: lim.fim, origem: "Cálculo automático", detalhe: "Último dia do mês selecionado" });
-      out.push({ chave: "MES_REFERENCIA", valor: lim.mesExtenso, origem: "Cálculo automático", detalhe: "Mês por extenso" });
-      out.push({ chave: "ANO", valor: lim.ano, origem: "Cálculo automático", detalhe: "Ano do mês selecionado" });
+  // Dispensa/assunção de função: a data vem do banco de férias ou da assunção anterior.
+  if (tipo === "dispensa_funcao" || tipo === "assuncao_funcao") {
+    const valor = s("DATA_INICIO");
+    if (valor && (ctx.origemDados === "ferias" || ctx.origemDados === "assuncao")) {
+      const origem: OrigemDado = ctx.origemDados === "ferias" ? "Banco de Férias" : "Assunção anterior";
+      out.unshift({
+        chave: "DATA_INICIO", valor, origem,
+        detalhe: ctx.origemDados === "ferias"
+          ? "Derivada do período de férias do titular"
+          : "Derivada da assunção anterior vinculada",
+      });
     }
   }
 
   if (tipo === "dispensa_recompensa") {
-    const inicio = s("DATA_INICIO");
-    const dias = diasDe();
-    const comApresentacao = campos.com_apresentacao !== false;
-    if (inicio && dias && comApresentacao) {
-      const fim = somarDiasISO(inicio, dias - 1);
-      out.push({
-        chave: "DATA_APRESENTACAO", valor: somarDiasISO(fim, 1), origem: "Cálculo automático",
-        detalhe: `Dia seguinte ao término da dispensa (${formatarDataBR(fim)})`,
-      });
-    }
     const unidade = (ctx.unidadeSigla || ctx.unidadeNome || "").trim();
     if (unidade) {
-      out.push({
+      push({
         chave: "BOLETIM_UNIDADE", valor: unidade, origem: "Configurações NBI",
         detalhe: "Unidade cadastrada nas Configurações NBI",
       });

@@ -39,6 +39,7 @@ import { ComissaoBuilder } from "@/components/nbi/ComissaoBuilder";
 import {
   calcularDerivados, estaManual, chaveManual, origensDeAssunto,
 } from "@/lib/nbi/derivados";
+import { campoOculto } from "@/lib/nbi/campos";
 import { montarDicionarioDinamico } from "@/utils/nbi-dicionario";
 import { sugestoesTexto, aplicarSugestao as aplicarSugestaoTexto } from "@/utils/nbi-corretor";
 import { useSpellchecker } from "@/hooks/use-spellcheck";
@@ -419,6 +420,7 @@ function NovaNbiPage() {
           origens_campos: origensDeAssunto(a.tipo, a.campos, {
             unidadeSigla: rascunho.unidade.sigla,
             unidadeNome: rascunho.unidade.nome,
+            origemDados: a.origem_dados ?? "manual",
           }),
           texto_final: texto,
           campos_ausentes: ausentes,
@@ -754,8 +756,9 @@ function AssuntoCard({
   const derivados = useMemo(
     () => calcularDerivados(assunto.tipo, assunto.campos, {
       unidadeSigla: unidade.sigla, unidadeNome: unidade.nome,
+      origemDados: assunto.origem_dados ?? "manual",
     }),
-    [assunto.tipo, assunto.campos, unidade.sigla, unidade.nome],
+    [assunto.tipo, assunto.campos, assunto.origem_dados, unidade.sigla, unidade.nome],
   );
   const derivadoPor = useMemo(() => {
     const m = new Map<string, (typeof derivados)[number]>();
@@ -1028,9 +1031,9 @@ function AssuntoCard({
 
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
-          .filter((c) => !["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A", "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR", "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "ARTIGO_O_A_TITULAR", "ARTIGO_O_A_CAP", "TERMO_DIA"].includes(c.chave))
-          // A comissão é montada pelo ComissaoBuilder — sem texto livre.
-          .filter((c) => !(assunto.tipo === "nomeacao_comissao" && ["COMPOSICAO", "FINALIDADE"].includes(c.chave)))
+          // Bloco 10 — fonte única: cadastro, gramática, cálculos e campos
+          // estruturados nunca são digitados pelo operador.
+          .filter((c) => !campoOculto(assunto.tipo, c.chave))
           .map((c) => {
             const derivado = derivadoPor.get(c.chave);
             if (derivado) {
@@ -1143,49 +1146,13 @@ function AssuntoCard({
               );
             }
             if (c.tipo === "data" || c.tipo === "inteiro") {
+              // Bloco 10 — campos derivados usam exclusivamente <CampoDerivado>
+              // (tratado acima). Aqui restam apenas fatos administrativos.
               const inputType = c.tipo === "data" ? "date" : "number";
-              // Data da dispensa derivada: quando a origem é férias cadastradas
-              // (ou assunção anterior), a data vem calculada e fica somente
-              // leitura até que o operador peça alteração manual explícita.
-              const derivada =
-                assunto.tipo === "dispensa_funcao" &&
-                chaveUp === "DATA_INICIO" &&
-                (assunto.origem_dados === "ferias" || assunto.origem_dados === "assuncao") &&
-                assunto.campos.data_dispensa_manual !== true;
-              if (derivada) {
-                return (
-                  <div key={c.chave}>
-                    <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
-                    <div className="flex items-center gap-2">
-                      <Input type="date" value={String(val ?? "")} readOnly disabled className="bg-muted" />
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onCampo("data_dispensa_manual", true)}
-                      >
-                        Alterar manualmente
-                      </Button>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Campo derivado: dia seguinte ao término do período do titular.
-                    </p>
-                  </div>
-                );
-              }
               return (
                 <div key={c.chave}>
                   <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
                   <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
-                  {assunto.tipo === "dispensa_funcao" && chaveUp === "DATA_INICIO" && assunto.campos.data_dispensa_manual === true && (
-                    <button
-                      type="button"
-                      className="mt-1 text-[11px] text-muted-foreground underline"
-                      onClick={() => onCampo("data_dispensa_manual", false)}
-                    >
-                      Voltar ao valor derivado
-                    </button>
-                  )}
                 </div>
               );
             }
