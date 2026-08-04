@@ -1223,6 +1223,24 @@ function Etapa3({
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
 
+  // RF-07 — datas informadas nos assuntos cujo ano diverge do ano do documento.
+  const divergenciasAno = rascunho.assuntos.flatMap((a) => {
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const achados: string[] = [];
+    for (const [chave, valor] of Object.entries(a.campos)) {
+      if (typeof valor !== "string") continue;
+      const m = /^(\d{4})-\d{2}-\d{2}$/.exec(valor.trim());
+      if (!m) continue;
+      const ano = parseInt(m[1], 10);
+      if (Number.isFinite(anoDoc) && ano !== anoDoc) {
+        const label = t?.campos.find((c) => c.chave === chave)?.label ?? chave;
+        achados.push(`${t?.titulo ?? a.tipo} · ${label}: ${ano}`);
+      }
+    }
+    return achados;
+  });
+
+
   async function handleGerar() {
     if (!documentoId) {
       toast.error("Salve o rascunho antes de gerar.");
