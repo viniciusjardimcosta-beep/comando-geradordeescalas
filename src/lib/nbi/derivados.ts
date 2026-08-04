@@ -138,19 +138,9 @@ export function calcularDerivados(
   }
 
   if (tipo === "dispensa_recompensa") {
-    const inicio = s("DATA_INICIO");
-    const dias = diasDe();
-    const comApresentacao = campos.com_apresentacao !== false;
-    if (inicio && dias && comApresentacao) {
-      const fim = somarDiasISO(inicio, dias - 1);
-      out.push({
-        chave: "DATA_APRESENTACAO", valor: somarDiasISO(fim, 1), origem: "Cálculo automático",
-        detalhe: `Dia seguinte ao término da dispensa (${formatarDataBR(fim)})`,
-      });
-    }
     const unidade = (ctx.unidadeSigla || ctx.unidadeNome || "").trim();
     if (unidade) {
-      out.push({
+      push({
         chave: "BOLETIM_UNIDADE", valor: unidade, origem: "Configurações NBI",
         detalhe: "Unidade cadastrada nas Configurações NBI",
       });
