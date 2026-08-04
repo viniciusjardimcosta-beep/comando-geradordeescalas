@@ -419,6 +419,7 @@ function NovaNbiPage() {
           origens_campos: origensDeAssunto(a.tipo, a.campos, {
             unidadeSigla: rascunho.unidade.sigla,
             unidadeNome: rascunho.unidade.nome,
+            origemDados: a.origem_dados ?? "manual",
           }),
           texto_final: texto,
           campos_ausentes: ausentes,
