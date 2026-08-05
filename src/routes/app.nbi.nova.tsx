@@ -1016,6 +1016,8 @@ function AssuntoCard({
           militares={militares}
           ferias={ferias}
           substituicoes={substituicoes}
+          onRecarregarSubstituicoes={onRecarregarSubstituicoes}
+
           anoNbi={anoNbi}
           onChange={onChange}
           onCampo={onCampo}
