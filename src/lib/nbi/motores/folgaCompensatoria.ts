@@ -54,7 +54,12 @@ export const motorFolgaCompensatoria: MotorNbi = {
   },
 
   validar(ctx: ContextoMotor) {
-    const out = [...validarMilitar(ctx), ...validarCamposTemplate(ctx)];
+    // A variante "compensação realizada" não possui MOTIVO na redação oficial:
+    // o campo é removido da validação genérica antes de qualquer checagem.
+    const ctxValido: ContextoMotor = subtipoDe(ctx) === "realizada"
+      ? { ...ctx, camposTemplate: ctx.camposTemplate.filter((c) => c.chave.toUpperCase() !== "MOTIVO") }
+      : ctx;
+    const out = [...validarMilitar(ctxValido), ...validarCamposTemplate(ctxValido)];
     const v = this.resolverCampos(ctx);
     const horas = parseInt(String(ctx.campos.QTD_HORAS ?? ""), 10);
     if (!v.QTD_HORAS || !Number.isFinite(horas) || horas <= 0) {
