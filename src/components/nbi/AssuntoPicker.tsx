@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, Lock } from "lucide-react";
 import {
-  CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS,
+  CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS, ehVarianteInterna,
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
 import { obterMotor } from "@/lib/nbi/motores/registry";
