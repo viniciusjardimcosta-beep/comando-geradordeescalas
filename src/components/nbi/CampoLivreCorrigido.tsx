@@ -23,6 +23,8 @@ import {
 
 interface Props {
   id?: string;
+  /** Identificador estável aplicado diretamente no input/textarea editável. */
+  testId?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -42,7 +44,7 @@ interface Props {
 }
 
 export function CampoLivreCorrigido({
-  id, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao, modoToponimo,
+  id, testId, value, onChange, placeholder, multiline, rows, extraWords, disabled, capitalizacao, modoToponimo,
   modoInstitucional,
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -140,6 +142,7 @@ export function CampoLivreCorrigido({
 
   const comum = {
     id,
+    "data-testid": testId,
     value,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
     onFocus: () => setFocused(true),

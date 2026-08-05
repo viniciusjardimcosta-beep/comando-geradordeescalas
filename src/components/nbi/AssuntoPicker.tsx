@@ -28,13 +28,15 @@ interface Props {
   onEscolher: (codigo: string) => void;
   label?: string;
   size?: "sm" | "default";
+  /** Identificador estável para automação (data-testid do gatilho). */
+  testId?: string;
 }
 
 function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-export function AssuntoPicker({ templates, onEscolher, label, size = "default" }: Props) {
+export function AssuntoPicker({ templates, onEscolher, label, size = "default", testId }: Props) {
   const [open, setOpen] = useState(false);
   const [busca, setBusca] = useState("");
 
@@ -79,12 +81,12 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default" }
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size}>
+        <Button variant="outline" size={size} data-testid={testId ?? "adicionar-assunto"}>
           <Plus className="mr-2 h-4 w-4" />
           {label ?? "Adicionar assunto"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[380px] p-0" align="start">
+      <PopoverContent className="w-[380px] p-0" align="start" data-testid="assunto-picker-lista">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Pesquisar assunto…"

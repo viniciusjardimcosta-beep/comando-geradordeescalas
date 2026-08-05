@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { tab?: "login" | "signup" | "reset" } => ({
     tab: (search.tab === "signup" || search.tab === "reset" || search.tab === "login"
       ? search.tab
       : undefined) as "login" | "signup" | "reset" | undefined,
