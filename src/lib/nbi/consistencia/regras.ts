@@ -195,7 +195,7 @@ export function regrasApresentacao(e: EntradaConsistencia): Achado[] {
   if (!dataApres) return out;
 
   const afastamentos = coletarAfastamentos(e.base, e.militarId);
-  const feriasId = texto(e.campos.ferias_id) || texto(e.ferias_id_placeholder as never) || "";
+  const feriasId = texto(e.campos.ferias_id);
   const origem = feriasId
     ? afastamentos.find((af) => af.ferias_id === feriasId)
     : afastamentos.filter((af) => af.fim < dataApres).slice(-1)[0];
