@@ -1183,11 +1183,53 @@ function AssuntoCard({
         </div>
       )}
 
+      {/* Bloco 11A — Apresentação: o operador escolhe a ORIGEM, nunca a redação. */}
+      {assunto.tipo === "apresentacao" && (
+        <div className="mb-3 rounded-md border border-dashed p-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Origem do afastamento
+          </Label>
+          <Select
+            value={subtipoApresentacaoSel}
+            onValueChange={(v) => onCampo("SUBTIPO", v)}
+          >
+            <SelectTrigger className="mt-2 max-w-[320px]" data-testid={`assunto-${assunto.id}-subtipo`}>
+              <SelectValue placeholder="Selecione a origem" />
+            </SelectTrigger>
+            <SelectContent>
+              {SUBTIPOS_APRESENTACAO.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}{s.homologado ? "" : " (aguardando exemplar oficial)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            A redação oficial é escolhida automaticamente conforme a origem.
+          </p>
+        </div>
+      )}
+
+      {/* Bloco 11A — a apresentação é consequência do afastamento: nada é redigitado. */}
+      {subtipoPorOrigem(assunto.tipo) && (
+        <div className="mb-3">
+          <Button type="button" variant="outline" size="sm" onClick={onGerarApresentacao}
+            data-testid={`assunto-${assunto.id}-gerar-apresentacao`}>
+            <Wand2 className="mr-2 h-4 w-4" /> Gerar apresentação automaticamente
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
           // Bloco 10 — fonte única: cadastro, gramática, cálculos e campos
           // estruturados nunca são digitados pelo operador.
           .filter((c) => !campoOculto(assunto.tipo, c.chave))
+          // Bloco 11A — o subtipo tem seletor próprio e cada variante mostra
+          // apenas os campos que existem na sua redação oficial.
+          .filter((c) => c.chave.toUpperCase() !== "SUBTIPO")
+          .filter((c) => assunto.tipo !== "apresentacao"
+            || campoDoSubtipoApresentacao(subtipoApresentacaoSel, c.chave))
           .map((c) => {
             const tid = testIdCampo(assunto.id, c.chave);
             const derivado = derivadoPor.get(c.chave);
