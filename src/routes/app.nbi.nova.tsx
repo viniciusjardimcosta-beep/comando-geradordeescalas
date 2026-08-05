@@ -1326,6 +1326,35 @@ function Etapa3({
     return achados;
   });
 
+  // Bloco 10D — auditoria pré-geração (somente leitura, nunca altera dados).
+  const auditoria = auditarPreGeracao({
+    assuntos: rascunho.assuntos.map((a) => {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      const { texto, ausentes } = textoFinal(a);
+      return {
+        titulo: t?.titulo ?? a.tipo,
+        militar: militares.find((m) => m.id === a.militar_id)?.nome ?? null,
+        titular: militares.find((m) => m.id === a.militar_titular_id)?.nome ?? null,
+        exigeTitular: a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao",
+        pendencias: pendencias(a),
+        ausentes,
+        texto,
+      };
+    }),
+    duplicados: duplicarMesmoAssim ? [] : duplicados,
+    divergenciasAno,
+    cabecalhoOk: Boolean(rascunho.unidade.nome),
+    digitadorOk: Boolean(rascunho.digitador.nome),
+    comandanteOk: Boolean(rascunho.comandante.nome),
+    numeracaoOk: rascunho.modo_numeracao === "manual"
+      ? /\d/.test(rascunho.numero)
+      : previsto !== null,
+  });
+
+  const bloqueado = bloqueadoBase || auditoria.bloqueado;
+
+
+
 
   async function handleGerar() {
     if (!documentoId) {
