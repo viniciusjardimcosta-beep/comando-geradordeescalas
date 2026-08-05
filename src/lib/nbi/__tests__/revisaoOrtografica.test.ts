@@ -34,11 +34,17 @@ describe("sugestões por acentuação", () => {
   });
 
   it("é puro: duas chamadas devolvem o mesmo resultado", () => {
-    const a = sugerirPorLexico("ferias", idx);
-    const b = sugerirPorLexico("ferias", idx);
+    const a = sugerirPorLexico("missao", idx);
+    const b = sugerirPorLexico("missao", idx);
     expect(a).toBe(b);
-    expect(a).toBe("férias");
+    expect(a).toBe("missão");
   });
+
+  it("formas flexionadas ausentes do .dic ficam a cargo do mapa curado", () => {
+    // "férias" é gerado por flag de afixo, não consta literalmente no .dic.
+    expect(sugerirPorLexico("ferias", idx)).toBeNull();
+  });
+
 
   it("reconhece palavras do léxico", () => {
     expect(conhecida("missão", idx)).toBe(true);
