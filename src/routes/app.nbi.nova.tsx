@@ -1553,8 +1553,13 @@ function Etapa3({
 
 
 // ============ REVISÃO ORTOGRÁFICA (pré-conferência) ============
-// Recomputa sugestões nos campos livres de todos os assuntos.
-// Não bloqueia a geração — o operador aplica ou mantém explicitamente.
+// Bloco 10C — regras de estabilidade:
+//  * derivação 100% pura (nenhum setState durante render / nenhum efeito
+//    que grave rascunho, snapshot ou banco);
+//  * o dicionário só é carregado quando existe pelo menos um campo livre
+//    preenchido — e o carregamento agora roda em Web Worker;
+//  * a lista é memoizada por (assuntos, templates, dicionário, ignoradas);
+//  * nenhuma sugestão é aplicada automaticamente: o operador escolhe.
 function RevisaoOrtografica({
   assuntos, templates, militares, onAplicar,
 }: {
@@ -1563,8 +1568,34 @@ function RevisaoOrtografica({
   militares: MilitarNbi[];
   onAplicar: (assuntoId: string, chave: string, novoValor: string) => void;
 }) {
-  const { spell } = useSpellchecker(true);
   const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
+
+  // Campos derivados/automáticos e textos oficiais nunca são revisados.
+  const CHAVES_DERIVADAS = [
+    "NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A",
+    "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR",
+    "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "PERIODO", "ANO",
+  ];
+
+  // Etapa pura 1 — quais campos livres existem e valem revisão.
+  const campos = useMemo(() => {
+    const out: Array<{ assuntoId: string; titulo: string; chave: string; label: string; valor: string }> = [];
+    for (const a of assuntos) {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      if (!t) continue;
+      for (const c of t.campos) {
+        if (c.tipo !== "texto" && c.tipo !== "texto_longo") continue;
+        if (CHAVES_DERIVADAS.includes(c.chave)) continue;
+        const v = String(a.campos[c.chave] ?? "");
+        if (!v.trim()) continue;
+        out.push({ assuntoId: a.id, titulo: t.titulo, chave: c.chave, label: c.label, valor: v });
+      }
+    }
+    return out;
+  }, [assuntos, templates]);
+
+  // O dicionário só é buscado se houver algo a revisar.
+  const { spell } = useSpellchecker(campos.length > 0);
 
   const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
     militaresNome: militares.map((m) => m.nome),
@@ -1572,6 +1603,7 @@ function RevisaoOrtografica({
     lotacoes: militares.map((m) => m.lotacao_nbi),
   }), [militares]);
 
+  // Etapa pura 2 — sugestões. Sem efeitos colaterais, sem persistência.
   const itens = useMemo(() => {
     const out: Array<{
       assuntoId: string;
@@ -1581,26 +1613,16 @@ function RevisaoOrtografica({
       valor: string;
       sugestoes: ReturnType<typeof sugestoesTexto>;
     }> = [];
-    for (const a of assuntos) {
-      const t = templates.find((x) => x.codigo === a.tipo);
-      if (!t) continue;
-      for (const c of t.campos) {
-        if (c.tipo !== "texto" && c.tipo !== "texto_longo") continue;
-        // Ignora campos derivados/automáticos.
-        if (["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A",
-             "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR",
-             "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "PERIODO", "ANO"].includes(c.chave)) continue;
-        const v = String(a.campos[c.chave] ?? "");
-        if (!v.trim()) continue;
-        const s = sugestoesTexto(v, spell, { extras: dicionarioExtras, ignoradas });
-        if (s.length === 0) continue;
-        out.push({ assuntoId: a.id, titulo: t.titulo, chave: c.chave, label: c.label, valor: v, sugestoes: s });
-      }
+    for (const c of campos) {
+      const s = sugestoesTexto(c.valor, spell, { extras: dicionarioExtras, ignoradas });
+      if (s.length === 0) continue;
+      out.push({ ...c, sugestoes: s });
     }
     return out;
-  }, [assuntos, templates, spell, dicionarioExtras, ignoradas]);
+  }, [campos, spell, dicionarioExtras, ignoradas]);
 
   if (itens.length === 0) return null;
+
 
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
@@ -1890,20 +1912,60 @@ function OrigemDadosFuncao({
             substituicoes.map((s) => {
               const ativo = assunto.substituicao_id === s.id;
               return (
-                <div key={s.id} data-testid={`substituicao-aberta-${s.id}`} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
-                  <span>
-                    <strong>{nomeDe(s.substituto_militar_id)}</strong> substituindo {nomeDe(s.titular_militar_id)}
-                    {s.funcao ? ` · ${s.funcao}` : ""}
-                    {s.data_inicio ? ` · assunção em ${formatarDataBR(s.data_inicio)}` : ""}
-                    {s.data_fim_prevista ? ` · dispensa prevista ${formatarDataBR(s.data_fim_prevista)}` : " · dispensa prevista a definir"}
-                    {s.assuncao?.numero ? ` · NBI ${s.assuncao.numero}/${s.assuncao.ano ?? ""}` : ""}
-                  </span>
-                  <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
-                    {ativo ? "Vinculada" : "Usar esta assunção"}
-                  </Button>
+                <div
+                  key={s.id}
+                  data-testid={`substituicao-aberta-${s.id}`}
+                  className={`rounded border p-3 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}
+                >
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Substituto</p>
+                      <p className="font-semibold">{nomeDe(s.substituto_militar_id)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Titular</p>
+                      <p className="font-semibold">{nomeDe(s.titular_militar_id)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Função</p>
+                      <p>{s.funcao || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Período</p>
+                      <p>
+                        Assunção: {s.data_inicio ? formatarDataBR(s.data_inicio) : "—"}
+                        <br />
+                        Dispensa prevista:{" "}
+                        {s.data_fim_prevista
+                          ? formatarDataBR(s.data_fim_prevista)
+                          : "Sem previsão automática"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Origem</p>
+                      <p>{s.assuncao?.numero ? `NBI nº ${s.assuncao.numero}/${s.assuncao.ano ?? ""}` : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
+                      <p>
+                        Aberta
+                        {!s.data_fim_prevista && (
+                          <span className="block text-[10px] text-muted-foreground">
+                            Data será informada após a seleção
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
+                      {ativo ? "Vinculada" : "Usar esta assunção"}
+                    </Button>
+                  </div>
                 </div>
               );
             })
+
           )}
           {assunto.substituicao_id && (
             <p className="text-[11px] text-muted-foreground">
