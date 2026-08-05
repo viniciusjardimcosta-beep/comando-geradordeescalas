@@ -134,6 +134,24 @@ function uid() {
     : Math.random().toString(36).slice(2);
 }
 
+/**
+ * Identificadores estáveis para automação de testes (Bloco 10C).
+ * Sempre derivados do id do assunto — nunca do índice visual, pois os
+ * cards podem ser reordenados.
+ */
+const APELIDO_TESTID: Record<string, string> = {
+  DATA_INICIO: "data-inicio",
+  DATA_FIM: "data-fim",
+  FUNCAO_ASSUMIDA: "funcao-assumida",
+  FUNCAO_DISPENSADA: "funcao-dispensada",
+  MOTIVO_TITULAR: "motivo-afastamento",
+  MOTIVO_RETORNO: "motivo-retorno",
+};
+function testIdCampo(assuntoId: string, chave: string): string {
+  const apelido = APELIDO_TESTID[chave.toUpperCase()];
+  return `assunto-${assuntoId}-${apelido ?? `campo-${chave}`}`;
+}
+
 function NovaNbiPage() {
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
@@ -685,6 +703,7 @@ function Etapa2({
           <AssuntoPicker
             templates={templates as TemplatePickable[]}
             onEscolher={(codigo) => adicionar(codigo)}
+            testId="adicionar-assunto"
           />
           <span className="ml-auto text-xs text-muted-foreground">
             {total === 0 ? "Nenhum assunto adicionado" : total === 1 ? "1 assunto adicionado" : `${total} assuntos adicionados`}
@@ -733,6 +752,7 @@ function Etapa2({
               onEscolher={(codigo) => adicionar(codigo)}
               label="Adicionar outro assunto"
               size="sm"
+              testId="adicionar-outro-assunto"
             />
             <span className="text-xs text-muted-foreground">
               Pesquise por nome, título oficial ou categoria.
@@ -743,7 +763,7 @@ function Etapa2({
 
         <div className="flex justify-between">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
-          <Button onClick={onNext} disabled={rascunho.assuntos.length === 0}>Ir para conferência <ArrowRight className="ml-2 h-4 w-4" /></Button>
+          <Button data-testid="ir-para-conferencia" onClick={onNext} disabled={rascunho.assuntos.length === 0}>Ir para conferência <ArrowRight className="ml-2 h-4 w-4" /></Button>
         </div>
       </CardContent>
     </Card>
@@ -925,7 +945,12 @@ function AssuntoCard({
   }
 
   return (
-    <div className="rounded-md border border-border p-4">
+    <div
+      className="rounded-md border border-border p-4"
+      data-testid={`assunto-card-${assunto.id}`}
+      data-assunto-id={assunto.id}
+      data-assunto-tipo={assunto.tipo}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Badge variant="secondary">#{index}</Badge>
@@ -979,10 +1004,10 @@ function AssuntoCard({
       <div className="mb-3">
         <Label>Militar</Label>
         <Select value={assunto.militar_id ?? ""} onValueChange={(v) => onChange({ militar_id: v || null })}>
-          <SelectTrigger><SelectValue placeholder="Selecionar militar" /></SelectTrigger>
+          <SelectTrigger data-testid={`assunto-${assunto.id}-militar`}><SelectValue placeholder="Selecionar militar" /></SelectTrigger>
           <SelectContent>
             {militares.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
+              <SelectItem key={m.id} value={m.id} data-testid={`assunto-${assunto.id}-militar-opcao-${m.id}`}>
                 {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
               </SelectItem>
             ))}
@@ -999,10 +1024,10 @@ function AssuntoCard({
             <span className="text-destructive"> *</span>
           </Label>
           <Select value={assunto.militar_titular_id ?? ""} onValueChange={(v) => onChange({ militar_titular_id: v || null })}>
-            <SelectTrigger><SelectValue placeholder="Selecionar titular" /></SelectTrigger>
+            <SelectTrigger data-testid={`assunto-${assunto.id}-titular`}><SelectValue placeholder="Selecionar titular" /></SelectTrigger>
             <SelectContent>
               {militares.filter((m) => m.id !== assunto.militar_id).map((m) => (
-                <SelectItem key={m.id} value={m.id}>
+                <SelectItem key={m.id} value={m.id} data-testid={`assunto-${assunto.id}-titular-opcao-${m.id}`}>
                   {m.posto_graduacao ?? ""} {m.nome} {m.matricula ? `· ${m.matricula}` : ""}
                 </SelectItem>
               ))}
@@ -1061,12 +1086,14 @@ function AssuntoCard({
           // estruturados nunca são digitados pelo operador.
           .filter((c) => !campoOculto(assunto.tipo, c.chave))
           .map((c) => {
+            const tid = testIdCampo(assunto.id, c.chave);
             const derivado = derivadoPor.get(c.chave);
             if (derivado) {
               const manual = estaManual(assunto.campos, c.chave);
               return (
                 <CampoDerivado
                   key={c.chave}
+                  testId={tid}
                   label={c.label}
                   obrigatorio={!!c.obrigatorio}
                   valor={String(assunto.campos[c.chave] ?? derivado.valor)}
@@ -1102,6 +1129,7 @@ function AssuntoCard({
                 <label key={c.chave} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
+                    data-testid={tid}
                     checked={Boolean(val)}
                     onChange={(e) => onCampo(c.chave, e.target.checked)}
                   />
@@ -1117,6 +1145,7 @@ function AssuntoCard({
                 <div key={c.chave} className="md:col-span-2">
                   <MotivoTitularField
                     chave={c.chave}
+                    testId={tid}
                     label={c.label}
                     obrigatorio={!!c.obrigatorio}
                     valor={String(val ?? "")}
@@ -1134,6 +1163,7 @@ function AssuntoCard({
                 <div key={c.chave} className="md:col-span-2">
                   <FuncaoComposta
                     chave={c.chave}
+                    testId={tid}
                     label={c.label}
                     obrigatorio={!!c.obrigatorio}
                     valor={String(val ?? "")}
@@ -1160,6 +1190,7 @@ function AssuntoCard({
                 <div key={c.chave} className="md:col-span-2">
                   <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
                   <CampoLivreCorrigido
+                    testId={tid}
                     value={String(val ?? "")}
                     onChange={(v) => onCampo(c.chave, v)}
                     multiline
@@ -1178,7 +1209,7 @@ function AssuntoCard({
               return (
                 <div key={c.chave}>
                   <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
-                  <Input type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+                  <Input data-testid={tid} type={inputType} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
                 </div>
               );
             }
@@ -1187,6 +1218,7 @@ function AssuntoCard({
               <div key={c.chave}>
                 <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
                 <CampoLivreCorrigido
+                  testId={tid}
                   value={String(val ?? "")}
                   onChange={(v) => onCampo(c.chave, v)}
                   extraWords={dicionarioExtras}
@@ -1401,6 +1433,7 @@ function Etapa3({
             <label className="mt-2 flex items-center gap-2 text-xs font-medium">
               <input
                 type="checkbox"
+                data-testid="duplicar-mesmo-assim"
                 checked={duplicarMesmoAssim}
                 onChange={(e) => setDuplicarMesmoAssim(e.target.checked)}
               />
@@ -1487,20 +1520,21 @@ function Etapa3({
         <div className="flex flex-wrap justify-between gap-2">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar e corrigir</Button>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onSalvar} disabled={salvando}>
+            <Button variant="outline" onClick={onSalvar} disabled={salvando} data-testid="salvar-rascunho">
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar rascunho
             </Button>
             {!gerado ? (
               <Button
                 onClick={handleGerar}
+                data-testid="gerar-nbi"
                 disabled={bloqueado || gerando || !documentoId || (transicaoAno && !confirmarAno)}
               >
                 {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
                 Gerar NBI (.docx)
               </Button>
             ) : (
-              <Button onClick={handleBaixar}>
+              <Button onClick={handleBaixar} data-testid="baixar-nbi">
                 <FileText className="mr-2 h-4 w-4" /> Baixar NBI (.docx)
               </Button>
             )}
@@ -1610,9 +1644,10 @@ function RevisaoOrtografica({
 // Bloco 8C: o rótulo da interface NUNCA vai para a frase. O valor gravado é
 // sempre o texto oficial do motivo (texto_assuncao / texto_dispensa).
 function MotivoTitularField({
-  chave, label, obrigatorio, valor, onChange, contexto,
+  chave, testId, label, obrigatorio, valor, onChange, contexto,
 }: {
   chave: string;
+  testId?: string;
   label: string;
   obrigatorio: boolean;
   valor: string;
@@ -1637,14 +1672,19 @@ function MotivoTitularField({
             onChange(textoMotivo(v, contexto) ?? "");
           }}
         >
-          <SelectTrigger><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
+          <SelectTrigger data-testid={testId}><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
           <SelectContent>
-            {MOTIVOS_FUNCAO.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}
-            <SelectItem value="__outro__">— Outro (texto livre) —</SelectItem>
+            {MOTIVOS_FUNCAO.map((o) => (
+              <SelectItem key={o.id} value={o.id} data-testid={testId ? `${testId}-opcao-${o.id}` : undefined}>
+                {o.label}
+              </SelectItem>
+            ))}
+            <SelectItem value="__outro__" data-testid={testId ? `${testId}-opcao-outro` : undefined}>— Outro (texto livre) —</SelectItem>
           </SelectContent>
         </Select>
         {modo === "outro" && (
           <Input
+            data-testid={testId ? `${testId}-livre` : undefined}
             value={valor}
             onChange={(e) => onChange(e.target.value)}
             placeholder='Ex.: "licença para tratamento de saúde" (somente a expressão que entra na frase)'
@@ -1762,6 +1802,7 @@ function OrigemDadosFuncao({
           <label key={o.v} className="flex items-center gap-2 text-sm">
             <input
               type="radio"
+              data-testid={`assunto-${assunto.id}-origem-${o.v}`}
               name={`origem-${assunto.id}`}
               checked={origem === o.v}
               onChange={() => onChange({ origem_dados: o.v, substituicao_id: o.v === "assuncao" ? assunto.substituicao_id ?? null : null })}
@@ -1819,7 +1860,7 @@ function OrigemDadosFuncao({
                 ? "Nenhuma assunção em aberto encontrada."
                 : `${substituicoes.length} assunção(ões) de função em aberto.`}
             </p>
-            <Button type="button" size="sm" variant="ghost" onClick={() => void onRecarregarSubstituicoes()}>
+            <Button type="button" size="sm" variant="ghost" data-testid={`assunto-${assunto.id}-atualizar-substituicoes`} onClick={() => void onRecarregarSubstituicoes()}>
               Atualizar lista
             </Button>
           </div>
@@ -1833,14 +1874,14 @@ function OrigemDadosFuncao({
             substituicoes.map((s) => {
               const ativo = assunto.substituicao_id === s.id;
               return (
-                <div key={s.id} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
+                <div key={s.id} data-testid={`substituicao-aberta-${s.id}`} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
                   <span>
                     <strong>{nomeDe(s.substituto_militar_id)}</strong> substituindo {nomeDe(s.titular_militar_id)}
                     {s.funcao ? ` · ${s.funcao}` : ""}
                     {s.data_inicio ? ` · desde ${formatarDataBR(s.data_inicio)}` : ""}
                     {s.data_fim_prevista ? ` · retorno previsto ${formatarDataBR(s.data_fim_prevista)}` : ""}
                   </span>
-                  <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} onClick={() => aplicarSubstituicao(s)}>
+                  <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
                     {ativo ? "Vinculada" : "Usar esta assunção"}
                   </Button>
                 </div>
@@ -1861,9 +1902,10 @@ function OrigemDadosFuncao({
 
 // ============ Composição de função (Assunção/Dispensa) ============
 function FuncaoComposta({
-  chave, label, obrigatorio, valor, titular, onChange, extraWords,
+  chave, testId, label, obrigatorio, valor, titular, onChange, extraWords,
 }: {
   chave: string;
+  testId?: string;
   label: string;
   obrigatorio: boolean;
   valor: string;
@@ -1899,6 +1941,7 @@ function FuncaoComposta({
       </div>
       <div className="mt-2">
         <CampoLivreCorrigido
+          testId={testId}
           value={valor}
           onChange={onChange}
           extraWords={extraWords}

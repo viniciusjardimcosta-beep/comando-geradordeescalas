@@ -9,7 +9,7 @@ import { Lock, PencilLine, RotateCcw } from "lucide-react";
 import type { OrigemDado } from "@/lib/nbi/derivados";
 
 export function CampoDerivado({
-  label, valor, origem, detalhe, tipo = "text", manual, obrigatorio,
+  label, valor, origem, detalhe, tipo = "text", manual, obrigatorio, testId,
   onAlterarManual, onVoltarDerivado, onChange,
 }: {
   label: string;
@@ -19,6 +19,8 @@ export function CampoDerivado({
   tipo?: "text" | "date" | "number";
   manual: boolean;
   obrigatorio?: boolean;
+  /** Identificador estável aplicado diretamente no input. */
+  testId?: string;
   onAlterarManual: () => void;
   onVoltarDerivado: () => void;
   onChange: (v: string) => void;
@@ -36,14 +38,14 @@ export function CampoDerivado({
 
       {!manual ? (
         <div className="mt-1 flex items-center gap-2">
-          <Input type={tipo} value={valor} readOnly disabled className="bg-muted" />
+          <Input data-testid={testId} type={tipo} value={valor} readOnly disabled className="bg-muted" />
           {!confirmando ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => setConfirmando(true)}>
+            <Button type="button" size="sm" variant="outline" data-testid={testId ? `${testId}-alterar` : undefined} onClick={() => setConfirmando(true)}>
               <PencilLine className="mr-1 h-3 w-3" /> Alterar manualmente
             </Button>
           ) : (
             <div className="flex gap-1">
-              <Button type="button" size="sm" onClick={() => { setConfirmando(false); onAlterarManual(); }}>
+              <Button type="button" size="sm" data-testid={testId ? `${testId}-confirmar` : undefined} onClick={() => { setConfirmando(false); onAlterarManual(); }}>
                 Confirmar
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmando(false)}>
@@ -54,7 +56,7 @@ export function CampoDerivado({
         </div>
       ) : (
         <div className="mt-1 flex items-center gap-2">
-          <Input type={tipo} value={valor} onChange={(e) => onChange(e.target.value)} />
+          <Input data-testid={testId} type={tipo} value={valor} onChange={(e) => onChange(e.target.value)} />
           <Button type="button" size="sm" variant="outline" onClick={onVoltarDerivado}>
             <RotateCcw className="mr-1 h-3 w-3" /> Voltar ao automático
           </Button>
