@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssuntoPicker, testIdDoAssunto, assuntoSelecionavel, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
-import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { CODIGOS_HOMOLOGADOS, ehVarianteInterna } from "@/utils/nbi-categorias";
 
 // jsdom não implementa ResizeObserver (usado pelo cmdk) nem Pointer Capture.
 vi.hoisted(() => {
@@ -34,7 +34,9 @@ const TEMPLATES: TemplatePickable[] = [
   { codigo: "ferias", titulo: "Férias", titulo_documento: "FÉRIAS", disponivel: true },
   { codigo: "apresentacao", titulo: "Apresentação após férias", titulo_documento: "APRESENTAÇÃO", disponivel: true },
   { codigo: "licenca_paternidade", titulo: "Licença-paternidade", titulo_documento: "LICENÇA PATERNIDADE", disponivel: true },
-  { codigo: "luto", titulo: "Luto", titulo_documento: "LUTO", disponivel: false },
+  { codigo: "nupcias", titulo: "Núpcias", titulo_documento: "NÚPCIAS", disponivel: true },
+  { codigo: "luto", titulo: "Luto", titulo_documento: "LUTO", disponivel: true },
+  { codigo: "apresentacao_luto", titulo: "Apresentação após luto", titulo_documento: "APRESENTAÇÃO", disponivel: true },
   { codigo: "dispensa_recompensa", titulo: "Dispensa por recompensa", titulo_documento: "DISPENSA POR RECOMPENSA", disponivel: true },
   { codigo: "dispensa_recompensa_sem_apresentacao", titulo: "Dispensa por recompensa (sem apresentação)", titulo_documento: "DISPENSA POR RECOMPENSA", disponivel: false },
   { codigo: "assuncao_funcao", titulo: "Assunção de função", titulo_documento: "ASSUNÇÃO DE FUNÇÃO", disponivel: true },
@@ -49,8 +51,10 @@ const TEMPLATES: TemplatePickable[] = [
   { codigo: "comunicado", titulo: "Comunicado", titulo_documento: "COMUNICADO", disponivel: false },
 ];
 
-const HOMOLOGADOS = TEMPLATES.filter(assuntoSelecionavel).map((t) => t.codigo);
-const BLOQUEADOS = TEMPLATES.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
+// Variantes internas (redação de subtipo) nunca aparecem no seletor.
+const LISTAVEIS = TEMPLATES.filter((t) => !ehVarianteInterna(t.codigo));
+const HOMOLOGADOS = LISTAVEIS.filter(assuntoSelecionavel).map((t) => t.codigo);
+const BLOQUEADOS = LISTAVEIS.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
 
 afterEach(() => {
   cleanup();

@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, Lock } from "lucide-react";
 import {
-  CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS,
+  CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS, ehVarianteInterna,
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
 import { obterMotor } from "@/lib/nbi/motores/registry";
@@ -69,6 +69,8 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
       "AFASTAMENTOS": [], "MOVIMENTAÇÕES": [], "SERVIÇO": [], "ADMINISTRATIVO": [],
     };
     const filtrados = templates.filter((t) => {
+      // Variantes internas guardam apenas a redação de um subtipo.
+      if (ehVarianteInterna(t.codigo)) return false;
       if (!busca.trim()) return true;
       const b = normalizar(busca);
       const cat = normalizar(categoriaDoCodigo(t.codigo));

@@ -35,6 +35,11 @@ import {
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 import { funcaoDocumentalDe, lotacaoDocumentalDe, comporFuncaoDocumental } from "@/lib/nbi/formatacao";
 import { MOTIVOS_FUNCAO, textoMotivo, motivoPorTexto, TEXTO_FERIAS } from "@/lib/nbi/motivos";
+import { GRAUS_LUTO, grauPorTexto } from "@/lib/nbi/luto";
+import {
+  SUBTIPOS_APRESENTACAO, SUBTIPO_APRESENTACAO_PADRAO, subtipoPorOrigem,
+  campoDoSubtipoApresentacao,
+} from "@/lib/nbi/motores/apresentacao";
 
 import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
 import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
@@ -295,7 +300,10 @@ function NovaNbiPage() {
     const campos: Record<string, string | boolean> = {};
     for (const c of t.campos) {
       if (c.tipo === "boolean") campos[c.chave] = Boolean(c.default ?? false);
+      else if (c.default !== undefined && c.default !== null) campos[c.chave] = String(c.default);
     }
+    // Bloco 11A — APRESENTAÇÃO é agregadora: começa na origem padrão (férias).
+    if (codigo === "apresentacao") campos.SUBTIPO = SUBTIPO_APRESENTACAO_PADRAO;
     setRascunho((r) => ({
       ...r,
       assuntos: [...r.assuntos, {
@@ -311,6 +319,56 @@ function NovaNbiPage() {
       }],
     }));
   }
+
+  /**
+   * Bloco 11A — origens automáticas: a apresentação é consequência do
+   * afastamento. Todos os dados são herdados; nada é redigitado.
+   */
+  function gerarApresentacaoDe(origem: AssuntoLocal) {
+    const sub = subtipoPorOrigem(origem.tipo);
+    const tApresentacao = templatePor.get("apresentacao");
+    if (!sub || !tApresentacao) return;
+    if (!sub.homologado) {
+      toast.error("Apresentação deste afastamento aguarda exemplar oficial.");
+      return;
+    }
+    const motor = obterMotor(origem.tipo);
+    const resolvidos = motor
+      ? motor.resolverCampos(contextoDe(origem))
+      : resolverBase(contextoDe(origem));
+    const campos: Record<string, string | boolean> = { SUBTIPO: sub.id };
+    for (const chave of ["QTD_DIAS", "PERIODO", "ANO"]) {
+      const bruto = origem.campos[chave];
+      if (bruto !== undefined && bruto !== "") campos[chave] = bruto;
+    }
+    // Datas seguem em ISO: a formatação oficial acontece no motor.
+    const dataFim = String(origem.campos.DATA_FIM ?? "")
+      || (origem.campos.DATA_INICIO && resolvidos.QTD_DIAS
+        ? somarDiasISO(String(origem.campos.DATA_INICIO), parseInt(resolvidos.QTD_DIAS, 10) - 1)
+        : "");
+    if (dataFim) campos.DATA_APRESENTACAO = somarDiasISO(dataFim, 1);
+    if (!campos.QTD_DIAS && resolvidos.QTD_DIAS) {
+      campos.QTD_DIAS = String(parseInt(resolvidos.QTD_DIAS, 10));
+    }
+    setRascunho((r) => {
+      const idx = r.assuntos.findIndex((a) => a.id === origem.id);
+      const novo: AssuntoLocal = {
+        id: uid(),
+        tipo: "apresentacao" as AssuntoTipo,
+        militar_id: origem.militar_id,
+        militar_titular_id: null,
+        ferias_id: origem.ferias_id,
+        origem_dados: "manual",
+        substituicao_id: null,
+        campos,
+      };
+      const arr = [...r.assuntos];
+      arr.splice(idx + 1, 0, novo);
+      return { ...r, assuntos: arr };
+    });
+    toast.success("Apresentação gerada a partir do afastamento.");
+  }
+
 
   function atualizarAssunto(id: string, patch: Partial<AssuntoLocal>) {
     setRascunho((r) => ({
@@ -575,6 +633,7 @@ function NovaNbiPage() {
           onRecarregarSubstituicoes={recarregarSubstituicoes}
 
           adicionar={adicionarAssunto}
+          gerarApresentacao={gerarApresentacaoDe}
           atualizar={atualizarAssunto}
           atualizarCampo={atualizarCampo}
           remover={removerAssunto}
@@ -714,7 +773,7 @@ function Etapa1({
 
 function Etapa2({
   rascunho, templates, militares, ferias, substituicoes, onRecarregarSubstituicoes,
-  adicionar, atualizar, atualizarCampo, remover, mover,
+  adicionar, gerarApresentacao, atualizar, atualizarCampo, remover, mover,
   onBack, onNext,
 }: {
   rascunho: Rascunho;
@@ -725,6 +784,7 @@ function Etapa2({
   onRecarregarSubstituicoes: () => Promise<void> | void;
 
   adicionar: (codigo: string) => void;
+  gerarApresentacao: (assunto: AssuntoLocal) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
   remover: (id: string) => void;
@@ -777,6 +837,7 @@ function Etapa2({
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               unidade={rascunho.unidade}
 
+              onGerarApresentacao={() => gerarApresentacao(a)}
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
               onRemove={() => remover(a.id)}
@@ -813,7 +874,7 @@ function Etapa2({
 
 function AssuntoCard({
   index, assunto, template, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, unidade,
-  onChange, onCampo, onRemove, onUp, onDown,
+  onGerarApresentacao, onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
   assunto: AssuntoLocal;
@@ -825,6 +886,7 @@ function AssuntoCard({
   anoNbi: number;
 
   unidade: { nome: string; sigla: string };
+  onGerarApresentacao: () => void;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
   onRemove: () => void;
@@ -836,6 +898,7 @@ function AssuntoCard({
   const [avisoSugestao, setAvisoSugestao] = useState<string | null>(null);
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
+  const subtipoApresentacaoSel = String(assunto.campos.SUBTIPO ?? "") || SUBTIPO_APRESENTACAO_PADRAO;
 
   // ── Bloco 9B — campos derivados (cálculo/banco/configurações) ──
   const derivados = useMemo(
@@ -1121,11 +1184,53 @@ function AssuntoCard({
         </div>
       )}
 
+      {/* Bloco 11A — Apresentação: o operador escolhe a ORIGEM, nunca a redação. */}
+      {assunto.tipo === "apresentacao" && (
+        <div className="mb-3 rounded-md border border-dashed p-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Origem do afastamento
+          </Label>
+          <Select
+            value={subtipoApresentacaoSel}
+            onValueChange={(v) => onCampo("SUBTIPO", v)}
+          >
+            <SelectTrigger className="mt-2 max-w-[320px]" data-testid={`assunto-${assunto.id}-subtipo`}>
+              <SelectValue placeholder="Selecione a origem" />
+            </SelectTrigger>
+            <SelectContent>
+              {SUBTIPOS_APRESENTACAO.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.label}{s.homologado ? "" : " (aguardando exemplar oficial)"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            A redação oficial é escolhida automaticamente conforme a origem.
+          </p>
+        </div>
+      )}
+
+      {/* Bloco 11A — a apresentação é consequência do afastamento: nada é redigitado. */}
+      {subtipoPorOrigem(assunto.tipo) && (
+        <div className="mb-3">
+          <Button type="button" variant="outline" size="sm" onClick={onGerarApresentacao}
+            data-testid={`assunto-${assunto.id}-gerar-apresentacao`}>
+            <Wand2 className="mr-2 h-4 w-4" /> Gerar apresentação automaticamente
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2">
         {template.campos
           // Bloco 10 — fonte única: cadastro, gramática, cálculos e campos
           // estruturados nunca são digitados pelo operador.
           .filter((c) => !campoOculto(assunto.tipo, c.chave))
+          // Bloco 11A — o subtipo tem seletor próprio e cada variante mostra
+          // apenas os campos que existem na sua redação oficial.
+          .filter((c) => c.chave.toUpperCase() !== "SUBTIPO")
+          .filter((c) => assunto.tipo !== "apresentacao"
+            || campoDoSubtipoApresentacao(subtipoApresentacaoSel, c.chave))
           .map((c) => {
             const tid = testIdCampo(assunto.id, c.chave);
             const derivado = derivadoPor.get(c.chave);
@@ -1193,6 +1298,35 @@ function AssuntoCard({
                     onChange={(v) => onCampo(c.chave, v)}
                     contexto={chaveUp === "MOTIVO_TITULAR" ? "afastamento" : "retorno"}
                   />
+                </div>
+              );
+            }
+
+            // ── Bloco 11A — grau de parentesco do luto (catálogo controlado) ──
+            if (chaveUp === "MOTIVO_LUTO") {
+              const atual = grauPorTexto(String(val ?? ""));
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <Select
+                    value={atual?.id ?? ""}
+                    onValueChange={(id) => {
+                      const g = GRAUS_LUTO.find((x) => x.id === id);
+                      if (g) onCampo(c.chave, g.texto);
+                    }}
+                  >
+                    <SelectTrigger className="mt-1" data-testid={tid}>
+                      <SelectValue placeholder="Selecione o grau de parentesco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GRAUS_LUTO.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Texto documental: <em>{atual?.texto ?? "—"}</em>
+                  </p>
                 </div>
               );
             }

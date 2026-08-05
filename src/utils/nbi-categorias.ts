@@ -16,8 +16,10 @@ const MAPA: Record<string, CategoriaNbi> = {
   ferias: "AFASTAMENTOS",
   apresentacao: "AFASTAMENTOS",
   licenca_paternidade: "AFASTAMENTOS",
+  nupcias: "AFASTAMENTOS",
   luto: "AFASTAMENTOS",
   dispensa_recompensa: "AFASTAMENTOS",
+
 
   assuncao_funcao: "MOVIMENTAÇÕES",
   assuncao_cargo_vago: "MOVIMENTAÇÕES",
@@ -47,8 +49,10 @@ const ORDEM_ADMINISTRATIVA: string[] = [
   "ferias",
   "apresentacao",
   "licenca_paternidade",
+  "nupcias",
   "luto",
   "dispensa_recompensa",
+
   // MOVIMENTAÇÕES
   "assuncao_funcao",
   "dispensa_funcao",
@@ -87,5 +91,21 @@ export const CODIGOS_HOMOLOGADOS: ReadonlySet<string> = new Set([
   "dispensa_recompensa",
   "nomeacao_comissao",
   "licenca_paternidade",
+  "nupcias",
+  "luto",
 ]);
+
+// Bloco 11A — variantes internas de redação. Existem em nbi_templates apenas
+// para guardar o texto oficial de um subtipo; nunca são escolhidas no seletor.
+export const VARIANTES_INTERNAS: ReadonlySet<string> = new Set([
+  "apresentacao_nupcias",
+  "apresentacao_luto",
+  "apresentacao_paternidade",
+  "dispensa_recompensa_sem_apresentacao",
+]);
+
+export function ehVarianteInterna(codigo: string): boolean {
+  return VARIANTES_INTERNAS.has(codigo);
+}
+
 
