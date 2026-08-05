@@ -511,6 +511,8 @@ function NovaNbiPage() {
           militares={militares}
           ferias={ferias}
           substituicoes={substituicoes}
+          onRecarregarSubstituicoes={recarregarSubstituicoes}
+
           adicionar={adicionarAssunto}
           atualizar={atualizarAssunto}
           atualizarCampo={atualizarCampo}
