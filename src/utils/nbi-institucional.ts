@@ -1,27 +1,52 @@
-// Sugestões administrativas seguras para campos institucionais do módulo NBI.
-// Nunca aplica automaticamente: devolve apenas uma proposta de grafia.
-// Nunca altera siglas militares já válidas.
+// Bloco 10D — Normalização INSTITUCIONAL (camada B).
+// Esta camada é independente do corretor ortográfico de português (camada A).
+// Ela nunca trata sigla militar como palavra comum: siglas têm forma canônica
+// congelada e jamais recebem capitalização de nome próprio ("Bbm" é proibido).
+//
+// Usada em: lotações, funções, cabeçalho, unidades, siglas, postos e quadros.
 
 export type ModoInstitucional = "caixa_alta" | "funcao" | "lotacao";
 
-// Siglas militares canônicas (chave em minúsculo, sem pontuação).
-const SIGLAS: Readonly<Record<string, string>> = {
+/**
+ * Siglas institucionais canônicas.
+ * Chave = forma reduzida (minúscula, sem acento e sem pontuação).
+ * Valor = grafia oficial obrigatória (nunca alterada por capitalização).
+ */
+export const SIGLAS_CANONICAS: Readonly<Record<string, string>> = {
+  // Unidades
   bbm: "BBM",
+  cia: "CiaBM",
   ciabm: "CiaBM",
+  pel: "PelBM",
   pelbm: "PelBM",
   gbm: "GBM",
   sgbm: "SGBM",
+  // Corporação
   cbmrs: "CBMRS",
   cbm: "CBM",
-  qpbm: "QPBM",
-  qobm: "QOBM",
-  qoem: "QOEM",
-  cmdt: "Cmt",
-  cmt: "Cmt",
-  subcmt: "SubCmt",
-  cia: "Cia",
-  pel: "Pel",
   bm: "BM",
+  // Quadros
+  qpbm: "QPBM",
+  qtbm: "QTBM",
+  qoem: "QOEM",
+  qobm: "QOBM",
+  qosbm: "QOSBM",
+  qoa: "QOA",
+  // Seções e órgãos
+  slog: "SLOG",
+  ssci: "SSCI",
+  sseg: "SSeg",
+  sadm: "SAdm",
+  sint: "SINT",
+  sodc: "SODC",
+  cobom: "COBOM",
+  // Serviço
+  cov: "COV",
+  cg: "CG",
+  bi: "BI",
+  nbi: "NBI",
+  idfunc: "ID FUNC",
+  // Postos e graduações
   sd: "Sd",
   cb: "Cb",
   sgt: "Sgt",
@@ -31,56 +56,129 @@ const SIGLAS: Readonly<Record<string, string>> = {
   maj: "Maj",
   cel: "Cel",
   tc: "TC",
-  nbi: "NBI",
-  bi: "BI",
+  cmt: "Cmt",
+  cmdt: "Cmt",
+  subcmt: "SubCmt",
   p1: "P/1",
   ssp: "SSP",
 };
 
-// Substantivos que definem o gênero do ordinal que os antecede.
+/** Siglas cujo ordinal é feminino. */
+const SIGLA_FEMININA = new Set(["CiaBM"]);
+
+// Substantivos por extenso que definem o gênero do ordinal que os antecede.
 const FEMININOS = new Set([
-  "companhia", "cia", "ciabm", "seção", "secao", "secretaria", "brigada", "região", "regiao",
-  "divisão", "divisao", "base", "unidade", "delegacia",
+  "companhia", "cia", "ciabm", "secao", "secretaria", "brigada", "regiao",
+  "divisao", "base", "unidade", "delegacia",
 ]);
 const MASCULINOS = new Set([
-  "batalhão", "batalhao", "bbm", "pelotão", "pelotao", "pel", "pelbm", "grupamento", "gbm",
+  "batalhao", "bbm", "pelotao", "pel", "pelbm", "grupamento", "gbm",
   "comando", "corpo", "posto", "distrito", "subgrupamento", "sgbm",
 ]);
+
+const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e", "em", "no", "na"]);
 
 function stripDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function chave(s: string): string {
-  return stripDiacritics(s).toLowerCase().replace(/[^a-z0-9/]+/g, "");
-}
-
-const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e", "em", "no", "na"]);
-
-// Normaliza uma sigla colada a um ordinal: "15ºbbm" → "15ºBBM".
-function normalizarToken(token: string, modo: ModoInstitucional): string {
-  const m = /^(\d+\s*[ºª°]?)(.*)$/.exec(token);
-  if (m && m[2]) {
-    return normalizarOrdinal(m[1]) + normalizarToken(m[2], modo);
-  }
-  const k = chave(token);
-  if (!k) return token;
-  const canon = SIGLAS[k];
-  if (canon) {
-    // Não altera sigla já válida.
-    if (token === canon) return token;
-    return modo === "caixa_alta" ? canon.toUpperCase() : canon;
-  }
-  return token;
-}
-
-function normalizarOrdinal(s: string): string {
-  return s.replace(/\s+/g, "").replace(/°/g, "º");
+  return stripDiacritics(s).toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function capitalizar(w: string): string {
   if (!w) return w;
   return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+}
+
+/** Devolve a grafia canônica da sigla, ou null quando não é sigla conhecida. */
+export function siglaCanonica(token: string): string | null {
+  const k = chave(token);
+  if (!k) return null;
+  return SIGLAS_CANONICAS[k] ?? null;
+}
+
+function generoOrdinal(palavra: string): "º" | "ª" | null {
+  const canon = siglaCanonica(palavra);
+  if (canon && SIGLA_FEMININA.has(canon)) return "ª";
+  const k = chave(palavra);
+  if (FEMININOS.has(k)) return "ª";
+  if (MASCULINOS.has(k)) return "º";
+  if (canon) return "º";
+  return null;
+}
+
+/**
+ * Normaliza um token isolado (sem separadores).
+ * Siglas conhecidas viram a forma canônica; ordinais recebem o gênero correto.
+ */
+function normalizarToken(token: string, modo: ModoInstitucional): string {
+  if (!token) return token;
+
+  const sufixo = /[.,;:]$/.test(token) ? token.slice(-1) : "";
+  const nucleo = sufixo ? token.slice(0, -1) : token;
+  if (!nucleo) return token;
+
+  // Ordinal opcional colado: "15º", "8ª", "6o", "2"
+  const m = /^(\d+)\s*([ºª°oa]?)(.*)$/i.exec(nucleo);
+  if (m && m[3]) {
+    const num = m[1];
+    const resto = m[3];
+    const canon = siglaCanonica(resto);
+    const genero = generoOrdinal(resto) ?? (m[2] === "ª" || m[2] === "a" ? "ª" : "º");
+    const corpo = canon ?? normalizarPalavra(resto, modo);
+    return `${num}${genero}${corpo}${sufixo}`;
+  }
+  if (m && !m[3]) {
+    // Somente número + marcador solto: apenas padroniza o símbolo.
+    const marc = m[2] === "ª" || m[2] === "a" ? "ª" : m[2] ? "º" : "";
+    return `${m[1]}${marc}${sufixo}`;
+  }
+
+  return normalizarPalavra(nucleo, modo) + sufixo;
+}
+
+function normalizarPalavra(palavra: string, modo: ModoInstitucional): string {
+  const canon = siglaCanonica(palavra);
+  if (canon) return canon; // sigla institucional: nunca capitalizada como palavra
+  if (modo === "caixa_alta") return palavra.toUpperCase();
+  if (modo === "lotacao") {
+    // Caixa alta institucional confirmada (cidade, unidade) não é falso positivo.
+    if (palavra.length >= 2 && palavra === palavra.toUpperCase()) return palavra;
+    if (CONECTIVOS.has(chave(palavra))) return palavra.toLowerCase();
+    return capitalizar(palavra);
+  }
+  return palavra;
+}
+
+/** Tokeniza preservando separadores institucionais ("/", espaço, hífen). */
+function normalizarExpressao(texto: string, modo: ModoInstitucional): string {
+  const partes = texto.split(/([/\s-]+)/);
+  return partes
+    .map((p, i) => (i % 2 === 1 ? p.replace(/\s+/g, " ") : normalizarToken(p, modo)))
+    .join("");
+}
+
+/**
+ * Normalização OBRIGATÓRIA e determinística: concordância do ordinal,
+ * forma oficial "Bombeiros Militar" e siglas canônicas. Não capitaliza
+ * palavras comuns (isso é papel de `sugerirInstitucional`).
+ */
+export function normalizarInstitucional(texto: string): string {
+  const bruto = (texto ?? "").trim().replace(/\s+/g, " ");
+  if (!bruto) return "";
+  let out = bruto.replace(/\b(bombeiro)(\s+militar)\b/gi, (_m, a: string, b: string) => {
+    const plural = a === a.toUpperCase() ? "BOMBEIROS" : capitalizar(a) === a ? "Bombeiros" : "bombeiros";
+    return plural + b;
+  });
+  // Ordinal + substantivo por extenso (mantém o espaçamento original).
+  out = out.replace(/(\d+)\s*([ºª°])\s*([\p{L}]+)/gu, (m, num: string, ord: string, palavra: string) => {
+    const g = generoOrdinal(palavra) ?? (ord === "°" ? "º" : (ord as "º" | "ª"));
+    const canon = siglaCanonica(palavra);
+    const colado = /^\d+\s*[ºª°]\S/.test(m);
+    return `${num}${g}${colado ? "" : " "}${canon ?? palavra}`;
+  });
+  return out;
 }
 
 export interface SugestaoInstitucional {
@@ -90,38 +188,14 @@ export interface SugestaoInstitucional {
 }
 
 /**
- * Normalização OBRIGATÓRIA (Bloco 8B): aplicada automaticamente, sem depender
- * de aceitação do operador. Cobre apenas regras determinísticas e seguras:
- * concordância do ordinal (8º Companhia → 8ª Companhia) e a forma oficial
- * "Bombeiros Militar". Não altera capitalização nem siglas livres.
- */
-export function normalizarInstitucional(texto: string): string {
-  const bruto = (texto ?? "").trim().replace(/\s+/g, " ");
-  if (!bruto) return "";
-  let out = bruto.replace(/\b(bombeiro)(\s+militar)\b/gi, (_m, a: string, b: string) => {
-    const plural = a === a.toUpperCase() ? "BOMBEIROS" : capitalizar(a) === a ? "Bombeiros" : "bombeiros";
-    return plural + b;
-  });
-  out = out.replace(/(\d+)\s*([ºª°])\s*([\p{L}]+)/gu, (m, num: string, ord: string, palavra: string) => {
-    const k = chave(palavra);
-    let alvo = ord === "°" ? "º" : ord;
-    if (FEMININOS.has(k)) alvo = "ª";
-    else if (MASCULINOS.has(k)) alvo = "º";
-    const colado = /^\d+\s*[ºª°]\S/.test(m);
-    return `${num}${alvo}${colado ? "" : " "}${palavra}`;
-  });
-  return out;
-}
-
-/**
  * Analisa a expressão completa de um campo institucional e devolve a grafia
- * administrativa sugerida. Retorna null quando nada muda.
+ * administrativa sugerida. Retorna null quando nada muda (sem falso positivo).
  */
 export function sugerirInstitucional(
   texto: string,
   modo: ModoInstitucional,
 ): SugestaoInstitucional | null {
-  const bruto = texto.trim();
+  const bruto = (texto ?? "").trim();
   if (!bruto) return null;
 
   const motivos: string[] = [];
@@ -135,58 +209,15 @@ export function sugerirInstitucional(
   });
   if (out !== antesPlural) motivos.push('"Bombeiro Militar" → "Bombeiros Militar"');
 
-  // 2) Normalização de siglas e ordinais token a token
-  const antesSiglas = out;
-  const tokens = out.split(" ");
-  const norm = tokens.map((t) => {
-    const sufixo = /[.,;:]$/.test(t) ? t.slice(-1) : "";
-    const nucleo = sufixo ? t.slice(0, -1) : t;
-    return normalizarToken(nucleo, modo) + sufixo;
-  });
-  out = norm.join(" ");
-  if (out !== antesSiglas) motivos.push("Padronização de siglas militares");
-
-  // 3) Concordância do ordinal com o substantivo seguinte
+  // 2) Concordância de ordinal separado por espaço ("8º Companhia" → "8ª Companhia")
   const antesOrd = out;
-  out = out.replace(/(\d+)\s*([ºª°])\s*([\p{L}]+)/gu, (m, num: string, ord: string, palavra: string) => {
-    const k = chave(palavra);
-    let alvo = ord === "°" ? "º" : ord;
-    if (FEMININOS.has(k)) alvo = "ª";
-    else if (MASCULINOS.has(k)) alvo = "º";
-    const colado = /^\d+\s*[ºª°]\S/.test(m);
-    return `${num}${alvo}${colado ? "" : " "}${palavra}`;
-  });
+  out = normalizarInstitucional(out);
   if (out !== antesOrd) motivos.push("Concordância do ordinal (º/ª)");
 
-  // 4) Capitalização conforme o modo
-  const antesCap = out;
-  if (modo === "caixa_alta") {
-    out = out.toUpperCase();
-    if (out !== antesCap) motivos.push("Forma institucional em caixa alta");
-  } else if (modo === "funcao") {
-    const primeira = out.charAt(0);
-    if (primeira && primeira !== primeira.toUpperCase()) {
-      out = primeira.toUpperCase() + out.slice(1);
-      motivos.push("Inicial maiúscula");
-    }
-  } else {
-    // lotacao → nome próprio, preservando siglas conhecidas
-    out = out
-      .split(" ")
-      .map((t, i) => {
-        const sufixo = /[.,;:]$/.test(t) ? t.slice(-1) : "";
-        const nucleo = sufixo ? t.slice(0, -1) : t;
-        const m = /^(\d+[ºª])(.*)$/.exec(nucleo);
-        const prefixoOrd = m ? m[1] : "";
-        const corpo = m ? m[2] : nucleo;
-        if (!corpo) return t;
-        if (SIGLAS[chave(corpo)]) return prefixoOrd + corpo + sufixo;
-        if (i > 0 && CONECTIVOS.has(chave(corpo))) return prefixoOrd + corpo.toLowerCase() + sufixo;
-        return prefixoOrd + capitalizar(corpo) + sufixo;
-      })
-      .join(" ");
-    if (out !== antesCap) motivos.push("Capitalização de nome próprio");
-  }
+  // 3) Siglas canônicas, ordinais colados e capitalização, token a token
+  const antes = out;
+  out = normalizarExpressao(out, modo);
+  if (out !== antes) motivos.push("Padronização institucional (siglas e ordinais)");
 
   if (out === bruto) return null;
   if (motivos.length === 0) motivos.push("Ajuste de espaçamento");

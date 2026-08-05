@@ -15,6 +15,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { auditarPreGeracao } from "@/lib/nbi/auditoria";
+import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
 import {
@@ -1303,7 +1305,7 @@ function Etapa3({
     return `${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"} · ${d.indices.length}x`;
   });
 
-  const bloqueado = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
+  const bloqueadoBase = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
 
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
@@ -1325,6 +1327,35 @@ function Etapa3({
     }
     return achados;
   });
+
+  // Bloco 10D — auditoria pré-geração (somente leitura, nunca altera dados).
+  const auditoria = auditarPreGeracao({
+    assuntos: rascunho.assuntos.map((a) => {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      const { texto, ausentes } = textoFinal(a);
+      return {
+        titulo: t?.titulo ?? a.tipo,
+        militar: militares.find((m) => m.id === a.militar_id)?.nome ?? null,
+        titular: militares.find((m) => m.id === a.militar_titular_id)?.nome ?? null,
+        exigeTitular: a.tipo === "assuncao_funcao" || a.tipo === "dispensa_funcao",
+        pendencias: pendencias(a),
+        ausentes,
+        texto,
+      };
+    }),
+    duplicados: duplicarMesmoAssim ? [] : duplicados,
+    divergenciasAno,
+    cabecalhoOk: Boolean(rascunho.unidade.nome),
+    digitadorOk: Boolean(rascunho.digitador.nome),
+    comandanteOk: Boolean(rascunho.comandante.nome),
+    numeracaoOk: rascunho.modo_numeracao === "manual"
+      ? /\d/.test(rascunho.numero)
+      : previsto !== null,
+  });
+
+  const bloqueado = bloqueadoBase || auditoria.bloqueado;
+
+
 
 
   async function handleGerar() {
@@ -1462,6 +1493,8 @@ function Etapa3({
           </div>
         )}
 
+
+        {!gerado && <PainelAuditoria resultado={auditoria} />}
 
         <RevisaoOrtografica
           assuntos={rascunho.assuntos}

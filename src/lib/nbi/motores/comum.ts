@@ -93,10 +93,14 @@ export function resolverBase(
     for (const k of ["ORIGEM", "DESTINO", "CIDADE"]) {
       if (v[k]) v[k] = normalizarLocalidade(v[k]).formatado;
     }
-    const mesmoDia = Boolean(campos.retorno_no_mesmo_dia);
+    // Bloco 10D — a frase de retorno é 100% automática: se a data de retorno
+    // coincide com a data da viagem, o documento diz "na mesma data".
+    const mesmoDia = Boolean(campos.retorno_no_mesmo_dia)
+      || (Boolean(v.DATA_RETORNO) && v.DATA_RETORNO === v.DATA_INICIO);
     v.TERMINACAO_RETORNO = mesmoDia
-      ? "retornando no mesmo dia"
+      ? "retornando na mesma data"
       : (v.DATA_RETORNO ? `retornando em ${formatarDataBR(v.DATA_RETORNO)}` : "");
+
   }
 
 
