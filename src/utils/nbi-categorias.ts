@@ -32,6 +32,8 @@ const MAPA: Record<string, CategoriaNbi> = {
   nomeacao_comissao_funcoes: "SERVIÇO",
   viagem: "SERVIÇO",
   nomeacao_comissao: "SERVIÇO",
+  folga_compensatoria: "SERVIÇO",
+  folga_compensatoria_realizada: "SERVIÇO",
 
   renovacao_tempo: "ADMINISTRATIVO",
   situacao_sanitaria: "ADMINISTRATIVO",
@@ -64,6 +66,7 @@ const ORDEM_ADMINISTRATIVA: string[] = [
   "servico_extraordinario_convocacao",
   "nomeacao_comissao",
   "nomeacao_comissao_funcoes",
+  "folga_compensatoria",
   // ADMINISTRATIVO
   "renovacao_tempo",
   "situacao_sanitaria",
@@ -93,6 +96,7 @@ export const CODIGOS_HOMOLOGADOS: ReadonlySet<string> = new Set([
   "licenca_paternidade",
   "nupcias",
   "luto",
+  "folga_compensatoria",
 ]);
 
 // Bloco 11A — variantes internas de redação. Existem em nbi_templates apenas
@@ -102,6 +106,7 @@ export const VARIANTES_INTERNAS: ReadonlySet<string> = new Set([
   "apresentacao_luto",
   "apresentacao_paternidade",
   "dispensa_recompensa_sem_apresentacao",
+  "folga_compensatoria_realizada",
 ]);
 
 export function ehVarianteInterna(codigo: string): boolean {

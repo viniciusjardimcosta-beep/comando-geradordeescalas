@@ -37,6 +37,10 @@ import { funcaoDocumentalDe, lotacaoDocumentalDe, comporFuncaoDocumental } from 
 import { MOTIVOS_FUNCAO, textoMotivo, motivoPorTexto, TEXTO_FERIAS } from "@/lib/nbi/motivos";
 import { GRAUS_LUTO, grauPorTexto } from "@/lib/nbi/luto";
 import {
+  MOTIVOS_FOLGA, MOTIVO_FOLGA_PADRAO, motivoFolgaPorTexto, textoMotivoFolga,
+  SUBTIPOS_FOLGA, SUBTIPO_FOLGA_PADRAO, campoDoSubtipoFolga, calcularMesesFolga,
+} from "@/lib/nbi/folgaCompensatoria";
+import {
   SUBTIPOS_APRESENTACAO, SUBTIPO_APRESENTACAO_PADRAO, subtipoPorOrigem,
   campoDoSubtipoApresentacao,
 } from "@/lib/nbi/motores/apresentacao";
@@ -304,6 +308,11 @@ function NovaNbiPage() {
     }
     // Bloco 11A — APRESENTAÇÃO é agregadora: começa na origem padrão (férias).
     if (codigo === "apresentacao") campos.SUBTIPO = SUBTIPO_APRESENTACAO_PADRAO;
+    // Bloco 11B — Folga compensatória: subtipo e motivo iniciam no padrão oficial.
+    if (codigo === "folga_compensatoria") {
+      campos.SUBTIPO = SUBTIPO_FOLGA_PADRAO;
+      campos.MOTIVO = textoMotivoFolga(MOTIVO_FOLGA_PADRAO) ?? "";
+    }
     setRascunho((r) => ({
       ...r,
       assuntos: [...r.assuntos, {
@@ -899,6 +908,8 @@ function AssuntoCard({
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
   const subtipoApresentacaoSel = String(assunto.campos.SUBTIPO ?? "") || SUBTIPO_APRESENTACAO_PADRAO;
+  const subtipoFolgaSel = String(assunto.campos.SUBTIPO ?? "") || SUBTIPO_FOLGA_PADRAO;
+  const mesesFolga = calcularMesesFolga(String(assunto.campos.mes_referencia_sel ?? ""));
 
   // ── Bloco 9B — campos derivados (cálculo/banco/configurações) ──
   const derivados = useMemo(
@@ -1177,6 +1188,44 @@ function AssuntoCard({
         </div>
       )}
 
+      {/* Bloco 11B — Folga compensatória: mês de referência e subtipo oficial. */}
+      {assunto.tipo === "folga_compensatoria" && (
+        <div className="mb-3 grid gap-3 rounded-md border border-dashed p-3 md:grid-cols-2">
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Redação oficial
+            </Label>
+            <Select value={subtipoFolgaSel} onValueChange={(v) => onCampo("SUBTIPO", v)}>
+              <SelectTrigger className="mt-2" data-testid={`assunto-${assunto.id}-subtipo`}>
+                <SelectValue placeholder="Selecione a redação" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUBTIPOS_FOLGA.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Mês de referência
+            </Label>
+            <Input
+              type="month"
+              className="mt-2"
+              data-testid={`assunto-${assunto.id}-mes-referencia`}
+              value={String(assunto.campos.mes_referencia_sel ?? "")}
+              onChange={(e) => onCampo("mes_referencia_sel", e.target.value)}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground md:col-span-2">
+            {mesesFolga
+              ? `Referência: ${mesesFolga.referencia} de ${mesesFolga.ano} — compensação em ${mesesFolga.compensacao} de ${mesesFolga.anoCompensacao}.`
+              : "O mês da compensação é calculado automaticamente (sempre o mês seguinte)."}
+          </p>
+        </div>
+      )}
+
       {/* Bloco 9B — Nomeação de comissão: formulário integralmente estruturado. */}
       {assunto.tipo === "nomeacao_comissao" && (
         <div className="mb-3">
@@ -1231,6 +1280,10 @@ function AssuntoCard({
           .filter((c) => c.chave.toUpperCase() !== "SUBTIPO")
           .filter((c) => assunto.tipo !== "apresentacao"
             || campoDoSubtipoApresentacao(subtipoApresentacaoSel, c.chave))
+          // Bloco 11B — o mês de referência tem seletor próprio; a variante
+          // "compensação realizada" não possui motivo na redação oficial.
+          .filter((c) => assunto.tipo !== "folga_compensatoria"
+            || (c.chave !== "mes_referencia_sel" && campoDoSubtipoFolga(subtipoFolgaSel, c.chave)))
           .map((c) => {
             const tid = testIdCampo(assunto.id, c.chave);
             const derivado = derivadoPor.get(c.chave);
@@ -1298,6 +1351,48 @@ function AssuntoCard({
                     onChange={(v) => onCampo(c.chave, v)}
                     contexto={chaveUp === "MOTIVO_TITULAR" ? "afastamento" : "retorno"}
                   />
+                </div>
+              );
+            }
+
+            // ── Bloco 11B — motivo da folga compensatória (catálogo + livre) ──
+            if (chaveUp === "MOTIVO" && assunto.tipo === "folga_compensatoria") {
+              const texto = String(val ?? "");
+              const catalogado = motivoFolgaPorTexto(texto);
+              const idSel = catalogado?.id ?? (texto ? "outro" : "");
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <Select
+                    value={idSel}
+                    onValueChange={(id) => {
+                      const oficial = textoMotivoFolga(id);
+                      onCampo(c.chave, oficial ?? "");
+                    }}
+                  >
+                    <SelectTrigger className="mt-1" data-testid={tid}>
+                      <SelectValue placeholder="Selecione o motivo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVOS_FOLGA.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {idSel === "outro" && (
+                    <div className="mt-2">
+                      <CampoLivreCorrigido
+                        testId={`${tid}-livre`}
+                        value={texto}
+                        onChange={(v) => onCampo(c.chave, v)}
+                        extraWords={dicionarioExtras}
+                        capitalizacao="inicial"
+                      />
+                    </div>
+                  )}
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Texto documental: <em>{texto || "—"}</em>
+                  </p>
                 </div>
               );
             }

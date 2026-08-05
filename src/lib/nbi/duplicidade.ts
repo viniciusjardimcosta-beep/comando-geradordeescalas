@@ -18,6 +18,8 @@ const ASSINATURA_POR_MOTOR: Record<string, string[]> = {
   dispensa_recompensa: ["DATA_INICIO", "QTD_DIAS", "MOTIVO"],
   nomeacao_comissao: ["DATA_INICIO", "FINALIDADE", "COMPOSICAO"],
   licenca_paternidade: ["DATA_INICIO"],
+  // Folga compensatória: mês de referência + subtipo identificam o fato.
+  folga_compensatoria: ["mes_referencia_sel", "SUBTIPO", "QTD_HORAS"],
 };
 
 /** Fallback usado por motores ainda não catalogados. */

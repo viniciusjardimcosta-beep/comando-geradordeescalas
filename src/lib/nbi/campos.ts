@@ -24,7 +24,7 @@ export const CHAVES_GRAMATICAIS = [
 
 /** Calculadas a partir de datas/quantidades já informadas. */
 export const CHAVES_CALCULADAS = [
-  "ANO", "MES_REFERENCIA", "DATA_APRESENTACAO",
+  "ANO", "MES_REFERENCIA", "MES_COMPENSACAO", "DATA_APRESENTACAO",
 ] as const;
 
 /** Conjunto completo: nunca renderizar como campo digitável. */
