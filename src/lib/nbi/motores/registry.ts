@@ -12,6 +12,7 @@ import { motorLicencaPaternidade } from "./licencaPaternidade";
 import { motorServicoExtraordinario } from "./servicoExtraordinario";
 import { motorDispensaRecompensa } from "./dispensaRecompensa";
 import { motorNomeacaoComissao } from "./nomeacaoComissao";
+import { motorServicoExtraordinarioConvocacao } from "./servicoExtraordinarioConvocacao";
 
 export * from "./tipos";
 
@@ -25,6 +26,7 @@ const MOTORES: MotorNbi[] = [
   motorServicoExtraordinario,
   motorDispensaRecompensa,
   motorNomeacaoComissao,
+  motorServicoExtraordinarioConvocacao,
 ];
 
 

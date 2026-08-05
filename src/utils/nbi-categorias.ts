@@ -26,6 +26,8 @@ const MAPA: Record<string, CategoriaNbi> = {
 
 
   servico_extraordinario: "SERVIÇO",
+  servico_extraordinario_convocacao: "SERVIÇO",
+  nomeacao_comissao_funcoes: "SERVIÇO",
   viagem: "SERVIÇO",
   nomeacao_comissao: "SERVIÇO",
 
@@ -55,7 +57,9 @@ const ORDEM_ADMINISTRATIVA: string[] = [
   // SERVIÇO
   "viagem",
   "servico_extraordinario",
+  "servico_extraordinario_convocacao",
   "nomeacao_comissao",
+  "nomeacao_comissao_funcoes",
   // ADMINISTRATIVO
   "renovacao_tempo",
   "situacao_sanitaria",

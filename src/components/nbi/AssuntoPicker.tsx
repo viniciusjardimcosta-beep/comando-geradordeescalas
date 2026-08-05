@@ -15,6 +15,7 @@ import {
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
 import { obterMotor } from "@/lib/nbi/motores/registry";
+import { podeGerarOficial, normalizarEstado } from "@/lib/nbi/homologacao";
 
 
 export interface TemplatePickable {
@@ -22,6 +23,8 @@ export interface TemplatePickable {
   titulo: string;
   titulo_documento: string | null;
   disponivel: boolean;
+  /** Bloco 10E — homologado | em_homologacao | aguardando_exemplar | bloqueado. */
+  estado_homologacao?: string | null;
 }
 
 interface Props {
@@ -39,7 +42,12 @@ interface Props {
  * Busca, categoria, acentuação e badge nunca influenciam este resultado.
  */
 export function assuntoSelecionavel(t: TemplatePickable): boolean {
-  return t.disponivel && CODIGOS_HOMOLOGADOS.has(t.codigo) && obterMotor(t.codigo) !== null;
+  return (
+    t.disponivel
+    && podeGerarOficial(t.estado_homologacao ?? "homologado")
+    && CODIGOS_HOMOLOGADOS.has(t.codigo)
+    && obterMotor(t.codigo) !== null
+  );
 }
 
 /** data-testid estável, derivado somente do código interno do motor. */
@@ -142,7 +150,11 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
                             <div className="text-sm font-medium">{t.titulo}</div>
                             {status === "nao_configurado" && (
                               <div className="text-[10px] text-muted-foreground">
-                                Modelo ainda não configurado para geração
+                                {normalizarEstado(t.estado_homologacao) === "em_homologacao"
+                                  ? "Em homologação — não disponível para geração oficial."
+                                  : normalizarEstado(t.estado_homologacao) === "aguardando_exemplar"
+                                    ? "Aguardando exemplar oficial — geração bloqueada."
+                                    : "Modelo ainda não configurado para geração"}
                               </div>
                             )}
                             {status === "proxima_etapa" && (

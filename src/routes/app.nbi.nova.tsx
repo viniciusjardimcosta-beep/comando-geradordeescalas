@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { auditarPreGeracao } from "@/lib/nbi/auditoria";
+import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
+import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
+import type { IntegranteComissao } from "@/lib/nbi/derivados";
 import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
@@ -70,6 +73,9 @@ interface TemplateRow {
   disponivel: boolean;
   ordem: number;
   texto_modelo: string;
+  estado_homologacao?: string | null;
+  subtipo?: string | null;
+  versao?: number | null;
   campos: Array<{
     chave: string;
     label: string;
@@ -170,6 +176,7 @@ function NovaNbiPage() {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
+  const [siglas, setSiglas] = useState<SiglaInstitucional[]>([]);
   const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
 
 
@@ -206,7 +213,7 @@ function NovaNbiPage() {
     setLoading(true);
     try {
       const [tpl, mil, fer, cfg, sub] = await Promise.all([
-        supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos").order("ordem"),
+        supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos,estado_homologacao,subtipo,versao").order("ordem"),
         supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical,gbm_nbi,companhia_nbi,pelotao_nbi,secao_nbi,subsecao_nbi,setor_nbi,cidade_nbi,batalhao_nbi,funcao_administrativa_nbi,funcao_documental_nbi").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
@@ -218,6 +225,12 @@ function NovaNbiPage() {
       if (mil.data) setMilitares(mil.data as MilitarNbi[]);
       if (fer.data) setFerias(fer.data as FeriasReg[]);
       if (sub.data) setSubstituicoes(sub.data as SubstituicaoAberta[]);
+      // Bloco 10E — catálogo institucional de siglas do usuário (opcional).
+      const sig = await supabase
+        .from("nbi_siglas_institucionais")
+        .select("id,sigla,descricao_oficial,forma_documental,categoria,ativo")
+        .eq("user_id", uid).eq("ativo", true);
+      if (sig.data) setSiglas(sig.data as unknown as SiglaInstitucional[]);
 
       if (cfg.data) {
         const d = cfg.data;
@@ -461,6 +474,30 @@ function NovaNbiPage() {
           texto_final: texto,
           campos_ausentes: ausentes,
           pendencias: pendencias(a),
+          // Bloco 10E — rastreabilidade de subtipo, homologação e catálogos.
+          codigo_motor: obterMotor(a.tipo)?.codigo ?? a.tipo,
+          versao_motor: t?.versao ?? 1,
+          subtipo: t?.subtipo ?? null,
+          template_id: t?.id ?? null,
+          estado_homologacao: t?.estado_homologacao ?? "homologado",
+          fundamento_aplicado: String(a.campos.FUNDAMENTO ?? "") || null,
+          fundamento_id: String(a.campos.fundamento_id ?? "") || null,
+          siglas_utilizadas: siglasUtilizadas(texto, siglas),
+          comissao: a.tipo === "nomeacao_comissao" ? (() => {
+            try {
+              const arr = JSON.parse(String(a.campos.integrantes_json ?? "[]")) as IntegranteComissao[];
+              return Array.isArray(arr)
+                ? arr.map((i, idx) => ({
+                    tipo: i.tipo,
+                    militar_id: i.militar_id ?? null,
+                    nome: i.nome ?? null,
+                    documento: i.documento ?? null,
+                    funcao: funcaoEfetiva(i as unknown as IntegranteFuncao, idx),
+                    funcao_outra: i.funcao_outra ?? null,
+                  }))
+                : [];
+            } catch { return []; }
+          })() : null,
 
 
         };

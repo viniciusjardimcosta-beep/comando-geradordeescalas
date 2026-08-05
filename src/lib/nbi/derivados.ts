@@ -233,8 +233,9 @@ export interface IntegranteComissao {
   documento_tipo?: "CPF" | "RG";
   documento?: string;
   tratamento?: "Sr." | "Sra.";
-  /** Comum */
-  funcao?: string;
+  /** Comum — função controlada na comissão (Bloco 10E). */
+  funcao?: "presidente" | "membro" | "secretario" | "relator" | "outra";
+  funcao_outra?: string;
 }
 
 export interface DadosMilitarComissao {
@@ -252,8 +253,7 @@ export function trechoIntegrante(
     if (!militar) return "";
     const base = [militar.posto_quadro, militar.nome].filter(Boolean).join(" ").trim();
     const id = militar.matricula ? `, ID FUNC ${militar.matricula}` : "";
-    const fx = i.funcao?.trim() ? `, ${i.funcao.trim()}` : "";
-    return `${base}${id}${fx}`;
+    return `${base}${id}`;
   }
   const trat = i.tratamento ?? "Sr.";
   const nome = (i.nome ?? "").trim();
@@ -261,8 +261,7 @@ export function trechoIntegrante(
   const doc = (i.documento ?? "").trim()
     ? `, ${i.documento_tipo ?? "CPF"} ${(i.documento ?? "").trim()}`
     : "";
-  const fx = i.funcao?.trim() ? `, ${i.funcao.trim()}` : "";
-  return `${trat} ${nome}${doc}${fx}`;
+  return `${trat} ${nome}${doc}`;
 }
 
 /** Junta os integrantes conforme a redação oficial: "A, B e C". */
