@@ -20,6 +20,11 @@ import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
 import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
 import type { IntegranteComissao } from "@/lib/nbi/derivados";
 import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
+import { ConsistenciaAssunto } from "@/components/nbi/ConsistenciaAssunto";
+import { useBaseConsistencia } from "@/lib/nbi/consistencia/carregar";
+import { avaliarConsistenciaNbi } from "@/lib/nbi/consistencia";
+import type { BaseConsistencia } from "@/lib/nbi/consistencia";
+import type { ItemAuditoria } from "@/lib/nbi/auditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
 import {
@@ -187,6 +192,8 @@ function NovaNbiPage() {
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
   const [siglas, setSiglas] = useState<SiglaInstitucional[]>([]);
   const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
+  // Bloco 12 — base do motor de consistência, carregada UMA vez em lote.
+  const { base: baseConsistencia } = useBaseConsistencia(userId ?? undefined);
 
 
   const [rascunho, setRascunho] = useState<Rascunho>({
@@ -640,6 +647,8 @@ function NovaNbiPage() {
           ferias={ferias}
           substituicoes={substituicoes}
           onRecarregarSubstituicoes={recarregarSubstituicoes}
+          baseConsistencia={baseConsistencia}
+          documentoId={documentoId}
 
           adicionar={adicionarAssunto}
           gerarApresentacao={gerarApresentacaoDe}
@@ -664,6 +673,7 @@ function NovaNbiPage() {
           salvando={salvando}
           documentoId={documentoId}
           onRecarregarSubstituicoes={recarregarSubstituicoes}
+          baseConsistencia={baseConsistencia}
 
         />
       )}
@@ -782,6 +792,7 @@ function Etapa1({
 
 function Etapa2({
   rascunho, templates, militares, ferias, substituicoes, onRecarregarSubstituicoes,
+  baseConsistencia, documentoId,
   adicionar, gerarApresentacao, atualizar, atualizarCampo, remover, mover,
   onBack, onNext,
 }: {
@@ -791,6 +802,8 @@ function Etapa2({
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
   onRecarregarSubstituicoes: () => Promise<void> | void;
+  baseConsistencia: BaseConsistencia;
+  documentoId: string | null;
 
   adicionar: (codigo: string) => void;
   gerarApresentacao: (assunto: AssuntoLocal) => void;
@@ -842,6 +855,9 @@ function Etapa2({
               ferias={ferias}
               substituicoes={substituicoes}
               onRecarregarSubstituicoes={onRecarregarSubstituicoes}
+              baseConsistencia={baseConsistencia}
+              documentoId={documentoId}
+              dataDocumento={rascunho.data_documento}
 
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               unidade={rascunho.unidade}
@@ -882,7 +898,8 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, unidade,
+  index, assunto, template, militares, ferias, substituicoes, onRecarregarSubstituicoes,
+  baseConsistencia, documentoId, dataDocumento, anoNbi, unidade,
   onGerarApresentacao, onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -892,6 +909,9 @@ function AssuntoCard({
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
   onRecarregarSubstituicoes: () => Promise<void> | void;
+  baseConsistencia: BaseConsistencia;
+  documentoId: string | null;
+  dataDocumento: string;
   anoNbi: number;
 
   unidade: { nome: string; sigla: string };
@@ -1499,15 +1519,31 @@ function AssuntoCard({
             );
           })}
       </div>
+
+      {/* Bloco 12 — consistência institucional do assunto (informativa). */}
+      <div className="mt-3">
+        <ConsistenciaAssunto
+          base={baseConsistencia}
+          militarId={assunto.militar_id}
+          militarTitularId={assunto.militar_titular_id}
+          substituicaoId={assunto.substituicao_id ?? null}
+          tipoAssunto={assunto.tipo}
+          subtipo={typeof assunto.campos["SUBTIPO"] === "string" ? (assunto.campos["SUBTIPO"] as string) : null}
+          campos={assunto.campos}
+          dataDocumento={dataDocumento}
+          documentoId={documentoId}
+        />
+      </div>
     </div>
   );
 }
+
 
 // ============ ETAPA 3 ============
 
 function Etapa3({
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, salvando,
-  documentoId, onRecarregarSubstituicoes,
+  documentoId, onRecarregarSubstituicoes, baseConsistencia,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -1520,6 +1556,7 @@ function Etapa3({
   salvando: boolean;
   documentoId: string | null;
   onRecarregarSubstituicoes: () => Promise<void> | void;
+  baseConsistencia: BaseConsistencia;
 
 }) {
   const gerar = useServerFn(gerarNbi);
@@ -1594,6 +1631,28 @@ function Etapa3({
     return achados;
   });
 
+  // Bloco 12 — consistência institucional agregada dos assuntos do rascunho.
+  const itensConsistencia: ItemAuditoria[] = rascunho.assuntos.flatMap((a) => {
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const nome = militares.find((m) => m.id === a.militar_id)?.nome ?? "militar não informado";
+    const r = avaliarConsistenciaNbi({
+      militarId: a.militar_id ?? null,
+      tipoAssunto: a.tipo,
+      subtipo: (typeof a.campos["SUBTIPO"] === "string" ? (a.campos["SUBTIPO"] as string) : null),
+      campos: a.campos,
+      dataDocumento: rascunho.data_documento,
+      documentoId,
+      substituicaoId: a.substituicao_id ?? null,
+      militarTitularId: a.militar_titular_id ?? null,
+      base: baseConsistencia,
+    });
+    const prefixo = `${t?.titulo ?? a.tipo} · ${nome}`;
+    return [
+      ...r.bloqueios.map((x) => ({ status: "erro" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
+      ...r.alertas.map((x) => ({ status: "alerta" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
+    ];
+  });
+
   // Bloco 10D — auditoria pré-geração (somente leitura, nunca altera dados).
   const auditoria = auditarPreGeracao({
     assuntos: rascunho.assuntos.map((a) => {
@@ -1614,6 +1673,7 @@ function Etapa3({
     cabecalhoOk: Boolean(rascunho.unidade.nome),
     digitadorOk: Boolean(rascunho.digitador.nome),
     comandanteOk: Boolean(rascunho.comandante.nome),
+    consistencia: itensConsistencia,
     numeracaoOk: rascunho.modo_numeracao === "manual"
       ? /\d/.test(rascunho.numero)
       : previsto !== null,

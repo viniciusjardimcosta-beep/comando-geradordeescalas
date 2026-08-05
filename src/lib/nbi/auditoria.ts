@@ -39,7 +39,10 @@ export interface EntradaAuditoria {
   digitadorOk: boolean;
   comandanteOk: boolean;
   numeracaoOk: boolean;
+  /** Bloco 12 — achados do motor de consistência institucional. */
+  consistencia?: ItemAuditoria[];
 }
+
 
 export interface ResultadoAuditoria {
   grupos: GrupoAuditoria[];
@@ -81,7 +84,7 @@ function grupoDaPendencia(p: string): "militares" | "institucional" | "datas" | 
 export function auditarPreGeracao(e: EntradaAuditoria): ResultadoAuditoria {
   const buckets: Record<string, ItemAuditoria[]> = {
     militares: [], institucional: [], datas: [], substituicoes: [],
-    redacoes: [], ortografia: [], assinaturas: [], numeracao: [],
+    redacoes: [], ortografia: [], assinaturas: [], numeracao: [], consistencia: [],
   };
 
   for (const a of e.assuntos) {
@@ -122,6 +125,7 @@ export function auditarPreGeracao(e: EntradaAuditoria): ResultadoAuditoria {
   }
   if (!e.digitadorOk) buckets.assinaturas.push({ status: "erro", mensagem: "Digitador não configurado" });
   if (!e.comandanteOk) buckets.assinaturas.push({ status: "erro", mensagem: "Comandante não configurado" });
+  for (const item of e.consistencia ?? []) buckets.consistencia.push(item);
   if (!e.numeracaoOk) buckets.numeracao.push({ status: "erro", mensagem: "Numeração indisponível para este documento" });
 
   const grupos: GrupoAuditoria[] = [
@@ -133,6 +137,7 @@ export function auditarPreGeracao(e: EntradaAuditoria): ResultadoAuditoria {
     grupo("ortografia", "Ortografia e topônimos", buckets.ortografia, "Topônimos e siglas institucionais validados"),
     grupo("assinaturas", "Assinaturas", buckets.assinaturas, "Digitador e comandante configurados"),
     grupo("numeracao", "Numeração", buckets.numeracao, "Numeração válida"),
+    grupo("consistencia", "Consistência institucional", buckets.consistencia, "Sem conflitos institucionais identificados"),
   ];
 
   const erros = grupos.reduce((n, g) => n + g.itens.filter((i) => i.status === "erro").length, 0);
