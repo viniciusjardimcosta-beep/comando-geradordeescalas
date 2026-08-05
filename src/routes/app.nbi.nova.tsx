@@ -1303,7 +1303,7 @@ function Etapa3({
     return `${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"} · ${d.indices.length}x`;
   });
 
-  const bloqueado = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
+  const bloqueadoBase = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
 
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
