@@ -52,7 +52,12 @@ const TEMPLATES: TemplatePickable[] = [
 const HOMOLOGADOS = TEMPLATES.filter(assuntoSelecionavel).map((t) => t.codigo);
 const BLOQUEADOS = TEMPLATES.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  // Radix/cmdk usam portais; garante DOM zerado entre provas.
+  document.body.innerHTML = "";
+});
+
 
 
 
