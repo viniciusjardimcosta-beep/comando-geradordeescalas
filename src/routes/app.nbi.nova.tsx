@@ -1302,6 +1302,35 @@ function AssuntoCard({
               );
             }
 
+            // ── Bloco 11A — grau de parentesco do luto (catálogo controlado) ──
+            if (chaveUp === "MOTIVO_LUTO") {
+              const atual = grauPorTexto(String(val ?? ""));
+              return (
+                <div key={c.chave} className="md:col-span-2">
+                  <Label>{c.label}{c.obrigatorio && <span className="text-destructive"> *</span>}</Label>
+                  <Select
+                    value={atual?.id ?? ""}
+                    onValueChange={(id) => {
+                      const g = GRAUS_LUTO.find((x) => x.id === id);
+                      if (g) onCampo(c.chave, g.texto);
+                    }}
+                  >
+                    <SelectTrigger className="mt-1" data-testid={tid}>
+                      <SelectValue placeholder="Selecione o grau de parentesco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GRAUS_LUTO.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Texto documental: <em>{atual?.texto ?? "—"}</em>
+                  </p>
+                </div>
+              );
+            }
+
             // ── Função assumida / dispensada (composição a partir do titular) ──
             if (chaveUp === "FUNCAO_ASSUMIDA" || chaveUp === "FUNCAO_DISPENSADA") {
               const titular = militares.find((m) => m.id === assunto.militar_titular_id) ?? null;
