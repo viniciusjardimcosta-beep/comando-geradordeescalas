@@ -49,8 +49,10 @@ const ORDEM_ADMINISTRATIVA: string[] = [
   "ferias",
   "apresentacao",
   "licenca_paternidade",
+  "nupcias",
   "luto",
   "dispensa_recompensa",
+
   // MOVIMENTAÇÕES
   "assuncao_funcao",
   "dispensa_funcao",
