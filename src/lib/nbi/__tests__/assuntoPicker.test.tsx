@@ -9,12 +9,16 @@ import { AssuntoPicker, testIdDoAssunto, assuntoSelecionavel, type TemplatePicka
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 
 // jsdom não implementa ResizeObserver (usado pelo cmdk) nem Pointer Capture.
-class ResizeObserverMock {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverMock;
+vi.hoisted(() => {
+  class ResizeObserverMock {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverMock;
+  (globalThis as unknown as { window?: { ResizeObserver: unknown } }).window!.ResizeObserver = ResizeObserverMock;
+});
+
 
 Object.defineProperties(HTMLElement.prototype, {
   hasPointerCapture: { configurable: true, value: () => false },
