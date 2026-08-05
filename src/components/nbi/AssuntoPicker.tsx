@@ -14,6 +14,7 @@ import {
   CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS,
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
+import { obterMotor } from "@/lib/nbi/motores/registry";
 
 
 export interface TemplatePickable {
@@ -32,9 +33,24 @@ interface Props {
   testId?: string;
 }
 
+/**
+ * Regra central única de habilitação. Um assunto só é bloqueado quando não é
+ * homologado, o template não está disponível ou não existe motor registrado.
+ * Busca, categoria, acentuação e badge nunca influenciam este resultado.
+ */
+export function assuntoSelecionavel(t: TemplatePickable): boolean {
+  return t.disponivel && CODIGOS_HOMOLOGADOS.has(t.codigo) && obterMotor(t.codigo) !== null;
+}
+
+/** data-testid estável, derivado somente do código interno do motor. */
+export function testIdDoAssunto(codigo: string): string {
+  return `nbi-assunto-option-${codigo}`;
+}
+
 function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
+
 
 export function AssuntoPicker({ templates, onEscolher, label, size = "default", testId }: Props) {
   const [open, setOpen] = useState(false);
@@ -101,7 +117,7 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
               return (
                 <CommandGroup key={cat} heading={cat}>
                   {itens.map((t) => {
-                    const homologado = t.disponivel && CODIGOS_HOMOLOGADOS.has(t.codigo);
+                    const homologado = assuntoSelecionavel(t);
                     const status: "disponivel" | "nao_configurado" | "proxima_etapa" =
                       homologado ? "disponivel"
                         : (t.disponivel ? "proxima_etapa" : "nao_configurado");
@@ -111,8 +127,13 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
                         value={t.codigo}
                         onSelect={() => escolher(t.codigo, homologado)}
                         disabled={!homologado}
+                        data-testid={testIdDoAssunto(t.codigo)}
+                        data-codigo={t.codigo}
+                        data-disponivel={homologado ? "true" : "false"}
+                        aria-disabled={homologado ? "false" : "true"}
                         className={homologado ? "" : "opacity-60"}
                       >
+
                         <div className="flex w-full items-center gap-2">
                           {homologado
                             ? <Check className="h-4 w-4 text-emerald-600" />
