@@ -747,7 +747,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias, substituicoes, anoNbi, unidade,
+  index, assunto, template, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, unidade,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -756,7 +756,9 @@ function AssuntoCard({
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
   anoNbi: number;
+
   unidade: { nome: string; sigla: string };
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
