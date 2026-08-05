@@ -1553,8 +1553,13 @@ function Etapa3({
 
 
 // ============ REVISÃO ORTOGRÁFICA (pré-conferência) ============
-// Recomputa sugestões nos campos livres de todos os assuntos.
-// Não bloqueia a geração — o operador aplica ou mantém explicitamente.
+// Bloco 10C — regras de estabilidade:
+//  * derivação 100% pura (nenhum setState durante render / nenhum efeito
+//    que grave rascunho, snapshot ou banco);
+//  * o dicionário só é carregado quando existe pelo menos um campo livre
+//    preenchido — e o carregamento agora roda em Web Worker;
+//  * a lista é memoizada por (assuntos, templates, dicionário, ignoradas);
+//  * nenhuma sugestão é aplicada automaticamente: o operador escolhe.
 function RevisaoOrtografica({
   assuntos, templates, militares, onAplicar,
 }: {
@@ -1563,8 +1568,34 @@ function RevisaoOrtografica({
   militares: MilitarNbi[];
   onAplicar: (assuntoId: string, chave: string, novoValor: string) => void;
 }) {
-  const { spell } = useSpellchecker(true);
   const [ignoradas, setIgnoradas] = useState<Set<string>>(new Set());
+
+  // Campos derivados/automáticos e textos oficiais nunca são revisados.
+  const CHAVES_DERIVADAS = [
+    "NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A",
+    "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR",
+    "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "PERIODO", "ANO",
+  ];
+
+  // Etapa pura 1 — quais campos livres existem e valem revisão.
+  const campos = useMemo(() => {
+    const out: Array<{ assuntoId: string; titulo: string; chave: string; label: string; valor: string }> = [];
+    for (const a of assuntos) {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      if (!t) continue;
+      for (const c of t.campos) {
+        if (c.tipo !== "texto" && c.tipo !== "texto_longo") continue;
+        if (CHAVES_DERIVADAS.includes(c.chave)) continue;
+        const v = String(a.campos[c.chave] ?? "");
+        if (!v.trim()) continue;
+        out.push({ assuntoId: a.id, titulo: t.titulo, chave: c.chave, label: c.label, valor: v });
+      }
+    }
+    return out;
+  }, [assuntos, templates]);
+
+  // O dicionário só é buscado se houver algo a revisar.
+  const { spell } = useSpellchecker(campos.length > 0);
 
   const dicionarioExtras = useMemo(() => montarDicionarioDinamico({
     militaresNome: militares.map((m) => m.nome),
@@ -1572,6 +1603,7 @@ function RevisaoOrtografica({
     lotacoes: militares.map((m) => m.lotacao_nbi),
   }), [militares]);
 
+  // Etapa pura 2 — sugestões. Sem efeitos colaterais, sem persistência.
   const itens = useMemo(() => {
     const out: Array<{
       assuntoId: string;
@@ -1581,26 +1613,16 @@ function RevisaoOrtografica({
       valor: string;
       sugestoes: ReturnType<typeof sugestoesTexto>;
     }> = [];
-    for (const a of assuntos) {
-      const t = templates.find((x) => x.codigo === a.tipo);
-      if (!t) continue;
-      for (const c of t.campos) {
-        if (c.tipo !== "texto" && c.tipo !== "texto_longo") continue;
-        // Ignora campos derivados/automáticos.
-        if (["NOME", "ID_FUNC", "LOTACAO", "POSTO_QUADRO", "ARTIGO_O_A", "ARTIGO_AO_A",
-             "NOME_TITULAR", "ID_FUNC_TITULAR", "LOTACAO_TITULAR", "POSTO_QUADRO_TITULAR",
-             "QTD_DIAS_EXTENSO", "TERMINACAO_RETORNO", "PERIODO", "ANO"].includes(c.chave)) continue;
-        const v = String(a.campos[c.chave] ?? "");
-        if (!v.trim()) continue;
-        const s = sugestoesTexto(v, spell, { extras: dicionarioExtras, ignoradas });
-        if (s.length === 0) continue;
-        out.push({ assuntoId: a.id, titulo: t.titulo, chave: c.chave, label: c.label, valor: v, sugestoes: s });
-      }
+    for (const c of campos) {
+      const s = sugestoesTexto(c.valor, spell, { extras: dicionarioExtras, ignoradas });
+      if (s.length === 0) continue;
+      out.push({ ...c, sugestoes: s });
     }
     return out;
-  }, [assuntos, templates, spell, dicionarioExtras, ignoradas]);
+  }, [campos, spell, dicionarioExtras, ignoradas]);
 
   if (itens.length === 0) return null;
+
 
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
