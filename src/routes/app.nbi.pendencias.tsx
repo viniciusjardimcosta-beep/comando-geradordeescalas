@@ -11,8 +11,9 @@ import { Loader2, CalendarClock, UserCheck, Clock, AlertTriangle, Lightbulb, His
 import { formatarDataBR } from "@/utils/nbi";
 import {
   apresentacoesPendentes, substituicoesPendentes, folgasPrevistas,
-  avaliarConsistenciaNbi, useBaseConsistencia,
+  avaliarConsistenciaNbi,
 } from "@/lib/nbi/consistencia";
+import { useBaseConsistencia } from "@/lib/nbi/consistencia/carregar";
 import { LinhaDoTempoMilitar } from "@/components/nbi/LinhaDoTempoMilitar";
 
 export const Route = createFileRoute("/app/nbi/pendencias")({

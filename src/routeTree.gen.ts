@@ -23,6 +23,7 @@ import { Route as AppEscalasRouteImport } from './routes/app.escalas'
 import { Route as AppAuditoriaRouteImport } from './routes/app.auditoria'
 import { Route as AppAssinaturasRouteImport } from './routes/app.assinaturas'
 import { Route as AppAssinaturaRouteImport } from './routes/app.assinatura'
+import { Route as AppNbiPendenciasRouteImport } from './routes/app.nbi.pendencias'
 import { Route as AppNbiNovaRouteImport } from './routes/app.nbi.nova'
 import { Route as AppNbiHistoricoRouteImport } from './routes/app.nbi.historico'
 import { Route as AppNbiConfiguracoesRouteImport } from './routes/app.nbi.configuracoes'
@@ -104,6 +105,11 @@ const AppAssinaturaRoute = AppAssinaturaRouteImport.update({
   path: '/assinatura',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNbiPendenciasRoute = AppNbiPendenciasRouteImport.update({
+  id: '/nbi/pendencias',
+  path: '/nbi/pendencias',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppNbiNovaRoute = AppNbiNovaRouteImport.update({
   id: '/nbi/nova',
   path: '/nbi/nova',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/app/nbi/historico': typeof AppNbiHistoricoRoute
   '/app/nbi/nova': typeof AppNbiNovaRoute
+  '/app/nbi/pendencias': typeof AppNbiPendenciasRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -202,6 +209,7 @@ export interface FileRoutesByTo {
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/app/nbi/historico': typeof AppNbiHistoricoRoute
   '/app/nbi/nova': typeof AppNbiNovaRoute
+  '/app/nbi/pendencias': typeof AppNbiPendenciasRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/app/nbi/configuracoes': typeof AppNbiConfiguracoesRoute
   '/app/nbi/historico': typeof AppNbiHistoricoRoute
   '/app/nbi/nova': typeof AppNbiNovaRoute
+  '/app/nbi/pendencias': typeof AppNbiPendenciasRoute
   '/api/public/webhooks/asaas': typeof ApiPublicWebhooksAsaasRoute
   '/api/public/webhooks/nexano': typeof ApiPublicWebhooksNexanoRoute
   '/api/public/webhooks/stripe': typeof ApiPublicWebhooksStripeRoute
@@ -257,6 +266,7 @@ export interface FileRouteTypes {
     | '/app/nbi/configuracoes'
     | '/app/nbi/historico'
     | '/app/nbi/nova'
+    | '/app/nbi/pendencias'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -282,6 +292,7 @@ export interface FileRouteTypes {
     | '/app/nbi/configuracoes'
     | '/app/nbi/historico'
     | '/app/nbi/nova'
+    | '/app/nbi/pendencias'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -308,6 +319,7 @@ export interface FileRouteTypes {
     | '/app/nbi/configuracoes'
     | '/app/nbi/historico'
     | '/app/nbi/nova'
+    | '/app/nbi/pendencias'
     | '/api/public/webhooks/asaas'
     | '/api/public/webhooks/nexano'
     | '/api/public/webhooks/stripe'
@@ -427,6 +439,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAssinaturaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/nbi/pendencias': {
+      id: '/app/nbi/pendencias'
+      path: '/nbi/pendencias'
+      fullPath: '/app/nbi/pendencias'
+      preLoaderRoute: typeof AppNbiPendenciasRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/nbi/nova': {
       id: '/app/nbi/nova'
       path: '/nbi/nova'
@@ -525,6 +544,7 @@ interface AppRouteChildren {
   AppNbiConfiguracoesRoute: typeof AppNbiConfiguracoesRoute
   AppNbiHistoricoRoute: typeof AppNbiHistoricoRoute
   AppNbiNovaRoute: typeof AppNbiNovaRoute
+  AppNbiPendenciasRoute: typeof AppNbiPendenciasRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -540,6 +560,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppNbiConfiguracoesRoute: AppNbiConfiguracoesRoute,
   AppNbiHistoricoRoute: AppNbiHistoricoRoute,
   AppNbiNovaRoute: AppNbiNovaRoute,
+  AppNbiPendenciasRoute: AppNbiPendenciasRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -560,13 +581,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
