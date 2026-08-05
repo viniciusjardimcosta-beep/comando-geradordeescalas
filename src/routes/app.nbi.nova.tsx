@@ -898,6 +898,7 @@ function AssuntoCard({
   const [avisoSugestao, setAvisoSugestao] = useState<string | null>(null);
 
   const usaFerias = assunto.tipo === "ferias" || assunto.tipo === "apresentacao";
+  const subtipoApresentacaoSel = String(assunto.campos.SUBTIPO ?? "") || SUBTIPO_APRESENTACAO_PADRAO;
 
   // ── Bloco 9B — campos derivados (cálculo/banco/configurações) ──
   const derivados = useMemo(
