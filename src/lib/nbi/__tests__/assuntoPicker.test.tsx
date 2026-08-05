@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssuntoPicker, testIdDoAssunto, assuntoSelecionavel, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
-import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
+import { CODIGOS_HOMOLOGADOS, ehVarianteInterna } from "@/utils/nbi-categorias";
 
 // jsdom não implementa ResizeObserver (usado pelo cmdk) nem Pointer Capture.
 vi.hoisted(() => {
