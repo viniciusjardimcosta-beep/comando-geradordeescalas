@@ -16,8 +16,10 @@ const MAPA: Record<string, CategoriaNbi> = {
   ferias: "AFASTAMENTOS",
   apresentacao: "AFASTAMENTOS",
   licenca_paternidade: "AFASTAMENTOS",
+  nupcias: "AFASTAMENTOS",
   luto: "AFASTAMENTOS",
   dispensa_recompensa: "AFASTAMENTOS",
+
 
   assuncao_funcao: "MOVIMENTAÇÕES",
   assuncao_cargo_vago: "MOVIMENTAÇÕES",
