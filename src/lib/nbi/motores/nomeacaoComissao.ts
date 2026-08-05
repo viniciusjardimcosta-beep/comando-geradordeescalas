@@ -4,6 +4,19 @@
 // a composição (presidente, membros e civis) é informada como texto controlado.
 import type { ContextoMotor, MotorNbi } from "./tipos";
 import { resolverBase, filtrarPlaceholders, validarCamposTemplate } from "./comum";
+import {
+  validarFuncoesComissao, exigeVarianteEspecial, codigoTemplateComissao,
+  funcaoEfetiva, type IntegranteFuncao,
+} from "@/lib/nbi/comissao";
+
+/** Lê a composição estruturada montada pelo formulário. */
+function lerIntegrantes(ctx: ContextoMotor): Array<Record<string, unknown>> {
+  try {
+    const raw = String(ctx.campos.integrantes_json ?? "");
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? (arr as Array<Record<string, unknown>>) : [];
+  } catch { return []; }
+}
 
 const SCHEMA = ["DATA_INICIO", "COMPOSICAO", "FINALIDADE"];
 
@@ -14,6 +27,11 @@ export const motorNomeacaoComissao: MotorNbi = {
   schema: SCHEMA,
 
   resolverCampos(ctx) { return resolverBase(ctx); },
+
+  // Variante com Secretário/Relator tem redação própria (ainda sem exemplar).
+  codigoTemplateEfetivo(ctx) {
+    return codigoTemplateComissao(lerIntegrantes(ctx) as unknown as IntegranteFuncao[]);
+  },
 
   montarPlaceholders(ctx) {
     return filtrarPlaceholders(this.resolverCampos(ctx), SCHEMA, ctx.camposTemplate);
@@ -26,18 +44,23 @@ export const motorNomeacaoComissao: MotorNbi = {
     if (!v.FINALIDADE) out.push("finalidade da comissão não selecionada");
 
     // Bloco 9B: a composição é montada pelo formulário estruturado.
-    let integrantes: Array<Record<string, unknown>> = [];
-    try {
-      const raw = String(ctx.campos.integrantes_json ?? "");
-      const arr = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(arr)) integrantes = arr as Array<Record<string, unknown>>;
-    } catch { integrantes = []; }
+    const integrantes = lerIntegrantes(ctx);
 
     if (integrantes.length === 0) {
       if (!v.COMPOSICAO) out.push("nenhum integrante informado na comissão");
     } else {
+      out.push(...validarFuncoesComissao(
+        integrantes as unknown as IntegranteFuncao[],
+        { confirmarDoisPresidentes: ctx.campos.confirmar_dois_presidentes === true },
+      ));
+      if (exigeVarianteEspecial(integrantes as unknown as IntegranteFuncao[])) {
+        out.push(
+          "comissão com Secretário/Relator: variante aguardando exemplar oficial homologado — geração bloqueada",
+        );
+      }
       integrantes.forEach((i, idx) => {
-        const pos = idx === 0 ? "presidente" : `${idx + 1}º integrante`;
+        const f = funcaoEfetiva(i as unknown as IntegranteFuncao, idx);
+        const pos = f === "presidente" ? "presidente" : `${idx + 1}º integrante`;
         if (i.tipo === "militar") {
           if (!i.militar_id) out.push(`${pos}: militar não selecionado`);
         } else {
