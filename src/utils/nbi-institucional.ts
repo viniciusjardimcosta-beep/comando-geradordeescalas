@@ -207,7 +207,12 @@ export function sugerirInstitucional(
   });
   if (out !== antesPlural) motivos.push('"Bombeiro Militar" → "Bombeiros Militar"');
 
-  // 2) Siglas canônicas, ordinais e capitalização, token a token
+  // 2) Concordância de ordinal separado por espaço ("8º Companhia" → "8ª Companhia")
+  const antesOrd = out;
+  out = normalizarInstitucional(out);
+  if (out !== antesOrd) motivos.push("Concordância do ordinal (º/ª)");
+
+  // 3) Siglas canônicas, ordinais colados e capitalização, token a token
   const antes = out;
   out = normalizarExpressao(out, modo);
   if (out !== antes) motivos.push("Padronização institucional (siglas e ordinais)");
