@@ -15,6 +15,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { auditarPreGeracao } from "@/lib/nbi/auditoria";
+import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
 import {
@@ -1491,6 +1493,8 @@ function Etapa3({
           </div>
         )}
 
+
+        {!gerado && <PainelAuditoria resultado={auditoria} />}
 
         <RevisaoOrtografica
           assuntos={rascunho.assuntos}
