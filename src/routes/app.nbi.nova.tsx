@@ -166,6 +166,18 @@ function NovaNbiPage() {
     void carregar(userId, rascunhoId);
   }, [userId, rascunhoId]);
 
+  // Substituições em aberto mudam a cada NBI gerada — a lista precisa poder
+  // ser reconsultada sem recarregar a página inteira.
+  async function recarregarSubstituicoes() {
+    if (!userId) return;
+    const { data } = await supabase.from("nbi_substituicoes")
+      .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista")
+      .eq("user_id", userId).eq("status", "aberta").order("created_at", { ascending: false });
+    setSubstituicoes((data ?? []) as SubstituicaoAberta[]);
+  }
+
+
+
   async function carregar(uid: string, rascId: string | null) {
     setLoading(true);
     try {
@@ -499,6 +511,8 @@ function NovaNbiPage() {
           militares={militares}
           ferias={ferias}
           substituicoes={substituicoes}
+          onRecarregarSubstituicoes={recarregarSubstituicoes}
+
           adicionar={adicionarAssunto}
           atualizar={atualizarAssunto}
           atualizarCampo={atualizarCampo}
@@ -520,6 +534,8 @@ function NovaNbiPage() {
           onSalvar={salvarRascunho}
           salvando={salvando}
           documentoId={documentoId}
+          onRecarregarSubstituicoes={recarregarSubstituicoes}
+
         />
       )}
     </div>
@@ -636,7 +652,7 @@ function Etapa1({
 // ============ ETAPA 2 ============
 
 function Etapa2({
-  rascunho, templates, militares, ferias, substituicoes,
+  rascunho, templates, militares, ferias, substituicoes, onRecarregarSubstituicoes,
   adicionar, atualizar, atualizarCampo, remover, mover,
   onBack, onNext,
 }: {
@@ -645,6 +661,8 @@ function Etapa2({
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
   adicionar: (codigo: string) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
@@ -692,6 +710,8 @@ function Etapa2({
               militares={militares}
               ferias={ferias}
               substituicoes={substituicoes}
+              onRecarregarSubstituicoes={onRecarregarSubstituicoes}
+
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               unidade={rascunho.unidade}
 
@@ -729,7 +749,7 @@ function Etapa2({
 }
 
 function AssuntoCard({
-  index, assunto, template, militares, ferias, substituicoes, anoNbi, unidade,
+  index, assunto, template, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, unidade,
   onChange, onCampo, onRemove, onUp, onDown,
 }: {
   index: number;
@@ -738,7 +758,9 @@ function AssuntoCard({
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
   anoNbi: number;
+
   unidade: { nome: string; sigla: string };
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
@@ -996,6 +1018,8 @@ function AssuntoCard({
           militares={militares}
           ferias={ferias}
           substituicoes={substituicoes}
+          onRecarregarSubstituicoes={onRecarregarSubstituicoes}
+
           anoNbi={anoNbi}
           onChange={onChange}
           onCampo={onCampo}
@@ -1179,7 +1203,7 @@ function AssuntoCard({
 
 function Etapa3({
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, salvando,
-  documentoId,
+  documentoId, onRecarregarSubstituicoes,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -1191,6 +1215,8 @@ function Etapa3({
   onSalvar: () => Promise<void> | void;
   salvando: boolean;
   documentoId: string | null;
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
 }) {
   const gerar = useServerFn(gerarNbi);
   const baixar = useServerFn(baixarNbi);
@@ -1218,7 +1244,32 @@ function Etapa3({
   });
   const totalPend = resumoPend.reduce((acc, r) => acc + r.lista.length, 0);
   const semAssuntos = rascunho.assuntos.length === 0;
-  const bloqueado = semAssuntos || totalPend > 0;
+
+  // Detector de duplicidade: mesmo assunto, mesmo militar e mesma data de início
+  // não pode ser publicado duas vezes na mesma NBI.
+  const duplicados = (() => {
+    const vistos = new Map<string, number>();
+    const achados: string[] = [];
+    rascunho.assuntos.forEach((a) => {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      const chave = [
+        a.tipo,
+        a.militar_id ?? "",
+        String(a.campos.DATA_INICIO ?? ""),
+        String(a.campos.PERIODO ?? ""),
+      ].join("|");
+      const n = (vistos.get(chave) ?? 0) + 1;
+      vistos.set(chave, n);
+      if (n === 2) {
+        const militar = militares.find((m) => m.id === a.militar_id);
+        achados.push(`${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"}`);
+      }
+    });
+    return achados;
+  })();
+
+  const bloqueado = semAssuntos || totalPend > 0 || duplicados.length > 0;
+
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
@@ -1274,6 +1325,9 @@ function Etapa3({
         toast.error("Falha ao gerar NBI", { description: r.code });
       } else {
         setGerado({ numero: r.numero ?? 0, ano: r.ano ?? new Date().getFullYear() });
+        // Assunções recém-registradas passam a valer para a próxima dispensa.
+        void onRecarregarSubstituicoes();
+
         toast.success(`NBI nº ${String(r.numero ?? 0).padStart(3, "0")}/${r.ano} gerada`);
       }
     } catch (e) {
@@ -1329,7 +1383,25 @@ function Etapa3({
           </div>
         )}
 
+        {/* Duplicidade — bloqueia a emissão até o operador remover o item repetido */}
+        {duplicados.length > 0 && !gerado && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Assuntos duplicados nesta NBI
+            </div>
+            <ul className="list-disc pl-5 text-xs">
+              {duplicados.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              O mesmo assunto, para o mesmo militar e com a mesma data de início, foi lançado mais de
+              uma vez. Volte à Etapa 2 e remova a repetição antes de gerar.
+            </p>
+          </div>
+        )}
+
         {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
+
         {divergenciasAno.length > 0 && !gerado && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <div className="mb-2 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
@@ -1579,12 +1651,14 @@ function MotivoTitularField({
 
 // ============ Origem dos dados de Assunção/Dispensa (Bloco 8C) ============
 function OrigemDadosFuncao({
-  assunto, militares, ferias, substituicoes, anoNbi, onChange, onCampo,
+  assunto, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, onChange, onCampo,
 }: {
   assunto: AssuntoLocal;
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
   anoNbi: number;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
@@ -1634,9 +1708,24 @@ function OrigemDadosFuncao({
     });
     if (s.funcao) onCampo("FUNCAO_DISPENSADA", s.funcao);
     if (s.motivo) onCampo("MOTIVO_RETORNO", s.motivo);
-    if (s.data_fim_prevista) onCampo("DATA_INICIO", s.data_fim_prevista);
-    toast.success("Assunção vinculada — confirme a data de dispensa antes de gerar.");
+    // Data de dispensa: prevista na assunção ou, na falta dela, derivada do
+    // período de férias do titular (dia seguinte ao término).
+    let dataDispensa = s.data_fim_prevista ?? "";
+    if (!dataDispensa && s.titular_militar_id) {
+      const f = ferias
+        .filter((x) => x.militar_id === s.titular_militar_id
+          && (!s.data_inicio || x.data_fim >= s.data_inicio))
+        .sort((a, b) => a.data_inicio.localeCompare(b.data_inicio))[0];
+      if (f) dataDispensa = somarDiasISO(f.data_fim, 1);
+    }
+    if (dataDispensa) onCampo("DATA_INICIO", dataDispensa);
+    toast.success(
+      dataDispensa
+        ? "Assunção vinculada — confirme a data de dispensa antes de gerar."
+        : "Assunção vinculada — informe manualmente a data de dispensa.",
+    );
   }
+
 
   const opcoes: Array<{ v: NonNullable<AssuntoLocal["origem_dados"]>; label: string }> = ehAssuncao
     ? [
@@ -1708,11 +1797,23 @@ function OrigemDadosFuncao({
 
       {origem === "assuncao" && !ehAssuncao && (
         <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              {substituicoes.length === 0
+                ? "Nenhuma assunção em aberto encontrada."
+                : `${substituicoes.length} assunção(ões) de função em aberto.`}
+            </p>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void onRecarregarSubstituicoes()}>
+              Atualizar lista
+            </Button>
+          </div>
           {substituicoes.length === 0 ? (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              Nenhuma assunção de função em aberto. Use férias cadastradas ou preenchimento manual.
+              Assunções só entram nesta lista após a NBI correspondente ser gerada.
+              Use férias cadastradas ou preenchimento manual.
             </p>
           ) : (
+
             substituicoes.map((s) => {
               const ativo = assunto.substituicao_id === s.id;
               return (
