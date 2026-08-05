@@ -8,12 +8,21 @@ import { describe, expect, it, vi } from "vitest";
 import { AssuntoPicker, testIdDoAssunto, assuntoSelecionavel, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 
+// jsdom não implementa ResizeObserver (usado pelo cmdk) nem Pointer Capture.
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverMock;
+
 Object.defineProperties(HTMLElement.prototype, {
   hasPointerCapture: { configurable: true, value: () => false },
   setPointerCapture: { configurable: true, value: () => undefined },
   releasePointerCapture: { configurable: true, value: () => undefined },
   scrollIntoView: { configurable: true, value: () => undefined },
 });
+
 
 // Espelho fiel de public.nbi_templates.
 const TEMPLATES: TemplatePickable[] = [
