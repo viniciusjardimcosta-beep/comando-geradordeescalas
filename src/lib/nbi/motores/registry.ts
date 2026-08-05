@@ -20,7 +20,9 @@ export * from "./tipos";
 
 const MOTORES: MotorNbi[] = [
   motorFerias,
-  motorApresentacaoFerias,
+  motorApresentacao,
+  motorNupcias,
+  motorLuto,
   motorViagem,
   motorAssuncaoFuncao,
   motorDispensaFuncao,
