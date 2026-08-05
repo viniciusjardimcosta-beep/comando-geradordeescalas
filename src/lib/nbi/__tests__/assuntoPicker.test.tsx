@@ -49,8 +49,10 @@ const TEMPLATES: TemplatePickable[] = [
   { codigo: "comunicado", titulo: "Comunicado", titulo_documento: "COMUNICADO", disponivel: false },
 ];
 
-const HOMOLOGADOS = TEMPLATES.filter(assuntoSelecionavel).map((t) => t.codigo);
-const BLOQUEADOS = TEMPLATES.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
+// Variantes internas (redação de subtipo) nunca aparecem no seletor.
+const LISTAVEIS = TEMPLATES.filter((t) => !ehVarianteInterna(t.codigo));
+const HOMOLOGADOS = LISTAVEIS.filter(assuntoSelecionavel).map((t) => t.codigo);
+const BLOQUEADOS = LISTAVEIS.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
 
 afterEach(() => {
   cleanup();
