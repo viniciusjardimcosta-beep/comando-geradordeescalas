@@ -1244,7 +1244,32 @@ function Etapa3({
   });
   const totalPend = resumoPend.reduce((acc, r) => acc + r.lista.length, 0);
   const semAssuntos = rascunho.assuntos.length === 0;
-  const bloqueado = semAssuntos || totalPend > 0;
+
+  // Detector de duplicidade: mesmo assunto, mesmo militar e mesma data de início
+  // não pode ser publicado duas vezes na mesma NBI.
+  const duplicados = (() => {
+    const vistos = new Map<string, number>();
+    const achados: string[] = [];
+    rascunho.assuntos.forEach((a) => {
+      const t = templates.find((x) => x.codigo === a.tipo);
+      const chave = [
+        a.tipo,
+        a.militar_id ?? "",
+        String(a.campos.DATA_INICIO ?? ""),
+        String(a.campos.PERIODO ?? ""),
+      ].join("|");
+      const n = (vistos.get(chave) ?? 0) + 1;
+      vistos.set(chave, n);
+      if (n === 2) {
+        const militar = militares.find((m) => m.id === a.militar_id);
+        achados.push(`${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"}`);
+      }
+    });
+    return achados;
+  })();
+
+  const bloqueado = semAssuntos || totalPend > 0 || duplicados.length > 0;
+
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
