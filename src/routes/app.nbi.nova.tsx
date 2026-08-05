@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { auditarPreGeracao } from "@/lib/nbi/auditoria";
 import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
 import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
+import type { IntegranteComissao } from "@/lib/nbi/derivados";
 import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
@@ -175,6 +176,7 @@ function NovaNbiPage() {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
   const [ferias, setFerias] = useState<FeriasReg[]>([]);
+  const [siglas, setSiglas] = useState<SiglaInstitucional[]>([]);
   const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
 
 
@@ -223,6 +225,12 @@ function NovaNbiPage() {
       if (mil.data) setMilitares(mil.data as MilitarNbi[]);
       if (fer.data) setFerias(fer.data as FeriasReg[]);
       if (sub.data) setSubstituicoes(sub.data as SubstituicaoAberta[]);
+      // Bloco 10E — catálogo institucional de siglas do usuário (opcional).
+      const sig = await supabase
+        .from("nbi_siglas_institucionais")
+        .select("id,sigla,descricao_oficial,forma_documental,categoria,ativo")
+        .eq("user_id", uid).eq("ativo", true);
+      if (sig.data) setSiglas(sig.data as unknown as SiglaInstitucional[]);
 
       if (cfg.data) {
         const d = cfg.data;
