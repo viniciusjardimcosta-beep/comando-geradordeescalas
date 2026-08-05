@@ -4,7 +4,7 @@
 export type AssuntoTipo =
   | "ferias" | "apresentacao" | "viagem" | "assuncao_funcao" | "dispensa_funcao"
   | "servico_extraordinario" | "dispensa_recompensa" | "nomeacao_comissao"
-  | "licenca_paternidade" | "nupcias" | "luto";
+  | "licenca_paternidade" | "nupcias" | "luto" | "folga_compensatoria";
 
 
 export interface MilitarNbi {

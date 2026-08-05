@@ -14,6 +14,7 @@ import { normalizarLocalidade } from "@/utils/nbi-toponimos";
 /** Placeholders derivados automaticamente (nunca cobrados do operador). */
 export const CHAVES_AUTO = new Set([
   "QTD_DIAS", "QTD_DIAS_EXTENSO", "DATA_APRESENTACAO", "ANO", "MES_REFERENCIA",
+  "MES_COMPENSACAO",
   "TERMINACAO_RETORNO", "ARTIGO_O_A", "ARTIGO_AO_A", "ARTIGO_O_A_TITULAR",
   "ARTIGO_O_A_CAP", "TERMO_DIA", "FUNCAO_DOCUMENTAL", "FUNCAO_DOCUMENTAL_TITULAR",
   "DISTRIBUICAO_INTERNA", "DISTRIBUICAO_INTERNA_TITULAR", "FUNCAO_ATUAL_TITULAR",
