@@ -1201,7 +1201,7 @@ function AssuntoCard({
 
 function Etapa3({
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, salvando,
-  documentoId,
+  documentoId, onRecarregarSubstituicoes,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -1213,6 +1213,8 @@ function Etapa3({
   onSalvar: () => Promise<void> | void;
   salvando: boolean;
   documentoId: string | null;
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
 }) {
   const gerar = useServerFn(gerarNbi);
   const baixar = useServerFn(baixarNbi);
