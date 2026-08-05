@@ -103,6 +103,8 @@ export interface SubstituicaoAberta {
   motivo: string | null;
   data_inicio: string | null;
   data_fim_prevista: string | null;
+  /** NBI de origem da Assunção (quando o documento ainda existe). */
+  assuncao?: { numero: string | null; ano: number | null } | null;
 }
 
 
@@ -191,7 +193,7 @@ function NovaNbiPage() {
   async function recarregarSubstituicoes() {
     if (!userId) return;
     const { data } = await supabase.from("nbi_substituicoes")
-      .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista")
+      .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista,assuncao:nbi_documents!assuncao_documento_id(numero,ano)")
       .eq("user_id", userId).eq("status", "aberta").order("created_at", { ascending: false });
     setSubstituicoes((data ?? []) as SubstituicaoAberta[]);
   }
@@ -207,7 +209,7 @@ function NovaNbiPage() {
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
         supabase.from("nbi_substituicoes")
-          .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista")
+          .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista,assuncao:nbi_documents!assuncao_documento_id(numero,ano)")
           .eq("user_id", uid).eq("status", "aberta").order("created_at", { ascending: false }),
       ]);
       if (tpl.data) setTemplates(tpl.data as unknown as TemplateRow[]);
@@ -1892,8 +1894,9 @@ function OrigemDadosFuncao({
                   <span>
                     <strong>{nomeDe(s.substituto_militar_id)}</strong> substituindo {nomeDe(s.titular_militar_id)}
                     {s.funcao ? ` · ${s.funcao}` : ""}
-                    {s.data_inicio ? ` · desde ${formatarDataBR(s.data_inicio)}` : ""}
-                    {s.data_fim_prevista ? ` · retorno previsto ${formatarDataBR(s.data_fim_prevista)}` : ""}
+                    {s.data_inicio ? ` · assunção em ${formatarDataBR(s.data_inicio)}` : ""}
+                    {s.data_fim_prevista ? ` · dispensa prevista ${formatarDataBR(s.data_fim_prevista)}` : " · dispensa prevista a definir"}
+                    {s.assuncao?.numero ? ` · NBI ${s.assuncao.numero}/${s.assuncao.ano ?? ""}` : ""}
                   </span>
                   <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
                     {ativo ? "Vinculada" : "Usar esta assunção"}
