@@ -495,6 +495,17 @@ export const gerarNbi = createServerFn({ method: "POST" })
       if (!s) continue;
       try {
         if (s.papel === "assuncao") {
+          // Idempotência: regerar o mesmo documento não duplica a substituição.
+          const { data: jaExiste } = await supabaseAdmin
+            .from("nbi_substituicoes")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("assuncao_documento_id", data.documento_id)
+            .eq("substituto_militar_id", s.substituto_militar_id ?? "")
+            .eq("titular_militar_id", s.titular_militar_id ?? "")
+            .limit(1)
+            .maybeSingle();
+          if (jaExiste) continue;
           await supabaseAdmin.from("nbi_substituicoes").insert({
             user_id: userId,
             assuncao_documento_id: data.documento_id,
@@ -506,7 +517,24 @@ export const gerarNbi = createServerFn({ method: "POST" })
             data_fim_prevista: s.data_fim_prevista || null,
             status: "aberta",
           });
-        } else if (s.substituicao_id) {
+        } else {
+          // Dispensa: usa o vínculo explícito ou, na falta dele, localiza a
+          // assunção aberta do mesmo par substituto/titular.
+          let alvo = s.substituicao_id ?? null;
+          if (!alvo && s.substituto_militar_id && s.titular_militar_id) {
+            const { data: aberta } = await supabaseAdmin
+              .from("nbi_substituicoes")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("status", "aberta")
+              .eq("substituto_militar_id", s.substituto_militar_id)
+              .eq("titular_militar_id", s.titular_militar_id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            alvo = aberta?.id ?? null;
+          }
+          if (!alvo) continue;
           await supabaseAdmin
             .from("nbi_substituicoes")
             .update({
@@ -514,13 +542,14 @@ export const gerarNbi = createServerFn({ method: "POST" })
               dispensa_documento_id: data.documento_id,
               data_fim_efetiva: s.data_inicio || null,
             })
-            .eq("id", s.substituicao_id)
+            .eq("id", alvo)
             .eq("user_id", userId);
         }
       } catch {
         // Falha no vínculo nunca invalida o documento já gerado e numerado.
       }
     }
+
 
 
     return { ok: true as const, numero, ano, storage_path: path };
