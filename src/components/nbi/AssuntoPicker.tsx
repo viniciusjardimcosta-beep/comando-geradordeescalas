@@ -117,7 +117,7 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
               return (
                 <CommandGroup key={cat} heading={cat}>
                   {itens.map((t) => {
-                    const homologado = t.disponivel && CODIGOS_HOMOLOGADOS.has(t.codigo);
+                    const homologado = assuntoSelecionavel(t);
                     const status: "disponivel" | "nao_configurado" | "proxima_etapa" =
                       homologado ? "disponivel"
                         : (t.disponivel ? "proxima_etapa" : "nao_configurado");
@@ -127,8 +127,13 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
                         value={t.codigo}
                         onSelect={() => escolher(t.codigo, homologado)}
                         disabled={!homologado}
+                        data-testid={testIdDoAssunto(t.codigo)}
+                        data-codigo={t.codigo}
+                        data-disponivel={homologado ? "true" : "false"}
+                        aria-disabled={homologado ? "false" : "true"}
                         className={homologado ? "" : "opacity-60"}
                       >
+
                         <div className="flex w-full items-center gap-2">
                           {homologado
                             ? <Check className="h-4 w-4 text-emerald-600" />
