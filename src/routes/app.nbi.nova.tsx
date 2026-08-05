@@ -534,6 +534,8 @@ function NovaNbiPage() {
           onSalvar={salvarRascunho}
           salvando={salvando}
           documentoId={documentoId}
+          onRecarregarSubstituicoes={recarregarSubstituicoes}
+
         />
       )}
     </div>
