@@ -1601,12 +1601,14 @@ function MotivoTitularField({
 
 // ============ Origem dos dados de Assunção/Dispensa (Bloco 8C) ============
 function OrigemDadosFuncao({
-  assunto, militares, ferias, substituicoes, anoNbi, onChange, onCampo,
+  assunto, militares, ferias, substituicoes, onRecarregarSubstituicoes, anoNbi, onChange, onCampo,
 }: {
   assunto: AssuntoLocal;
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
   anoNbi: number;
   onChange: (patch: Partial<AssuntoLocal>) => void;
   onCampo: (chave: string, v: string | boolean) => void;
