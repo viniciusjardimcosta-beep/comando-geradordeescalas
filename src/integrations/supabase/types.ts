@@ -714,6 +714,7 @@ export type Database = {
           descricao_oficial: string
           forma_documental: string | null
           id: string
+          modo: string
           sigla: string
           updated_at: string
           user_id: string
@@ -725,6 +726,7 @@ export type Database = {
           descricao_oficial: string
           forma_documental?: string | null
           id?: string
+          modo?: string
           sigla: string
           updated_at?: string
           user_id: string
@@ -736,6 +738,7 @@ export type Database = {
           descricao_oficial?: string
           forma_documental?: string | null
           id?: string
+          modo?: string
           sigla?: string
           updated_at?: string
           user_id?: string
