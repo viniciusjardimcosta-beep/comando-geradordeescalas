@@ -1325,6 +1325,9 @@ function Etapa3({
         toast.error("Falha ao gerar NBI", { description: r.code });
       } else {
         setGerado({ numero: r.numero ?? 0, ano: r.ano ?? new Date().getFullYear() });
+        // Assunções recém-registradas passam a valer para a próxima dispensa.
+        void onRecarregarSubstituicoes();
+
         toast.success(`NBI nº ${String(r.numero ?? 0).padStart(3, "0")}/${r.ano} gerada`);
       }
     } catch (e) {
