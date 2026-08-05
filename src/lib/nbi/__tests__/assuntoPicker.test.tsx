@@ -1,10 +1,11 @@
 // Bloco 10C — prova isolada do AssuntoPicker.
 // Identidade dos itens é o código interno do motor, nunca o texto visível.
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { AssuntoPicker, testIdDoAssunto, assuntoSelecionavel, type TemplatePickable } from "@/components/nbi/AssuntoPicker";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 
