@@ -650,7 +650,7 @@ function Etapa1({
 // ============ ETAPA 2 ============
 
 function Etapa2({
-  rascunho, templates, militares, ferias, substituicoes,
+  rascunho, templates, militares, ferias, substituicoes, onRecarregarSubstituicoes,
   adicionar, atualizar, atualizarCampo, remover, mover,
   onBack, onNext,
 }: {
@@ -659,6 +659,8 @@ function Etapa2({
   militares: MilitarNbi[];
   ferias: FeriasReg[];
   substituicoes: SubstituicaoAberta[];
+  onRecarregarSubstituicoes: () => Promise<void> | void;
+
   adicionar: (codigo: string) => void;
   atualizar: (id: string, patch: Partial<AssuntoLocal>) => void;
   atualizarCampo: (id: string, chave: string, valor: string | boolean) => void;
