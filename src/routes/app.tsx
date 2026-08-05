@@ -34,6 +34,8 @@ function AppLayout() {
     { to: "/app/auditoria", label: "Auditoria", icon: ClipboardCheck, show: true },
     { to: "/app/nbi/nova", label: "NBI · Nova", icon: FileText, show: true },
     { to: "/app/nbi/historico", label: "NBI · Histórico", icon: FileText, show: true },
+    { to: "/app/nbi/pendencias", label: "NBI · Pendências", icon: FileText, show: true },
+
     { to: "/app/nbi/configuracoes", label: "NBI · Config", icon: FileText, show: true },
     { to: "/app/assinatura", label: "Assinatura", icon: Crown, show: true },
     { to: "/app/usuarios", label: "Gerenciar usuários", icon: Users, show: isAdmin },
