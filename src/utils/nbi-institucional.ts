@@ -143,6 +143,8 @@ function normalizarPalavra(palavra: string, modo: ModoInstitucional): string {
   if (canon) return canon; // sigla institucional: nunca capitalizada como palavra
   if (modo === "caixa_alta") return palavra.toUpperCase();
   if (modo === "lotacao") {
+    // Caixa alta institucional confirmada (cidade, unidade) não é falso positivo.
+    if (palavra.length >= 2 && palavra === palavra.toUpperCase()) return palavra;
     if (CONECTIVOS.has(chave(palavra))) return palavra.toLowerCase();
     return capitalizar(palavra);
   }
