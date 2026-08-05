@@ -4,10 +4,12 @@
 
 import {
   montarPostoQuadro, artigoO, artigoAo, numeroPorExtenso, periodoOrdinal,
-  somarDiasISO, diasEntreISO, formatarDataBR,
+  somarDiasISO, diasEntreISO, formatarDataBR, formatarDataFlexivelBR,
 } from "@/utils/nbi";
 import type { ContextoMotor } from "./tipos";
 import { lotacaoDocumentalDe, distribuicaoDocumentalDe, funcaoDocumentalDe } from "@/lib/nbi/formatacao";
+import { normalizarLocalidade } from "@/utils/nbi-toponimos";
+
 
 /** Placeholders derivados automaticamente (nunca cobrados do operador). */
 export const CHAVES_AUTO = new Set([
@@ -86,15 +88,27 @@ export function resolverBase(
   }
 
   if (opts.viagem) {
+    // Bloco 10C — topônimos são normalizados no VALOR ENVIADO AO DOCX,
+    // não apenas como sugestão visual. "São Sebastiao" → "São Sebastião/RS".
+    for (const k of ["ORIGEM", "DESTINO", "CIDADE"]) {
+      if (v[k]) v[k] = normalizarLocalidade(v[k]).formatado;
+    }
     const mesmoDia = Boolean(campos.retorno_no_mesmo_dia);
     v.TERMINACAO_RETORNO = mesmoDia
       ? "retornando no mesmo dia"
       : (v.DATA_RETORNO ? `retornando em ${formatarDataBR(v.DATA_RETORNO)}` : "");
   }
 
+
+  // Bloco 10C — nunca concatenar dia/mês/ano manualmente: todas as datas
+  // visíveis passam pelo formatador (ISO ou entrada legada tolerada).
   for (const k of ["DATA_INICIO", "DATA_FIM", "DATA_APRESENTACAO", "DATA_RETORNO"]) {
     if (v[k] && /^\d{4}-\d{2}-\d{2}$/.test(v[k])) v[k] = formatarDataBR(v[k]);
   }
+  for (const k of ["BOLETIM_DATA", "DATA_BOLETIM", "DATA_PUBLICACAO"]) {
+    if (v[k]) v[k] = formatarDataFlexivelBR(v[k]);
+  }
+
   return v;
 }
 

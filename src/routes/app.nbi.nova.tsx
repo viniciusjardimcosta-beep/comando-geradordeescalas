@@ -15,6 +15,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
+import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
 import {
   Loader2, Save, ArrowLeft, ArrowRight, Plus, Trash2, ChevronUp, ChevronDown,
   Wand2, AlertTriangle, CheckCircle2, FileText,
@@ -1225,6 +1227,8 @@ function Etapa3({
   const [gerando, setGerando] = useState(false);
   const [gerado, setGerado] = useState<{ numero: number; ano: number } | null>(null);
   const [confirmarAno, setConfirmarAno] = useState(false);
+  // Bloco 10C — override de duplicidade exige confirmação explícita.
+  const [duplicarMesmoAssim, setDuplicarMesmoAssim] = useState(false);
   const [previsto, setPrevisto] = useState<{ proximo: number; ano_vigente: number; reiniciar_anualmente: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState<string | null>(null);
 
@@ -1245,30 +1249,27 @@ function Etapa3({
   const totalPend = resumoPend.reduce((acc, r) => acc + r.lista.length, 0);
   const semAssuntos = rascunho.assuntos.length === 0;
 
-  // Detector de duplicidade: mesmo assunto, mesmo militar e mesma data de início
-  // não pode ser publicado duas vezes na mesma NBI.
-  const duplicados = (() => {
-    const vistos = new Map<string, number>();
-    const achados: string[] = [];
-    rascunho.assuntos.forEach((a) => {
-      const t = templates.find((x) => x.codigo === a.tipo);
-      const chave = [
-        a.tipo,
-        a.militar_id ?? "",
-        String(a.campos.DATA_INICIO ?? ""),
-        String(a.campos.PERIODO ?? ""),
-      ].join("|");
-      const n = (vistos.get(chave) ?? 0) + 1;
-      vistos.set(chave, n);
-      if (n === 2) {
-        const militar = militares.find((m) => m.id === a.militar_id);
-        achados.push(`${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"}`);
-      }
-    });
-    return achados;
-  })();
+  // Bloco 10C — duplicidade por ASSINATURA ESPECÍFICA DO MOTOR.
+  // Assuntos legítimos semelhantes (duas viagens no mesmo dia para destinos
+  // diferentes) deixam de ser bloqueados; só a repetição real é barrada.
+  const duplicidades = detectarDuplicidades(
+    rascunho.assuntos.map((a) => ({
+      id: a.id,
+      tipo: a.tipo,
+      militar_id: a.militar_id ?? null,
+      militar_titular_id: a.militar_titular_id ?? null,
+      substituicao_id: a.substituicao_id ?? null,
+      campos: a.campos,
+    })),
+  );
+  const duplicados = duplicidades.map((d) => {
+    const a = rascunho.assuntos[d.indices[0]];
+    const t = templates.find((x) => x.codigo === a.tipo);
+    const militar = militares.find((m) => m.id === a.militar_id);
+    return `${t?.titulo ?? a.tipo} · ${militar?.nome ?? "militar não informado"} · ${d.indices.length}x`;
+  });
 
-  const bloqueado = semAssuntos || totalPend > 0 || duplicados.length > 0;
+  const bloqueado = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
 
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
@@ -1394,9 +1395,17 @@ function Etapa3({
               {duplicados.map((d) => <li key={d}>{d}</li>)}
             </ul>
             <p className="mt-2 text-xs text-muted-foreground">
-              O mesmo assunto, para o mesmo militar e com a mesma data de início, foi lançado mais de
-              uma vez. Volte à Etapa 2 e remova a repetição antes de gerar.
+              Os itens acima têm assinatura idêntica (mesmo motor, mesmo militar e mesmos dados que
+              identificam o fato). Volte à Etapa 2 e remova a repetição — ou confirme abaixo.
             </p>
+            <label className="mt-2 flex items-center gap-2 text-xs font-medium">
+              <input
+                type="checkbox"
+                checked={duplicarMesmoAssim}
+                onChange={(e) => setDuplicarMesmoAssim(e.target.checked)}
+              />
+              Duplicar mesmo assim (registrado no snapshot de auditoria)
+            </label>
           </div>
         )}
 
@@ -1710,18 +1719,25 @@ function OrigemDadosFuncao({
     if (s.motivo) onCampo("MOTIVO_RETORNO", s.motivo);
     // Data de dispensa: prevista na assunção ou, na falta dela, derivada do
     // período de férias do titular (dia seguinte ao término).
-    let dataDispensa = s.data_fim_prevista ?? "";
-    if (!dataDispensa && s.titular_militar_id) {
-      const f = ferias
-        .filter((x) => x.militar_id === s.titular_militar_id
-          && (!s.data_inicio || x.data_fim >= s.data_inicio))
-        .sort((a, b) => a.data_inicio.localeCompare(b.data_inicio))[0];
-      if (f) dataDispensa = somarDiasISO(f.data_fim, 1);
-    }
-    if (dataDispensa) onCampo("DATA_INICIO", dataDispensa);
+    // Prioridade obrigatória (Bloco 10C):
+    // 1) data_fim_prevista da substituição → 2) férias do titular + 1 dia
+    // → 3) snapshot da assunção → 4) manual.
+    const r = resolverDataDispensa(
+      {
+        id: s.id,
+        titular_militar_id: s.titular_militar_id ?? null,
+        data_inicio: s.data_inicio ?? null,
+        data_fim_prevista: s.data_fim_prevista ?? null,
+      },
+      ferias.map((f) => ({ militar_id: f.militar_id, data_inicio: f.data_inicio, data_fim: f.data_fim })),
+      null,
+    );
+    if (r.valor) onCampo("DATA_INICIO", r.valor);
+    // Registrada a origem para exibição no CampoDerivado e no snapshot.
+    onCampo("__ORIGEM_DATA_DISPENSA", r.detalhe);
     toast.success(
-      dataDispensa
-        ? "Assunção vinculada — confirme a data de dispensa antes de gerar."
+      r.valor
+        ? `Assunção vinculada — data de dispensa por ${r.origem.toLowerCase()}.`
         : "Assunção vinculada — informe manualmente a data de dispensa.",
     );
   }
