@@ -1912,20 +1912,60 @@ function OrigemDadosFuncao({
             substituicoes.map((s) => {
               const ativo = assunto.substituicao_id === s.id;
               return (
-                <div key={s.id} data-testid={`substituicao-aberta-${s.id}`} className={`flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}>
-                  <span>
-                    <strong>{nomeDe(s.substituto_militar_id)}</strong> substituindo {nomeDe(s.titular_militar_id)}
-                    {s.funcao ? ` · ${s.funcao}` : ""}
-                    {s.data_inicio ? ` · assunção em ${formatarDataBR(s.data_inicio)}` : ""}
-                    {s.data_fim_prevista ? ` · dispensa prevista ${formatarDataBR(s.data_fim_prevista)}` : " · dispensa prevista a definir"}
-                    {s.assuncao?.numero ? ` · NBI ${s.assuncao.numero}/${s.assuncao.ano ?? ""}` : ""}
-                  </span>
-                  <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
-                    {ativo ? "Vinculada" : "Usar esta assunção"}
-                  </Button>
+                <div
+                  key={s.id}
+                  data-testid={`substituicao-aberta-${s.id}`}
+                  className={`rounded border p-3 text-xs ${ativo ? "border-primary bg-primary/5" : "border-border"}`}
+                >
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Substituto</p>
+                      <p className="font-semibold">{nomeDe(s.substituto_militar_id)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Titular</p>
+                      <p className="font-semibold">{nomeDe(s.titular_militar_id)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Função</p>
+                      <p>{s.funcao || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Período</p>
+                      <p>
+                        Assunção: {s.data_inicio ? formatarDataBR(s.data_inicio) : "—"}
+                        <br />
+                        Dispensa prevista:{" "}
+                        {s.data_fim_prevista
+                          ? formatarDataBR(s.data_fim_prevista)
+                          : "Sem previsão automática"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Origem</p>
+                      <p>{s.assuncao?.numero ? `NBI nº ${s.assuncao.numero}/${s.assuncao.ano ?? ""}` : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
+                      <p>
+                        Aberta
+                        {!s.data_fim_prevista && (
+                          <span className="block text-[10px] text-muted-foreground">
+                            Data será informada após a seleção
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <Button type="button" size="sm" variant={ativo ? "secondary" : "outline"} data-testid={`usar-substituicao-${s.id}`} onClick={() => aplicarSubstituicao(s)}>
+                      {ativo ? "Vinculada" : "Usar esta assunção"}
+                    </Button>
+                  </div>
                 </div>
               );
             })
+
           )}
           {assunto.substituicao_id && (
             <p className="text-[11px] text-muted-foreground">
