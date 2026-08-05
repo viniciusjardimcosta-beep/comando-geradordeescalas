@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { auditarPreGeracao } from "@/lib/nbi/auditoria";
+import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
+import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
 import { PainelAuditoria } from "@/components/nbi/PainelAuditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
@@ -70,6 +72,9 @@ interface TemplateRow {
   disponivel: boolean;
   ordem: number;
   texto_modelo: string;
+  estado_homologacao?: string | null;
+  subtipo?: string | null;
+  versao?: number | null;
   campos: Array<{
     chave: string;
     label: string;
@@ -461,6 +466,30 @@ function NovaNbiPage() {
           texto_final: texto,
           campos_ausentes: ausentes,
           pendencias: pendencias(a),
+          // Bloco 10E — rastreabilidade de subtipo, homologação e catálogos.
+          codigo_motor: obterMotor(a.tipo)?.codigo ?? a.tipo,
+          versao_motor: t?.versao ?? 1,
+          subtipo: t?.subtipo ?? null,
+          template_id: t?.id ?? null,
+          estado_homologacao: t?.estado_homologacao ?? "homologado",
+          fundamento_aplicado: String(a.campos.FUNDAMENTO ?? "") || null,
+          fundamento_id: String(a.campos.fundamento_id ?? "") || null,
+          siglas_utilizadas: siglasUtilizadas(texto, siglas),
+          comissao: a.tipo === "nomeacao_comissao" ? (() => {
+            try {
+              const arr = JSON.parse(String(a.campos.integrantes_json ?? "[]")) as IntegranteComissao[];
+              return Array.isArray(arr)
+                ? arr.map((i, idx) => ({
+                    tipo: i.tipo,
+                    militar_id: i.militar_id ?? null,
+                    nome: i.nome ?? null,
+                    documento: i.documento ?? null,
+                    funcao: funcaoEfetiva(i as unknown as IntegranteFuncao, idx),
+                    funcao_outra: i.funcao_outra ?? null,
+                  }))
+                : [];
+            } catch { return []; }
+          })() : null,
 
 
         };
