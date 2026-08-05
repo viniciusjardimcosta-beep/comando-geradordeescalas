@@ -1747,11 +1747,23 @@ function OrigemDadosFuncao({
 
       {origem === "assuncao" && !ehAssuncao && (
         <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              {substituicoes.length === 0
+                ? "Nenhuma assunção em aberto encontrada."
+                : `${substituicoes.length} assunção(ões) de função em aberto.`}
+            </p>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void onRecarregarSubstituicoes()}>
+              Atualizar lista
+            </Button>
+          </div>
           {substituicoes.length === 0 ? (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              Nenhuma assunção de função em aberto. Use férias cadastradas ou preenchimento manual.
+              Assunções só entram nesta lista após a NBI correspondente ser gerada.
+              Use férias cadastradas ou preenchimento manual.
             </p>
           ) : (
+
             substituicoes.map((s) => {
               const ativo = assunto.substituicao_id === s.id;
               return (
