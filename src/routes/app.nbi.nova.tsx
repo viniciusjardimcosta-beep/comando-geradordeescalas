@@ -708,6 +708,8 @@ function Etapa2({
               militares={militares}
               ferias={ferias}
               substituicoes={substituicoes}
+              onRecarregarSubstituicoes={onRecarregarSubstituicoes}
+
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               unidade={rascunho.unidade}
 
