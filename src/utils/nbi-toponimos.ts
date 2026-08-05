@@ -57,6 +57,9 @@ export const MUNICIPIOS_RS: readonly string[] = [
   "Putinga", "Arvorezinha", "Fontoura Xavier", "São José do Herval",
   "Ilópolis", "Guaporé", "Serafina Corrêa", "Nova Bassano", "Paraí",
   "Casca", "Ciríaco", "Vanini", "Camargo", "Nova Alvorada",
+  // Bloco 10C — localidades/distritos usados em NBIs de viagem.
+  "São Sebastião", "São Geraldo", "São Sebastião do Caí", "São José do Norte",
+  "São Valentim", "São Martinho", "São Domingos do Sul", "São João da Urtiga",
 ];
 
 function stripDiacritics(s: string): string {
@@ -172,4 +175,50 @@ export function sugerirToponimo(texto: string): SugestaoToponimo | null {
   const cap = capitalizarNomeProprio(bruto);
   if (cap === bruto) return null;
   return { original: bruto, correcao: cap, reconhecido: false, fonte: "capitalizacao" };
+}
+
+
+// ============ Bloco 10C — normalização aplicada NA GERAÇÃO ============
+
+/** UF padrão da unidade emissora (Corpo de Bombeiros Militar do RS). */
+export const UF_PADRAO = "RS";
+
+export interface Localidade {
+  municipio: string;
+  uf: string | null;
+  reconhecido: boolean;
+  /** Texto final pronto para o DOCX (ex.: "São Sebastião/RS"). */
+  formatado: string;
+}
+
+/**
+ * Normaliza o valor efetivamente enviado ao DOCX em campos de localidade
+ * (ORIGEM / DESTINO / CIDADE).
+ *
+ * - Aceita "Município/UF" ou "Município - UF" e preserva a UF informada.
+ * - Corrige a acentuação oficial quando o município é reconhecido.
+ * - Acrescenta "/RS" apenas quando o município é reconhecido na base do RS
+ *   e nenhuma UF foi informada.
+ * - Municípios desconhecidos recebem somente capitalização de nome próprio,
+ *   nunca uma UF inventada.
+ */
+export function normalizarLocalidade(texto: string): Localidade {
+  const bruto = String(texto ?? "").trim().replace(/\s+/g, " ");
+  if (!bruto) return { municipio: "", uf: null, reconhecido: false, formatado: "" };
+
+  const m = /^(.*?)\s*(?:\/|\s-\s)\s*([A-Za-z]{2})$/.exec(bruto);
+  const parteMunicipio = (m ? m[1] : bruto).trim();
+  const ufInformada = m ? m[2].toUpperCase() : null;
+
+  const sug = sugerirToponimo(parteMunicipio);
+  const municipio = sug ? sug.correcao : parteMunicipio;
+  const reconhecido = sug ? sug.reconhecido : MAPA_TOPONIMOS.has(normalizarChave(parteMunicipio));
+
+  const uf = ufInformada ?? (reconhecido ? UF_PADRAO : null);
+  return {
+    municipio,
+    uf,
+    reconhecido,
+    formatado: uf ? `${municipio}/${uf}` : municipio,
+  };
 }

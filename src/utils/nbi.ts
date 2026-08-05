@@ -273,3 +273,36 @@ export function interpolarTexto(
   });
   return { texto: out, ausentes };
 }
+
+/**
+ * Bloco 10C — formatação defensiva de data para o documento.
+ * Nunca concatena dia/mês/ano manualmente: normaliza a entrada para
+ * dd/mm/aaaa a partir de ISO, de dd/mm/aa(aa) ou de 8 dígitos corridos.
+ * Retorna o valor original quando não reconhece um formato de data.
+ */
+export function formatarDataFlexivelBR(valor: string | null | undefined): string {
+  const v = String(valor ?? "").trim();
+  if (!v) return "";
+
+  // ISO yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return formatarDataBR(v);
+
+  // dd/mm/aaaa ou dd/mm/aa (com / . ou -)
+  const m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(v);
+  if (m) {
+    const d = m[1].padStart(2, "0");
+    const mes = m[2].padStart(2, "0");
+    const ano = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${d}/${mes}/${ano}`;
+  }
+
+  // dd/mmaaaa — erro real observado ("05/072026")
+  const m2 = /^(\d{1,2})[/.-](\d{2})(\d{4})$/.exec(v);
+  if (m2) return `${m2[1].padStart(2, "0")}/${m2[2]}/${m2[3]}`;
+
+  // 8 dígitos corridos ddmmaaaa
+  const m3 = /^(\d{2})(\d{2})(\d{4})$/.exec(v);
+  if (m3) return `${m3[1]}/${m3[2]}/${m3[3]}`;
+
+  return v;
+}

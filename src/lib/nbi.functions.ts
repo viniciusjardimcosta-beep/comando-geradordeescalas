@@ -4,6 +4,8 @@
 // backend com context.userId (nunca a partir de input do cliente).
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { formatarDataBR } from "@/utils/nbi";
+import { normalizarCabecalho } from "@/lib/nbi/cabecalho";
 
 // ---------- helpers de input ----------
 function asUuid(v: unknown): string {
@@ -104,6 +106,9 @@ interface SnapshotSubstituicao {
   data_fim_prevista?: string | null;
   substituto_militar_id?: string | null;
   titular_militar_id?: string | null;
+  /** Data de início da Assunção vinculada — desempata o fallback antigo. */
+  data_inicio_assuncao?: string | null;
+
 }
 
 interface SnapshotAssunto {
@@ -137,10 +142,7 @@ function dataExtenso(iso: string): string {
   const [y, m, d] = iso.split("-").map((v) => parseInt(v, 10));
   return `${String(d).padStart(2, "0")} de ${mesExtenso(m)} de ${y}`;
 }
-function dataBR(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
+
 
 // Deduplica quadro/token repetido no posto_quadro (ex: "1º Sargento QPBM QPBM").
 function dedupPostoQuadro(v: string | null | undefined): string {
@@ -284,7 +286,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: modelo, error: eM } = await supabaseAdmin.storage
       .from("nbi-documentos")
-      .download("_sistema/nbi-mestre-v3.docx");
+      .download("_sistema/nbi-mestre-v4.docx");
     if (eM || !modelo) throw new Error("Modelo mestre indisponível");
     const modeloBuf = Buffer.from(await modelo.arrayBuffer());
 
@@ -294,14 +296,18 @@ export const gerarNbi = createServerFn({ method: "POST" })
       .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla, boletim_nome, boletim_sigla")
       .eq("user_id", userId)
       .maybeSingle();
-    const cabecalho = {
-      estado: (settings?.cabecalho_estado ?? "").trim(),
-      secretaria: (settings?.cabecalho_secretaria ?? "").trim(),
-      corporacao: (settings?.cabecalho_corporacao ?? "").trim(),
-      batalhao: (settings?.cabecalho_batalhao ?? "").trim(),
-      subunidade: (settings?.cabecalho_subunidade ?? settings?.unidade_nome ?? "").trim(),
-      cidade: (settings?.cabecalho_cidade ?? "").trim(),
-    };
+    // Bloco 10C — normalização institucional aplicada NO MOMENTO DA GERAÇÃO:
+    // configurações antigas ("15ª BATALHAO", "8º COMPANHIA") saem corrigidas
+    // sem exigir que o usuário reabra e salve as Configurações NBI.
+    // Linhas iniciadas por "!" são exceções confirmadas e saem literalmente.
+    const cabecalho = normalizarCabecalho({
+      estado: settings?.cabecalho_estado ?? "",
+      secretaria: settings?.cabecalho_secretaria ?? "",
+      corporacao: settings?.cabecalho_corporacao ?? "",
+      batalhao: settings?.cabecalho_batalhao ?? "",
+      subunidade: settings?.cabecalho_subunidade ?? settings?.unidade_nome ?? "",
+      cidade: settings?.cabecalho_cidade ?? "",
+    });
     const cabecalhoFaltando: string[] = [];
     if (!cabecalho.estado) cabecalhoFaltando.push("Estado");
     if (!cabecalho.secretaria) cabecalhoFaltando.push("Secretaria");
@@ -364,7 +370,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const secoes = ordemChaves.map((k) => secoesMap.get(k)!);
 
     const numeroFmt = String(numero).padStart(3, "0");
-    const dataNota = dataBR(doc.data_documento);
+    // Bloco 10C — data sempre formatada, nunca concatenada manualmente.
+    const dataNota = formatarDataBR(doc.data_documento);
 
     // Objeto explícito enviado ao docxtemplater. Nomes de chaves fixos
     // acordados com o modelo mestre (sem acentos, sempre maiúsculo).
@@ -495,16 +502,23 @@ export const gerarNbi = createServerFn({ method: "POST" })
       if (!s) continue;
       try {
         if (s.papel === "assuncao") {
-          // Idempotência: regerar o mesmo documento não duplica a substituição.
-          const { data: jaExiste } = await supabaseAdmin
+          // Bloco 10C — CAUSA RAIZ CORRIGIDA: a chave de idempotência usava
+          // apenas (documento, substituto, titular). Duas Assunções distintas
+          // do mesmo par (funções/datas diferentes) eram tratadas como
+          // repetição e a segunda nunca era inserida. A assinatura agora
+          // inclui função e data de início.
+          const { data: candidatos } = await supabaseAdmin
             .from("nbi_substituicoes")
-            .select("id")
+            .select("id,funcao,data_inicio")
             .eq("user_id", userId)
             .eq("assuncao_documento_id", data.documento_id)
             .eq("substituto_militar_id", s.substituto_militar_id ?? "")
-            .eq("titular_militar_id", s.titular_militar_id ?? "")
-            .limit(1)
-            .maybeSingle();
+            .eq("titular_militar_id", s.titular_militar_id ?? "");
+          const jaExiste = (candidatos ?? []).some(
+            (c) =>
+              (c.funcao ?? "") === (s.funcao ?? "") &&
+              (c.data_inicio ?? "") === (s.data_inicio || ""),
+          );
           if (jaExiste) continue;
           await supabaseAdmin.from("nbi_substituicoes").insert({
             user_id: userId,
@@ -516,23 +530,45 @@ export const gerarNbi = createServerFn({ method: "POST" })
             data_inicio: s.data_inicio || null,
             data_fim_prevista: s.data_fim_prevista || null,
             status: "aberta",
+            // Snapshot congelado: permite reabrir a Dispensa mesmo que o
+            // cadastro do militar mude depois.
+            snapshot: {
+              funcao: s.funcao ?? null,
+              motivo: s.motivo ?? null,
+              data_inicio: s.data_inicio || null,
+              data_fim_prevista: s.data_fim_prevista || null,
+              titular_militar_id: s.titular_militar_id ?? null,
+              substituto_militar_id: s.substituto_militar_id ?? null,
+            },
           });
         } else {
-          // Dispensa: usa o vínculo explícito ou, na falta dele, localiza a
-          // assunção aberta do mesmo par substituto/titular.
+          // Dispensa: o fluxo normal SEMPRE envia substituicao_id.
+          // A busca por par titular/substituto é apenas fallback para
+          // registros antigos e agora desempata por função e data.
           let alvo = s.substituicao_id ?? null;
           if (!alvo && s.substituto_militar_id && s.titular_militar_id) {
-            const { data: aberta } = await supabaseAdmin
+            const { data: abertas } = await supabaseAdmin
               .from("nbi_substituicoes")
-              .select("id")
+              .select("id,funcao,data_inicio")
               .eq("user_id", userId)
               .eq("status", "aberta")
               .eq("substituto_militar_id", s.substituto_militar_id)
               .eq("titular_militar_id", s.titular_militar_id)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            alvo = aberta?.id ?? null;
+              .order("created_at", { ascending: false });
+            const lista = abertas ?? [];
+            // 1) função + data de início idênticas à assunção informada
+            let escolhida =
+              lista.find(
+                (c) =>
+                  (c.funcao ?? "") === (s.funcao ?? "") &&
+                  (c.data_inicio ?? "") === (s.data_inicio_assuncao || ""),
+              ) ??
+              // 2) apenas a função (quando só ela é conhecida)
+              lista.find((c) => (c.funcao ?? "") === (s.funcao ?? "")) ??
+              null;
+            // 3) ambiguidade: só encerra automaticamente se houver UMA aberta
+            if (!escolhida && lista.length === 1) escolhida = lista[0];
+            alvo = escolhida?.id ?? null;
           }
           if (!alvo) continue;
           await supabaseAdmin
@@ -543,11 +579,13 @@ export const gerarNbi = createServerFn({ method: "POST" })
               data_fim_efetiva: s.data_inicio || null,
             })
             .eq("id", alvo)
-            .eq("user_id", userId);
+            .eq("user_id", userId)
+            .eq("status", "aberta");
         }
       } catch {
         // Falha no vínculo nunca invalida o documento já gerado e numerado.
       }
+
     }
 
 
