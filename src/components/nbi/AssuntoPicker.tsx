@@ -69,6 +69,8 @@ export function AssuntoPicker({ templates, onEscolher, label, size = "default", 
       "AFASTAMENTOS": [], "MOVIMENTAÇÕES": [], "SERVIÇO": [], "ADMINISTRATIVO": [],
     };
     const filtrados = templates.filter((t) => {
+      // Variantes internas guardam apenas a redação de um subtipo.
+      if (ehVarianteInterna(t.codigo)) return false;
       if (!busca.trim()) return true;
       const b = normalizar(busca);
       const cat = normalizar(categoriaDoCodigo(t.codigo));
