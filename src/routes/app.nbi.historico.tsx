@@ -66,8 +66,7 @@ function NbiHistoricoPage() {
       .from("nbi_documents")
       .select("id,numero,numero_int,ano,numero_ano_local,data_documento,titulo,status,storage_path,reserved_at,generated_at,canceled_at,cancel_reason,created_at")
       .eq("user_id", session.user.id)
-      .order("data_documento", { ascending: false })
-      .order("numero_int", { ascending: false, nullsFirst: false });
+      .order("created_at", { ascending: false });
     if (error) toast.error("Erro ao carregar histórico", { description: error.message });
     else setDocs((data ?? []) as DocRow[]);
     setLoading(false);
