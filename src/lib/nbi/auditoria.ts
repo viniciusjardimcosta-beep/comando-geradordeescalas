@@ -39,7 +39,10 @@ export interface EntradaAuditoria {
   digitadorOk: boolean;
   comandanteOk: boolean;
   numeracaoOk: boolean;
+  /** Bloco 12 — achados do motor de consistência institucional. */
+  consistencia?: ItemAuditoria[];
 }
+
 
 export interface ResultadoAuditoria {
   grupos: GrupoAuditoria[];
