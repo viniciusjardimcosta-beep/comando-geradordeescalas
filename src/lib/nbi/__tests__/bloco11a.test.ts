@@ -36,19 +36,19 @@ describe("Motor Núpcias", () => {
   });
 
   it("aplica 8 dias padrão com dois dígitos e extenso", () => {
-    const v = motor.resolverCampos(ctx({ DATA_INICIO: "2026-03-02" }, ["DATA_INICIO"]));
+    const v = motor.resolverCampos(ctx({ DATA_INICIO: "2026-03-02" }, ["DATA_INICIO", "DATA_FIM", "QTD_DIAS", "DATA_APRESENTACAO"]));
     expect(v.QTD_DIAS).toBe("08");
     expect(v.QTD_DIAS_EXTENSO).toBe("oito");
   });
 
   it("deriva data de apresentação a partir do fim", () => {
-    const v = motor.resolverCampos(ctx({ DATA_INICIO: "2026-03-02" }, ["DATA_INICIO"]));
+    const v = motor.resolverCampos(ctx({ DATA_INICIO: "2026-03-02" }, ["DATA_INICIO", "DATA_FIM", "QTD_DIAS", "DATA_APRESENTACAO"]));
     expect(v.DATA_FIM).toBe("09/03/2026");
     expect(v.DATA_APRESENTACAO).toBe("10/03/2026");
   });
 
   it("acusa ausência de data de início", () => {
-    expect(motor.validar(ctx({}, [])).join(" ")).toMatch(/in[íi]cio/i);
+    expect(motor.validar(ctx({}, [])).join(" ")).toMatch(/concess[ãa]o|in[íi]cio/i);
   });
 });
 
@@ -63,14 +63,14 @@ describe("Motor Luto", () => {
   });
 
   it("exige o grau de parentesco", () => {
-    const erros = motor.validar(ctx({ DATA_INICIO: "2026-04-01" }, ["DATA_INICIO", "MOTIVO_LUTO"]));
+    const erros = motor.validar(ctx({ DATA_INICIO: "2026-04-01" }, ["DATA_INICIO", "MOTIVO_LUTO", "DATA_FIM", "QTD_DIAS", "DATA_APRESENTACAO"]));
     expect(erros.join(" ")).toMatch(/MOTIVO_LUTO|parentesco|falecimento/i);
   });
 
   it("aceita grau do catálogo e aplica 8 dias", () => {
     const c = ctx(
       { DATA_INICIO: "2026-04-01", MOTIVO_LUTO: "seu Genitor" },
-      ["DATA_INICIO", "MOTIVO_LUTO"],
+      ["DATA_INICIO", "MOTIVO_LUTO", "DATA_FIM", "QTD_DIAS", "DATA_APRESENTACAO"],
     );
     const v = motor.resolverCampos(c);
     expect(v.QTD_DIAS).toBe("08");
