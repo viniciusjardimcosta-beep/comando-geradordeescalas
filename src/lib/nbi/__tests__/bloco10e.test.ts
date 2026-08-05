@@ -39,7 +39,7 @@ describe("10E — homologação de subtipos", () => {
     const motor = obterMotor("servico_extraordinario_convocacao");
     expect(motor).not.toBeNull();
     const pend = motor!.validar({
-      campos: {}, militar: null, titular: null, unidade: { nome: "", sigla: "" },
+      campos: {}, camposTemplate: [], militar: null, titular: null, unidade: { nome: "", sigla: "" },
     } as never);
     expect(pend.some((p) => /exemplar|homologa/i.test(p))).toBe(true);
   });

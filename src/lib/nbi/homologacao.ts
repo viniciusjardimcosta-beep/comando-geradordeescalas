@@ -14,6 +14,8 @@ export const ESTADOS_HOMOLOGACAO: EstadoHomologacao[] = [
 
 export function normalizarEstado(v: string | null | undefined): EstadoHomologacao {
   const s = String(v ?? "").trim().toLowerCase();
+  // Modelos legados (sem estado gravado) permanecem homologados.
+  if (!s) return "homologado";
   return (ESTADOS_HOMOLOGACAO as string[]).includes(s) ? (s as EstadoHomologacao) : "bloqueado";
 }
 
