@@ -52,6 +52,10 @@ const TEMPLATES: TemplatePickable[] = [
 const HOMOLOGADOS = TEMPLATES.filter(assuntoSelecionavel).map((t) => t.codigo);
 const BLOQUEADOS = TEMPLATES.filter((t) => !assuntoSelecionavel(t)).map((t) => t.codigo);
 
+afterEach(() => cleanup());
+
+
+
 async function abrir() {
   const user = userEvent.setup();
   const onEscolher = vi.fn();
