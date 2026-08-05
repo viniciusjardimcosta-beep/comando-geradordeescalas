@@ -4,7 +4,9 @@
 
 import type { MotorNbi } from "./tipos";
 import { motorFerias } from "./ferias";
-import { motorApresentacaoFerias } from "./apresentacaoFerias";
+import { motorApresentacao } from "./apresentacao";
+import { motorNupcias } from "./nupcias";
+import { motorLuto } from "./luto";
 import { motorViagem } from "./viagem";
 import { motorAssuncaoFuncao } from "./assuncaoFuncao";
 import { motorDispensaFuncao } from "./dispensaFuncao";
