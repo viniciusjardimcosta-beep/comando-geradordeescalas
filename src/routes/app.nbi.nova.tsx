@@ -1643,7 +1643,7 @@ function RevisaoOrtografica({
 // ============ Motivo controlado (Assunção/Dispensa) ============
 // Bloco 8C: o rótulo da interface NUNCA vai para a frase. O valor gravado é
 // sempre o texto oficial do motivo (texto_assuncao / texto_dispensa).
-function MotivoTitularField({
+export function MotivoTitularField({
   chave, testId, label, obrigatorio, valor, onChange, contexto,
 }: {
   chave: string;
@@ -1657,6 +1657,7 @@ function MotivoTitularField({
   const conhecido = motivoPorTexto(valor, contexto);
   const isOutro = valor !== "" && !conhecido;
   const [modo, setModo] = useState<"lista" | "outro">(isOutro ? "outro" : "lista");
+  const [aberto, setAberto] = useState(false);
   const preview = contexto === "afastamento"
     ? `…encontrar-se em ${valor || "…"}.`
     : `…retornou de ${valor || "…"}.`;
@@ -1665,6 +1666,8 @@ function MotivoTitularField({
       <Label>{label}{obrigatorio && <span className="text-destructive"> *</span>}</Label>
       <div className="mt-2 grid gap-2">
         <Select
+          open={aberto}
+          onOpenChange={setAberto}
           value={modo === "outro" ? "__outro__" : (conhecido?.id ?? "")}
           onValueChange={(v) => {
             if (v === "__outro__") { setModo("outro"); onChange(""); return; }
@@ -1672,14 +1675,19 @@ function MotivoTitularField({
             onChange(textoMotivo(v, contexto) ?? "");
           }}
         >
-          <SelectTrigger data-testid={testId}><SelectValue placeholder="Selecionar motivo" /></SelectTrigger>
-          <SelectContent>
+          <SelectTrigger
+            data-testid={testId ? `${testId}-trigger` : undefined}
+            onClick={() => setAberto(true)}
+          >
+            <SelectValue placeholder="Selecionar motivo" />
+          </SelectTrigger>
+          <SelectContent data-testid={testId ? `${testId}-options` : undefined}>
             {MOTIVOS_FUNCAO.map((o) => (
-              <SelectItem key={o.id} value={o.id} data-testid={testId ? `${testId}-opcao-${o.id}` : undefined}>
+              <SelectItem key={o.id} value={o.id} data-testid={testId ? `${testId}-option-${idMotivoTeste(o.id)}` : undefined}>
                 {o.label}
               </SelectItem>
             ))}
-            <SelectItem value="__outro__" data-testid={testId ? `${testId}-opcao-outro` : undefined}>— Outro (texto livre) —</SelectItem>
+            <SelectItem value="__outro__" data-testid={testId ? `${testId}-option-outro` : undefined}>— Outro (texto livre) —</SelectItem>
           </SelectContent>
         </Select>
         {modo === "outro" && (
@@ -1696,6 +1704,12 @@ function MotivoTitularField({
       </div>
     </div>
   );
+}
+
+function idMotivoTeste(id: string): string {
+  if (id === "paternidade") return "licenca-paternidade";
+  if (id === "lts") return "licenca";
+  return id;
 }
 
 // ============ Origem dos dados de Assunção/Dispensa (Bloco 8C) ============
