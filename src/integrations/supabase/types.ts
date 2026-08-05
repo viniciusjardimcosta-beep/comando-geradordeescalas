@@ -489,6 +489,42 @@ export type Database = {
         }
         Relationships: []
       }
+      nbi_fundamentos: {
+        Row: {
+          ativo: boolean
+          codigo_assunto: string
+          created_at: string
+          id: string
+          padrao: boolean
+          texto_oficial: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_assunto: string
+          created_at?: string
+          id?: string
+          padrao?: boolean
+          texto_oficial: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_assunto?: string
+          created_at?: string
+          id?: string
+          padrao?: boolean
+          texto_oficial?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       nbi_numeracao: {
         Row: {
           ano_vigente: number
@@ -670,6 +706,42 @@ export type Database = {
           },
         ]
       }
+      nbi_siglas_institucionais: {
+        Row: {
+          ativo: boolean
+          categoria: string | null
+          created_at: string
+          descricao_oficial: string
+          forma_documental: string | null
+          id: string
+          sigla: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          descricao_oficial: string
+          forma_documental?: string | null
+          id?: string
+          sigla: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string | null
+          created_at?: string
+          descricao_oficial?: string
+          forma_documental?: string | null
+          id?: string
+          sigla?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       nbi_substituicoes: {
         Row: {
           assuncao_documento_id: string | null
@@ -795,12 +867,15 @@ export type Database = {
           created_at: string
           descricao: string | null
           disponivel: boolean
+          estado_homologacao: string
           id: string
           ordem: number
+          subtipo: string | null
           texto_modelo: string
           titulo: string
           titulo_documento: string | null
           updated_at: string
+          versao: number
         }
         Insert: {
           campos?: Json
@@ -808,12 +883,15 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           disponivel?: boolean
+          estado_homologacao?: string
           id?: string
           ordem?: number
+          subtipo?: string | null
           texto_modelo: string
           titulo: string
           titulo_documento?: string | null
           updated_at?: string
+          versao?: number
         }
         Update: {
           campos?: Json
@@ -821,12 +899,15 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           disponivel?: boolean
+          estado_homologacao?: string
           id?: string
           ordem?: number
+          subtipo?: string | null
           texto_modelo?: string
           titulo?: string
           titulo_documento?: string | null
           updated_at?: string
+          versao?: number
         }
         Relationships: []
       }
