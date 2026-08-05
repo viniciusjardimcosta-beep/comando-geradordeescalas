@@ -837,6 +837,7 @@ function Etapa2({
               anoNbi={parseInt(rascunho.data_documento.slice(0, 4), 10) || rascunho.ano}
               unidade={rascunho.unidade}
 
+              onGerarApresentacao={() => gerarApresentacao(a)}
               onChange={(patch) => atualizar(a.id, patch)}
               onCampo={(chave, v) => atualizarCampo(a.id, chave, v)}
               onRemove={() => remover(a.id)}
