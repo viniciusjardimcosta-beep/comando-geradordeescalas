@@ -1,7 +1,7 @@
 // Bloco 12 — testes do motor de consistência institucional (camada pura).
 import { describe, expect, it } from "vitest";
 import { avaliarConsistenciaNbi } from "@/lib/nbi/consistencia/avaliar";
-import { coletarAfastamentos } from "@/lib/nbi/consistencia/base";
+import { coletarAfastamentos, documentoConfirmado } from "@/lib/nbi/consistencia/base";
 import { montarTimeline } from "@/lib/nbi/consistencia/timeline";
 import { apresentacoesPendentes, substituicoesPendentes } from "@/lib/nbi/consistencia/pendencias";
 import type { BaseConsistencia, DocumentoBase } from "@/lib/nbi/consistencia/tipos";
@@ -129,7 +129,7 @@ describe("Bloco 12 — afastamentos, dedupe e pendência de apresentação", () 
     });
     const afast = coletarAfastamentos(b, MIL).filter((a) => a.tipo === "ferias");
     expect(afast).toHaveLength(1);
-    expect(afast[0].origem).toBe("documento_nbi");
+    expect(afast[0].ferias_id).toBe("f-1");
   });
 
   it("aponta apresentação pendente após encerramento do afastamento", () => {
@@ -151,7 +151,7 @@ describe("Bloco 12 — afastamentos, dedupe e pendência de apresentação", () 
     expect(apresentacoesPendentes(b)).toHaveLength(0);
   });
 
-  it("rascunho não satisfaz pendência nem conta como documento confirmado", () => {
+  it("rascunho não é documento confirmado, apenas suprime pendência transitória", () => {
     const b = base({
       ferias: [ferias("f-1", "2026-01-05", "2026-01-24")],
       hoje: "2026-02-01",
@@ -161,7 +161,10 @@ describe("Bloco 12 — afastamentos, dedupe e pendência de apresentação", () 
         assuntos: [{ tipo: "apresentacao", militar_id: MIL, campos: { DATA_APRESENTACAO: "2026-01-25" } }],
       })],
     });
-    expect(apresentacoesPendentes(b)).toHaveLength(1);
+    // Rascunho não é fato documental confirmado…
+    expect(documentoConfirmado(b.documentos[0])).toBe(false);
+    // …mas evita pendência transitória enquanto a nota está sendo elaborada.
+    expect(apresentacoesPendentes(b)).toHaveLength(0);
   });
 
   it("documento cancelado não satisfaz pendência", () => {
