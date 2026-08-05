@@ -633,6 +633,7 @@ function NovaNbiPage() {
           onRecarregarSubstituicoes={recarregarSubstituicoes}
 
           adicionar={adicionarAssunto}
+          gerarApresentacao={gerarApresentacaoDe}
           atualizar={atualizarAssunto}
           atualizarCampo={atualizarCampo}
           remover={removerAssunto}
