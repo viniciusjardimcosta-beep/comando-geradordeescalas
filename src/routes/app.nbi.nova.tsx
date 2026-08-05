@@ -295,7 +295,10 @@ function NovaNbiPage() {
     const campos: Record<string, string | boolean> = {};
     for (const c of t.campos) {
       if (c.tipo === "boolean") campos[c.chave] = Boolean(c.default ?? false);
+      else if (c.default !== undefined && c.default !== null) campos[c.chave] = String(c.default);
     }
+    // Bloco 11A — APRESENTAÇÃO é agregadora: começa na origem padrão (férias).
+    if (codigo === "apresentacao") campos.SUBTIPO = SUBTIPO_APRESENTACAO_PADRAO;
     setRascunho((r) => ({
       ...r,
       assuntos: [...r.assuntos, {
@@ -311,6 +314,56 @@ function NovaNbiPage() {
       }],
     }));
   }
+
+  /**
+   * Bloco 11A — origens automáticas: a apresentação é consequência do
+   * afastamento. Todos os dados são herdados; nada é redigitado.
+   */
+  function gerarApresentacaoDe(origem: AssuntoLocal) {
+    const sub = subtipoPorOrigem(origem.tipo);
+    const tApresentacao = templatePor.get("apresentacao");
+    if (!sub || !tApresentacao) return;
+    if (!sub.homologado) {
+      toast.error("Apresentação deste afastamento aguarda exemplar oficial.");
+      return;
+    }
+    const motor = obterMotor(origem.tipo);
+    const resolvidos = motor
+      ? motor.resolverCampos(contextoDe(origem))
+      : resolverBase(contextoDe(origem));
+    const campos: Record<string, string | boolean> = { SUBTIPO: sub.id };
+    for (const chave of ["QTD_DIAS", "PERIODO", "ANO"]) {
+      const bruto = origem.campos[chave];
+      if (bruto !== undefined && bruto !== "") campos[chave] = bruto;
+    }
+    // Datas seguem em ISO: a formatação oficial acontece no motor.
+    const dataFim = String(origem.campos.DATA_FIM ?? "")
+      || (origem.campos.DATA_INICIO && resolvidos.QTD_DIAS
+        ? somarDiasISO(String(origem.campos.DATA_INICIO), parseInt(resolvidos.QTD_DIAS, 10) - 1)
+        : "");
+    if (dataFim) campos.DATA_APRESENTACAO = somarDiasISO(dataFim, 1);
+    if (!campos.QTD_DIAS && resolvidos.QTD_DIAS) {
+      campos.QTD_DIAS = String(parseInt(resolvidos.QTD_DIAS, 10));
+    }
+    setRascunho((r) => {
+      const idx = r.assuntos.findIndex((a) => a.id === origem.id);
+      const novo: AssuntoLocal = {
+        id: uid(),
+        tipo: "apresentacao" as AssuntoTipo,
+        militar_id: origem.militar_id,
+        militar_titular_id: null,
+        ferias_id: origem.ferias_id,
+        origem_dados: "manual",
+        substituicao_id: null,
+        campos,
+      };
+      const arr = [...r.assuntos];
+      arr.splice(idx + 1, 0, novo);
+      return { ...r, assuntos: arr };
+    });
+    toast.success("Apresentação gerada a partir do afastamento.");
+  }
+
 
   function atualizarAssunto(id: string, patch: Partial<AssuntoLocal>) {
     setRascunho((r) => ({
