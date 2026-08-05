@@ -94,12 +94,12 @@ describe("10E — fundamentos legais", () => {
 });
 
 describe("10E — funções na comissão", () => {
-  const presidente: IntegranteFuncao = { id: "1", funcao: "presidente" };
-  const membro: IntegranteFuncao = { id: "2", funcao: "membro" };
+  const presidente: IntegranteFuncao = { funcao: "presidente" };
+  const membro: IntegranteFuncao = { funcao: "membro" };
 
   it("assume o primeiro integrante como presidente por compatibilidade", () => {
-    expect(funcaoEfetiva({ id: "x" }, 0)).toBe("presidente");
-    expect(funcaoEfetiva({ id: "y" }, 1)).toBe("membro");
+    expect(funcaoEfetiva({}, 0)).toBe("presidente");
+    expect(funcaoEfetiva({}, 1)).toBe("membro");
   });
 
   it("exige exatamente um presidente", () => {
@@ -115,7 +115,7 @@ describe("10E — funções na comissão", () => {
   });
 
   it("exige descrição quando a função é 'outra'", () => {
-    const outra: IntegranteFuncao = { id: "3", funcao: "outra" };
+    const outra: IntegranteFuncao = { funcao: "outra" };
     expect(validarFuncoesComissao([presidente, outra]).length).toBeGreaterThan(0);
     expect(
       validarFuncoesComissao([presidente, { ...outra, funcao_outra: "Escrivão" }]),
@@ -123,7 +123,7 @@ describe("10E — funções na comissão", () => {
   });
 
   it("direciona Secretário/Relator para a variante ainda não homologada", () => {
-    const sec: IntegranteFuncao = { id: "4", funcao: "secretario" };
+    const sec: IntegranteFuncao = { funcao: "secretario" };
     expect(exigeVarianteEspecial([presidente, membro])).toBe(false);
     expect(exigeVarianteEspecial([presidente, sec])).toBe(true);
     expect(codigoTemplateComissao([presidente, membro])).toBe("nomeacao_comissao");
