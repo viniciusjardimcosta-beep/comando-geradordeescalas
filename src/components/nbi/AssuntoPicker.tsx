@@ -14,6 +14,7 @@ import {
   CATEGORIAS_ORDEM, categoriaDoCodigo, ordemDoCodigo, CODIGOS_HOMOLOGADOS,
   type CategoriaNbi,
 } from "@/utils/nbi-categorias";
+import { obterMotor } from "@/lib/nbi/motores/registry";
 
 
 export interface TemplatePickable {
@@ -32,9 +33,24 @@ interface Props {
   testId?: string;
 }
 
+/**
+ * Regra central única de habilitação. Um assunto só é bloqueado quando não é
+ * homologado, o template não está disponível ou não existe motor registrado.
+ * Busca, categoria, acentuação e badge nunca influenciam este resultado.
+ */
+export function assuntoSelecionavel(t: TemplatePickable): boolean {
+  return t.disponivel && CODIGOS_HOMOLOGADOS.has(t.codigo) && obterMotor(t.codigo) !== null;
+}
+
+/** data-testid estável, derivado somente do código interno do motor. */
+export function testIdDoAssunto(codigo: string): string {
+  return `nbi-assunto-option-${codigo}`;
+}
+
 function normalizar(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
+
 
 export function AssuntoPicker({ templates, onEscolher, label, size = "default", testId }: Props) {
   const [open, setOpen] = useState(false);
