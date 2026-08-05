@@ -1634,9 +1634,24 @@ function OrigemDadosFuncao({
     });
     if (s.funcao) onCampo("FUNCAO_DISPENSADA", s.funcao);
     if (s.motivo) onCampo("MOTIVO_RETORNO", s.motivo);
-    if (s.data_fim_prevista) onCampo("DATA_INICIO", s.data_fim_prevista);
-    toast.success("Assunção vinculada — confirme a data de dispensa antes de gerar.");
+    // Data de dispensa: prevista na assunção ou, na falta dela, derivada do
+    // período de férias do titular (dia seguinte ao término).
+    let dataDispensa = s.data_fim_prevista ?? "";
+    if (!dataDispensa && s.titular_militar_id) {
+      const f = ferias
+        .filter((x) => x.militar_id === s.titular_militar_id
+          && (!s.data_inicio || x.data_fim >= s.data_inicio))
+        .sort((a, b) => a.data_inicio.localeCompare(b.data_inicio))[0];
+      if (f) dataDispensa = somarDiasISO(f.data_fim, 1);
+    }
+    if (dataDispensa) onCampo("DATA_INICIO", dataDispensa);
+    toast.success(
+      dataDispensa
+        ? "Assunção vinculada — confirme a data de dispensa antes de gerar."
+        : "Assunção vinculada — informe manualmente a data de dispensa.",
+    );
   }
+
 
   const opcoes: Array<{ v: NonNullable<AssuntoLocal["origem_dados"]>; label: string }> = ehAssuncao
     ? [
