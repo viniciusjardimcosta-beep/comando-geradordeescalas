@@ -17,6 +17,10 @@ import {
   type IntegranteComissao, trechoIntegrante, comporComposicao,
   comporFinalidade, FINALIDADES_COMISSAO,
 } from "@/lib/nbi/derivados";
+import {
+  FUNCOES_COMISSAO, funcaoEfetiva, rotuloFuncao, validarFuncoesComissao,
+  exigeVarianteEspecial, type FuncaoComissao, type IntegranteFuncao,
+} from "@/lib/nbi/comissao";
 
 function uid() {
   return (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -70,7 +74,8 @@ export function ComissaoBuilder({
   }
 
   function adicionar(tipo: "militar" | "externo") {
-    persistir([...integrantes, { id: uid(), tipo, tratamento: "Sr.", documento_tipo: "CPF" }]);
+    const funcao: FuncaoComissao = integrantes.length === 0 ? "presidente" : "membro";
+    persistir([...integrantes, { id: uid(), tipo, tratamento: "Sr.", documento_tipo: "CPF", funcao }]);
   }
   function atualizar(id: string, patch: Partial<IntegranteComissao>) {
     persistir(integrantes.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -81,8 +86,19 @@ export function ComissaoBuilder({
   function tornarPresidente(id: string) {
     const alvo = integrantes.find((i) => i.id === id);
     if (!alvo) return;
-    persistir([alvo, ...integrantes.filter((i) => i.id !== id)]);
+    persistir([
+      { ...alvo, funcao: "presidente" },
+      ...integrantes
+        .filter((i) => i.id !== id)
+        .map((i) => (i.funcao === "presidente" ? { ...i, funcao: "membro" as FuncaoComissao } : i)),
+    ]);
   }
+
+  const problemasFuncoes = validarFuncoesComissao(
+    integrantes as unknown as IntegranteFuncao[],
+    { confirmarDoisPresidentes: campos.confirmar_dois_presidentes === true },
+  );
+  const varianteEspecial = exigeVarianteEspecial(integrantes as unknown as IntegranteFuncao[]);
 
   const previewComposicao = comporComposicao(
     integrantes.map((i) => trechoIntegrante(i, i.tipo === "militar" ? dadosMilitar(i.militar_id) : null)),
@@ -141,14 +157,39 @@ export function ComissaoBuilder({
             return (
               <div key={i.id} className="rounded border p-2">
                 <div className="mb-2 flex items-center gap-2">
-                  {idx === 0
+                  {funcaoEfetiva(i as unknown as IntegranteFuncao, idx) === "presidente"
                     ? <Badge className="text-[10px]"><Crown className="mr-1 h-3 w-3" /> Presidente</Badge>
-                    : <Badge variant="secondary" className="text-[10px]">Membro</Badge>}
+                    : (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {rotuloFuncao(funcaoEfetiva(i as unknown as IntegranteFuncao, idx), i.funcao_outra)}
+                      </Badge>
+                    )}
                   <span className="text-xs text-muted-foreground">
                     {i.tipo === "militar" ? "Militar cadastrado" : "Pessoa externa"}
                   </span>
                   <div className="ml-auto flex gap-1">
-                    {idx !== 0 && (
+                    <Select
+                      value={funcaoEfetiva(i as unknown as IntegranteFuncao, idx)}
+                      onValueChange={(v) => atualizar(i.id, { funcao: v as FuncaoComissao })}
+                    >
+                      <SelectTrigger className="h-7 w-[190px] text-xs" data-testid={`comissao-funcao-${idx}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FUNCOES_COMISSAO.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {funcaoEfetiva(i as unknown as IntegranteFuncao, idx) === "outra" && (
+                      <Input
+                        className="h-7 w-[180px] text-xs"
+                        value={i.funcao_outra ?? ""}
+                        onChange={(e) => atualizar(i.id, { funcao_outra: e.target.value })}
+                        placeholder="Função confirmada"
+                      />
+                    )}
+                    {funcaoEfetiva(i as unknown as IntegranteFuncao, idx) !== "presidente" && (
                       <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => tornarPresidente(i.id)}>
                         Tornar presidente
                       </Button>
@@ -224,6 +265,27 @@ export function ComissaoBuilder({
           })}
         </div>
 
+        {problemasFuncoes.length > 0 && (
+          <ul className="mt-3 list-disc pl-5 text-[11px] text-destructive" data-testid="comissao-problemas">
+            {problemasFuncoes.map((p, i) => <li key={i}>{p}</li>)}
+          </ul>
+        )}
+        {problemasFuncoes.some((p) => p.includes("Presidentes")) && (
+          <label className="mt-2 flex items-center gap-2 text-[11px]">
+            <input
+              type="checkbox"
+              checked={campos.confirmar_dois_presidentes === true}
+              onChange={(e) => onCampo("confirmar_dois_presidentes", e.target.checked)}
+            />
+            Confirmo administrativamente mais de um Presidente nesta comissão.
+          </label>
+        )}
+        {varianteEspecial && (
+          <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400" data-testid="comissao-variante-especial">
+            Comissão com Secretário/Relator usa variante própria — em homologação, sem exemplar oficial.
+            Geração de NBI oficial bloqueada para esta composição.
+          </p>
+        )}
         <p className="mt-3 text-[11px] text-muted-foreground">
           Composição montada pelo sistema: <em>{previewComposicao || "—"}</em>
         </p>
