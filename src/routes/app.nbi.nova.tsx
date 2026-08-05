@@ -1519,9 +1519,25 @@ function AssuntoCard({
             );
           })}
       </div>
+
+      {/* Bloco 12 — consistência institucional do assunto (informativa). */}
+      <div className="mt-3">
+        <ConsistenciaAssunto
+          base={baseConsistencia}
+          militarId={assunto.militar_id}
+          militarTitularId={assunto.militar_titular_id}
+          substituicaoId={assunto.substituicao_id ?? null}
+          tipoAssunto={assunto.tipo}
+          subtipo={typeof assunto.campos["SUBTIPO"] === "string" ? (assunto.campos["SUBTIPO"] as string) : null}
+          campos={assunto.campos}
+          dataDocumento={dataDocumento}
+          documentoId={documentoId}
+        />
+      </div>
     </div>
   );
 }
+
 
 // ============ ETAPA 3 ============
 
