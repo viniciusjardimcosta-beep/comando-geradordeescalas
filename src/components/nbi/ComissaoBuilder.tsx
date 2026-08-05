@@ -212,11 +212,6 @@ export function ComissaoBuilder({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input
-                      value={i.funcao ?? ""}
-                      onChange={(e) => atualizar(i.id, { funcao: e.target.value })}
-                      placeholder="Função na comissão (opcional)"
-                    />
                     {mil && (
                       <p className="md:col-span-2 text-[11px] text-muted-foreground">
                         Banco de Militares: {dados?.posto_quadro || "posto/quadro ausente"} ·
@@ -251,12 +246,6 @@ export function ComissaoBuilder({
                       value={i.documento ?? ""}
                       onChange={(e) => atualizar(i.id, { documento: e.target.value })}
                       placeholder="Número do documento"
-                    />
-                    <Input
-                      className="md:col-span-4"
-                      value={i.funcao ?? ""}
-                      onChange={(e) => atualizar(i.id, { funcao: e.target.value })}
-                      placeholder="Função na comissão (opcional)"
                     />
                   </div>
                 )}
