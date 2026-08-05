@@ -35,6 +35,11 @@ import {
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
 import { funcaoDocumentalDe, lotacaoDocumentalDe, comporFuncaoDocumental } from "@/lib/nbi/formatacao";
 import { MOTIVOS_FUNCAO, textoMotivo, motivoPorTexto, TEXTO_FERIAS } from "@/lib/nbi/motivos";
+import { GRAUS_LUTO, grauPorTexto } from "@/lib/nbi/luto";
+import {
+  SUBTIPOS_APRESENTACAO, SUBTIPO_APRESENTACAO_PADRAO, subtipoPorOrigem,
+  campoDoSubtipoApresentacao,
+} from "@/lib/nbi/motores/apresentacao";
 
 import { obterMotor, type ContextoMotor } from "@/lib/nbi/motores/registry";
 import { resolverBase, validarMilitar, validarCamposTemplate } from "@/lib/nbi/motores/comum";
