@@ -1383,7 +1383,25 @@ function Etapa3({
           </div>
         )}
 
+        {/* Duplicidade — bloqueia a emissão até o operador remover o item repetido */}
+        {duplicados.length > 0 && !gerado && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Assuntos duplicados nesta NBI
+            </div>
+            <ul className="list-disc pl-5 text-xs">
+              {duplicados.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              O mesmo assunto, para o mesmo militar e com a mesma data de início, foi lançado mais de
+              uma vez. Volte à Etapa 2 e remova a repetição antes de gerar.
+            </p>
+          </div>
+        )}
+
         {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
+
         {divergenciasAno.length > 0 && !gerado && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <div className="mb-2 flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
