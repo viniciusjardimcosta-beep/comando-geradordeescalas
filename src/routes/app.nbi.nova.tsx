@@ -166,6 +166,18 @@ function NovaNbiPage() {
     void carregar(userId, rascunhoId);
   }, [userId, rascunhoId]);
 
+  // Substituições em aberto mudam a cada NBI gerada — a lista precisa poder
+  // ser reconsultada sem recarregar a página inteira.
+  async function recarregarSubstituicoes() {
+    if (!userId) return;
+    const { data } = await supabase.from("nbi_substituicoes")
+      .select("id,assuncao_documento_id,substituto_militar_id,titular_militar_id,funcao,motivo,data_inicio,data_fim_prevista")
+      .eq("user_id", userId).eq("status", "aberta").order("created_at", { ascending: false });
+    setSubstituicoes((data ?? []) as SubstituicaoAberta[]);
+  }
+
+
+
   async function carregar(uid: string, rascId: string | null) {
     setLoading(true);
     try {
