@@ -18,6 +18,7 @@ import { CampoLivreCorrigido } from "@/components/nbi/CampoLivreCorrigido";
 import { sugerirInstitucional, normalizarInstitucional } from "@/utils/nbi-institucional";
 import { sugerirToponimo } from "@/utils/nbi-toponimos";
 import { toast } from "sonner";
+import { CatalogosInstitucionais } from "@/components/nbi/CatalogosInstitucionais";
 
 export const Route = createFileRoute("/app/nbi/configuracoes")({
   component: NbiConfiguracoesPage,
@@ -568,6 +569,8 @@ function NbiConfiguracoesPage() {
           </Card>
 
           <NumeracaoCard />
+
+          <CatalogosInstitucionais />
 
           <Card>
             <CardHeader>
