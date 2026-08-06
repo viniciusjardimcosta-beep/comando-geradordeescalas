@@ -480,7 +480,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const buf = dt.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
 
     // 6. Upload no bucket
-    const path = `${userId}/${ano}/nbi-${numeroFmt}-${data.documento_id}.docx`;
+    const path = `${userId}/${ano}/nbi-${numeroBase}-${data.documento_id}.docx`;
     const { error: eU } = await supabaseAdmin.storage
       .from("nbi-documentos")
       .upload(path, buf, {
