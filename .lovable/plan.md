@@ -1,97 +1,100 @@
-# Bloco 12 — Motor de Consistência Institucional e Pendências NBI (Etapa A)
+# Bloco 12C — Etapa A: Plano de homologação e congelamento do módulo NBI
 
-Auditoria concluída sobre a base real. Nenhum código alterado.
+Nenhum código ou dado foi alterado. Abaixo, o inventário real e o plano de execução.
 
-## 1. Fontes de dados disponíveis
+## 1. Inventário inicial (base atual)
 
-| Fato | Origem | Observações |
-| --- | --- | --- |
-| Férias | `ferias_militares` (42 registros): militar, ano, período, início, fim | Fonte primária confiável de afastamento |
-| Afastamentos não-férias (luto, núpcias, licença-paternidade) | Apenas dentro de `nbi_documents.assuntos[].campos` (DATA_INICIO / DATA_FIM / QTD_DIAS) | Não existe tabela própria; só existem se houver NBI emitida |
-| Apresentações | `nbi_documents.assuntos[]` com `tipo = apresentacao`, `subtipo`, campos `DATA_APRESENTACAO` | 13 itens hoje |
-| Substituições / Assunção ⇄ Dispensa | `nbi_substituicoes` (status aberta/encerrada, data_inicio, data_fim_prevista, data_fim_efetiva, função, titular, substituto, documentos vinculados) | Estrutura completa; 5 registros, alguns encerrados sem previsão |
-| Documentos NBI | `nbi_documents` (status rascunho/reservado/gerado, `canceled_at`, `numero`, `ano`, `data_documento`, `assuntos` jsonb) | 32 docs, 0 cancelados até agora |
-| Snapshot por assunto | Cada item traz `tipo`, `codigo_motor`, `subtipo`, `militar_id`, `ferias_id`, `substituicao_id`, `campos`, `texto_final`, `versao_motor` | Base suficiente para vínculos e duplicidade |
-| Militares | `militares` (ativo, dados institucionais NBI) | Inativos devem sair das pendências |
-| Auditoria | `nbi_auditoria` (documento_id, ação, detalhe jsonb) | Reaproveitada na Fase 14 |
-| Folgas compensatórias | `assuntos[].campos` (mes_referencia_sel, QTD_HORAS, SUBTIPO) | Sem tabela; comparação previsão × realizada é textual |
+| Item | Valor |
+| --- | --- |
+| Documentos NBI | 32 (31 gerados, 1 rascunho, 0 cancelados) |
+| Substituições | 6 (2 abertas, 4 encerradas) |
+| Férias em `ferias_militares` | 42 |
+| Militares | 65 ativos, 0 inativos |
+| Configurações NBI | 1 conjunto (cabeçalho, digitador, comandante, autoridade) |
+| Usuários | 5 |
+| Modelos homologados | 15 |
+| Modelos aguardando exemplar | 9 |
+| Modelo mestre | `_sistema/nbi-mestre-v4.docx` |
+| Suíte NBI atual | 114 testes em 10 arquivos |
 
-Distribuição atual de assuntos: férias 33, assunção 13, apresentação 13, viagem 12, dispensa 10, licença-paternidade 7, serviço extraordinário 5, dispensa por recompensa 5, comissão 4.
+Modelos homologados: férias, apresentação (padrão, luto, núpcias), luto, núpcias, licença-paternidade, viagem, assunção de função, dispensa de função, dispensa por recompensa, nomeação de comissão (padrão), serviço extraordinário (executado), folga compensatória (previsão e realizada).
 
-## 2. Regras implementáveis com os dados atuais
+Modelos ainda bloqueados (`aguardando_exemplar`, não serão liberados): apresentação-paternidade, assunção/dispensa de cargo vago, comunicado, dispensa por recompensa sem apresentação, nomeação de comissão com funções especiais, renovação de tempo, serviço extraordinário por convocação, situação sanitária.
 
-Cronológicas (puras, sem consulta): DATA_FIM ≥ DATA_INICIO; apresentação > último dia do afastamento; retorno de viagem ≥ saída; período de serviço extraordinário início ≤ fim; data da nota muito posterior ao fato (alerta); data em outro ano (alerta, já existe).
+Pendências detectadas hoje pelo motor: 2 substituições abertas (uma sem previsão de término), apresentações e folgas serão recontadas no início da Etapa B com a base carregada.
 
-Com consulta em lote: dispensa anterior à assunção vinculada; substituição encerrada reutilizada; conflito com férias (intervalo × intervalo); conflito com afastamento registrado em NBI ativa; apresentação sem afastamento de origem; duplicidade de fato ativo; documento cancelado como origem; apresentações pendentes; assunções/dispensas pendentes; folgas previstas do mês e do próximo.
+## 2. Estratégia de isolamento dos dados de teste
 
-## 3. Regras SEM dados suficientes (não serão inventadas)
+- Todos os registros de homologação serão criados sob um **usuário de homologação dedicado** (conta separada), nunca sob o usuário operacional. Assim as policies por `user_id` já isolam tudo.
+- Militares de teste receberão prefixo `[HOMOLOG]` no nome e matrícula da faixa `999xxx`.
+- Nenhum documento, férias, substituição ou numeração do usuário operacional será lido para escrita, alterado ou cancelado.
+- A numeração de teste corre na linha `nbi_numeracao` do usuário de homologação — não afeta a sequência oficial.
+- Ao final: relatório com a lista de IDs criados e a opção de manter (marcados como homologação) ou remover em lote.
 
-- "Titular já retornou" só é detectável quando o retorno do titular é uma férias na tabela ou uma apresentação emitida — caso contrário a pendência não é exibida.
-- Folga compensatória "atrasada": não há data-limite oficial; só exibiremos previsão do mês corrente/seguinte e realizadas.
-- Luto, núpcias e licença-paternidade só existem como afastamento se houver NBI gerada; afastamentos não documentados são invisíveis (declarado na origem do evento).
-- Unidade como filtro depende de `lotacao_nbi` preenchido; será opcional.
+## 3. Registros que serão criados (massa funcional)
 
-## 4. Matriz de compatibilidade proposta
+- 6 militares de teste (2 com dados institucionais completos, 1 sem lotação, 1 sem função documental, 1 inativo, 1 com sigla/topônimo atípicos).
+- 4 períodos de férias, 3 afastamentos (luto, núpcias, licença-paternidade), 2 viagens, 2 assunções + 2 dispensas, 2 serviços extraordinários, 4 folgas compensatórias (previsão e realizada), 1 dispensa por recompensa, 1 nomeação de comissão.
+- 1 NBI longa com no mínimo 22 itens (Fase 8) e 1 NBI por motor homologado (Fase 9).
+- Massa de volume (Fase 13) **simulada em memória**, não gravada no banco: 200 militares, 1.000 documentos, 500 férias, 200 substituições, 5 anos, alimentando diretamente o motor puro e a timeline.
 
-| Assunto \ Afastamento vigente | Férias | Lic.-paternidade | Luto | Núpcias |
-| --- | --- | --- | --- | --- |
-| Serviço extraordinário | BLOQUEIO | BLOQUEIO | ALERTA | ALERTA |
-| Serviço extraordinário (convocação) | BLOQUEIO | BLOQUEIO | ALERTA | ALERTA |
-| Viagem | ALERTA | ALERTA | ALERTA | ALERTA |
-| Assunção de função (substituto afastado no início) | ALERTA | ALERTA | ALERTA | ALERTA |
-| Apresentação | validada contra o afastamento de origem (BLOQUEIO se anterior ao fim) | idem | idem | idem |
-| Folga compensatória / recompensa / comissão | SUGESTÃO informativa | idem | idem | idem |
+## 4. Roteiro automatizado (testes)
 
-Luto e núpcias ficam como alerta porque a base não guarda a hora do fato e o período pode ser ajustado administrativamente. A matriz fica num único arquivo configurável.
+Novo arquivo `src/lib/nbi/__tests__/bloco12c.test.ts` (somente testes, sem mudança de motor):
 
-## 5. Arquitetura
+1. Cronologia: fim < início; retorno de viagem < saída; apresentação anterior ao término; dispensa anterior à assunção.
+2. Matriz de conflitos: serviço extraordinário × férias/licença (bloqueio), × luto/núpcias (alerta); viagem × férias/licença (alerta); assunção com substituto afastado (alerta).
+3. Origem inválida: documento cancelado como origem; substituição encerrada reutilizada; militar inativo; nota em outro ano.
+4. Pendências: aparecem só após o término; rascunho/reservado/cancelado não satisfazem; geradas desaparecem.
+5. Redundância: duplicidade exata × assunto semelhante com datas diferentes; cancelado apenas informativo.
+6. Folga compensatória: 4h, 33h, 128h; jun→jul, jul→ago, dez/2026→jan/2027; previsão × realizada sem duplicar.
+7. Timeline: ordenação, paginação, recorte por período, dedupe `ferias_militares` ⇄ NBI, vínculos férias⇄apresentação e assunção⇄dispensa.
+8. Volume: 1.000 documentos → avaliação e timeline dentro do orçamento de tempo.
+9. Regressão de placeholders por motor homologado (schema completo, sem `undefined`/`null`).
 
-```text
-src/lib/nbi/consistencia/
-  tipos.ts        contratos: Severidade, Achado, ResultadoConsistencia, EventoTimeline
-  matriz.ts       matriz de compatibilidade afastamento × assunto
-  regras.ts       regras puras (cronologia, conflito, redundância)
-  timeline.ts     montagem e ordenação da linha do tempo
-  pendencias.ts   apresentações/assunções/dispensas/folgas pendentes
-  avaliar.ts      avaliarConsistenciaNbi(entrada) -> resultado (puro)
-  index.ts        reexports
-src/lib/nbi/consistencia.functions.ts   carregamento em lote (server fn autenticada)
-src/components/nbi/LinhaDoTempoMilitar.tsx
-src/components/nbi/ConsistenciaAssunto.tsx  (Etapa 2 do wizard)
-src/routes/app.nbi.pendencias.tsx           (/app/nbi/pendencias)
-src/lib/nbi/__tests__/bloco12.test.ts
-```
+Comandos: `bunx vitest run src/lib/nbi`, `tsgo` (typecheck) e build de produção.
 
-Contrato: `avaliarConsistenciaNbi({ userId, militarId, tipoAssunto, campos, dataDocumento, documentoId?, base })` → `{ bloqueios, alertas, sugestoes, documentosRelacionados, linhaDoTempo }`. A função é pura: recebe a `base` já carregada (férias, documentos, substituições, militares) e nunca escreve no banco, não reserva número nem gera documento.
+## 5. Roteiro manual/E2E (Playwright + inspeção documental)
 
-## 6. Consultas necessárias (em lote, uma vez por tela)
+- Fases 2 a 7 executadas na interface real, com captura de tela por etapa e verificação de que "Gerar apresentação" abre rascunho **sem reservar número**.
+- Fase 8: gerar a NBI longa com `nbi-mestre-v4.docx`, converter para PDF e PNG de todas as páginas, e conferir os 18 pontos exigidos (títulos únicos, agrupamento, sem título órfão, assinaturas unidas, caixa Publique-se, cabeçalho, datas, topônimos, siglas, sem placeholder/undefined/null, paginação).
+- Fase 10 e 11: timeline e painel de pendências com militar ativo e inativo, todos os filtros.
+- Fase 12: conferir em `nbi_auditoria` o registro de alerta ignorado, conflito confirmado, duplicidade intencional, sugestão convertida em rascunho, encerramento de substituição e cancelamento — com `user_id`, documento e detalhe mínimo.
+- Fase 14: banco vazio e dados incompletos — checar mensagens orientativas, sem erro técnico exposto e sem gerar documento inválido.
+- Fase 15: roteiro impresso de 8 tarefas para operador externo, com planilha de tempo/dúvidas/erros. Resultados apenas consolidados, sem alteração de código nesta etapa.
 
-1. `ferias_militares` do usuário — todas do ano corrente ±1.
-2. `nbi_documents` do usuário: `id, numero, ano, data_documento, status, canceled_at, assuntos` (assuntos expandidos em memória).
-3. `nbi_substituicoes` do usuário com militares vinculados.
-4. `militares` do usuário (ativo/inativo, dados institucionais).
+## 6. Métricas de desempenho (Fase 13)
 
-O wizard reaproveita a mesma base já carregada, memoizada por `[militarId, tipo, campos relevantes]` — sem consulta por card ou por assunto, e sem loop de renderização.
+| Métrica | Alvo |
+| --- | --- |
+| Consultas ao abrir painel de pendências | 4 (lote único), 0 por card |
+| Consultas por assunto no wizard | 0 |
+| Avaliação de consistência (1.000 docs) | < 150 ms |
+| Montagem da timeline paginada | < 100 ms |
+| Renderização do painel | < 1,5 s até interativo |
+| Re-renders do wizard ao digitar | sem loop; recálculo só na mudança de campo relevante |
 
-## 7. Índices
+Índices só serão propostos (não aplicados) se houver degradação comprovada.
 
-Não serão criados nesta etapa. Volumes atuais (dezenas de linhas por usuário) e filtros por `user_id` já cobertos pelas policies/PKs não justificam migração. Se o teste de volume (500+ documentos) mostrar degradação, propomos então um índice em `nbi_documents(user_id, data_documento)` e `nbi_substituicoes(user_id, status)`.
+## 7. Critérios de aprovação por cenário
 
-## 8. Riscos de falso positivo e mitigação
+- A (férias): pendência nasce e morre na data certa, vínculo férias⇄apresentação íntegro, timeline sem duplicidade.
+- B (luto/núpcias/paternidade): variante textual correta, grau de parentesco controlado, 8 dias padrão em núpcias.
+- C (assunção⇄dispensa): duas abertas independentes, encerramento correto, encerrada reutilizada bloqueada, aberta sem previsão nunca "atrasada", ambiguidade legada bloqueia.
+- D (folga): mês seguinte e virada de ano corretos, previsão e realizada distintas, nada marcado como atrasado.
+- E (conflitos): severidade exatamente conforme a matriz; nenhum bloqueio por inferência.
+- F (redundância): duplicidade exata detectada, semelhante legítima liberada, "duplicar mesmo assim" exige confirmação e gera auditoria.
+- G (NBI longa): aprovação visual dos 18 pontos em DOCX e PDF.
+- Regressão: cada motor homologado confere frase a frase com o template oficial.
 
-- Afastamentos só conhecidos via NBI → conflito só é avaliado quando há documento ativo; a origem do dado aparece no achado.
-- Substituições legadas sem `data_fim_prevista` → tratadas como "aberta sem previsão", nunca como atrasada.
-- Duas assunções abertas legítimas para funções diferentes → alerta, nunca bloqueio (regra já homologada no 10C).
-- Documento cancelado nunca satisfaz pendência, mas é exibido como informação, não como duplicidade ativa.
-- Duplicidade reutiliza o detector de assinatura por motor já homologado (`duplicidade.ts`), sem novo critério paralelo.
+## 8. Riscos
 
-## 9. Integração e limites
+- Diferença de renderização DOCX→PDF no conversor do sandbox pode gerar falso negativo visual; a conferência final considera o DOCX como fonte de verdade.
+- A massa de volume simulada não exercita latência real de rede; a medição de consultas será feita separadamente contando as chamadas do lote.
+- Afastamentos que só existem via NBI continuam invisíveis quando não documentados — limitação declarada, não bug.
+- Fase 15 depende de operador externo; se indisponível, será entregue apenas o roteiro e a recomendação ficará "congelar com ressalva na aceitação de operador".
+- Criação de militares/documentos de teste aumenta o volume histórico do usuário de homologação; limpeza opcional ao final.
 
-- Etapa 2 do wizard: bloco "Consistência institucional" abaixo do assunto preenchido.
-- Etapa 3: o `PainelAuditoria` existente recebe um grupo adicional `consistencia` — nenhum painel concorrente.
-- Fase 14: gravação em `nbi_auditoria` apenas para conflito confirmado, alerta ignorado, duplicação intencional e sugestão convertida em rascunho.
-- Nada fora do módulo NBI é tocado: escalas, 24x72, XLSX, PDF de furos, pagamentos, autenticação, landing page, numeração, modelo mestre v4 e textos oficiais permanecem intactos.
+## 9. Entrega da Etapa B
 
-## 10. Testes previstos
-
-Os 28 casos do Bloco 12 em `bloco12.test.ts` (cronologia, matriz de conflitos, pendências, duplicidade, timeline, filtros do painel), mais typecheck, build de produção, verificação da rota no preview e teste de volume simulando centenas de documentos.
+Relatório com inventário antes/depois, cenários aprovados/reprovados, bugs encontrados e corrigidos, arquivos alterados, documentos gerados (DOCX/PDF/PNG), desempenho, suíte, typecheck, build, lista de assuntos ainda bloqueados com justificativa, confirmação de que nada fora do NBI foi tocado e a recomendação final (CONGELAR / CONGELAR COM RESSALVAS / NÃO CONGELAR).
