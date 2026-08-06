@@ -21,6 +21,8 @@ export interface Profile {
   complimentary_access?: boolean;
   complimentary_access_reason?: string | null;
   complimentary_access_expires_at?: string | null;
+  /** Bloco 12D — conta de homologação: dados de teste, sem validade oficial. */
+  ambiente_homologacao?: boolean;
 }
 
 
