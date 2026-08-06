@@ -9,7 +9,7 @@ export const Route = createFileRoute("/app")({
 });
 
 function AppLayout() {
-  const { loading, session, profile, isAdmin, isApproved, hasAccess, isTrial, trialDaysLeft, signOut } = useAuth();
+  const { loading, session, profile, isAdmin, isApproved, hasAccess, isTrial, trialDaysLeft, isHomologacao, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
