@@ -143,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     trialDaysLeft: access.daysLeft,
     isTrial: access.isTrial,
     isComplimentary: access.isComplimentary,
+    isHomologacao: profile?.ambiente_homologacao === true,
     refresh,
     signOut,
   };
