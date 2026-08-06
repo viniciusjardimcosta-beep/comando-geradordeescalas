@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ambiente_homologacao boolean NOT NULL DEFAULT false;
