@@ -38,6 +38,8 @@ interface AuthContextValue {
   trialDaysLeft: number | null;
   isTrial: boolean;
   isComplimentary: boolean;
+  /** Bloco 12D — true quando a conta é o ambiente de homologação. */
+  isHomologacao: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
