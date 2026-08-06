@@ -122,12 +122,13 @@ describe("12C/A — ciclo completo de férias", () => {
   it("reservado não é publicado e não satisfaz a pendência", () => {
     const reservado = doc({
       id: "d-res", status: "reservado", numero: "011",
-      assuntos: [assunto({ tipo: "apresentacao", ferias_id: "outra", campos: { DATA_APRESENTACAO: "2026-02-11" } })],
+      assuntos: [assunto({ tipo: "apresentacao", ferias_id: "outra", campos: { DATA_APRESENTACAO: "2026-01-05" } })],
     });
     const b = base({ ferias: [f], documentos: [reservado], hoje: "2026-02-20" });
     expect(apresentacoesPendentes(b)).toHaveLength(1);
     expect(montarTimeline(b, MIL).eventos.find((e) => e.documento_id === "d-res")?.situacao).toBe("reservado");
   });
+
 
   it("apresentação gerada resolve a pendência e o vínculo é preservado", () => {
     const gerado = doc({
