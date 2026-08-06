@@ -196,9 +196,14 @@ export function regrasApresentacao(e: EntradaConsistencia): Achado[] {
 
   const afastamentos = coletarAfastamentos(e.base, e.militarId);
   const feriasId = texto(e.campos.ferias_id);
+  // 12C — bug reproduzido: quando a apresentação cai DENTRO de um afastamento
+  // ainda em curso, esse afastamento é a origem (e o caso é bloqueio). Antes,
+  // só afastamentos já encerrados eram considerados e a regra ficava silenciosa.
   const origem = feriasId
     ? afastamentos.find((af) => af.ferias_id === feriasId)
-    : afastamentos.filter((af) => af.fim < dataApres).slice(-1)[0];
+    : afastamentos.find((af) => af.inicio <= dataApres && dataApres <= af.fim)
+      ?? afastamentos.filter((af) => af.fim < dataApres).slice(-1)[0];
+
 
   if (!origem) return out;
 
