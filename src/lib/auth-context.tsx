@@ -21,6 +21,8 @@ export interface Profile {
   complimentary_access?: boolean;
   complimentary_access_reason?: string | null;
   complimentary_access_expires_at?: string | null;
+  /** Bloco 12D — conta de homologação: dados de teste, sem validade oficial. */
+  ambiente_homologacao?: boolean;
 }
 
 
@@ -36,6 +38,8 @@ interface AuthContextValue {
   trialDaysLeft: number | null;
   isTrial: boolean;
   isComplimentary: boolean;
+  /** Bloco 12D — true quando a conta é o ambiente de homologação. */
+  isHomologacao: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -76,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [{ data: prof }, { data: roles }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, email, nome, status, trial_start_date, trial_end_date, subscription_status, subscription_end_date, plan_type, password_temporary, complimentary_access, complimentary_access_reason, complimentary_access_expires_at")
+        .select("id, email, nome, status, trial_start_date, trial_end_date, subscription_status, subscription_end_date, plan_type, password_temporary, complimentary_access, complimentary_access_reason, complimentary_access_expires_at, ambiente_homologacao")
         .eq("id", userId)
         .maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId),
@@ -139,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     trialDaysLeft: access.daysLeft,
     isTrial: access.isTrial,
     isComplimentary: access.isComplimentary,
+    isHomologacao: profile?.ambiente_homologacao === true,
     refresh,
     signOut,
   };

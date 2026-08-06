@@ -9,7 +9,7 @@ export const Route = createFileRoute("/app")({
 });
 
 function AppLayout() {
-  const { loading, session, profile, isAdmin, isApproved, hasAccess, isTrial, trialDaysLeft, signOut } = useAuth();
+  const { loading, session, profile, isAdmin, isApproved, hasAccess, isTrial, trialDaysLeft, isHomologacao, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -47,6 +47,14 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen">
+      {isHomologacao && (
+        <div
+          data-testid="banner-homologacao"
+          className="sticky top-0 z-40 border-b border-amber-500/50 bg-amber-500/20 px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-200"
+        >
+          Ambiente de homologação — dados de teste. Nenhum documento possui validade oficial.
+        </div>
+      )}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">

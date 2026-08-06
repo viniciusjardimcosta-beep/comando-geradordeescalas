@@ -994,6 +994,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ambiente_homologacao: boolean
           complimentary_access: boolean
           complimentary_access_expires_at: string | null
           complimentary_access_reason: string | null
@@ -1017,6 +1018,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ambiente_homologacao?: boolean
           complimentary_access?: boolean
           complimentary_access_expires_at?: string | null
           complimentary_access_reason?: string | null
@@ -1040,6 +1042,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ambiente_homologacao?: boolean
           complimentary_access?: boolean
           complimentary_access_expires_at?: string | null
           complimentary_access_reason?: string | null

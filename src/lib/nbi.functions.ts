@@ -369,7 +369,17 @@ export const gerarNbi = createServerFn({ method: "POST" })
     }
     const secoes = ordemChaves.map((k) => secoesMap.get(k)!);
 
-    const numeroFmt = String(numero).padStart(3, "0");
+    // Bloco 12D — prefixo de numeração (ex.: "TESTE") vem de nbi_numeracao do
+    // próprio usuário. Ambientes de homologação usam prefixo próprio para que
+    // o documento jamais seja confundido com um documento oficial.
+    const { data: numRow } = await supabase
+      .from("nbi_numeracao")
+      .select("prefixo")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const prefixoNum = ((numRow?.prefixo ?? "") as string).trim();
+    const numeroBase = String(numero).padStart(3, "0");
+    const numeroFmt = prefixoNum ? `${prefixoNum} ${numeroBase}` : numeroBase;
     // Bloco 10C — data sempre formatada, nunca concatenada manualmente.
     const dataNota = formatarDataBR(doc.data_documento);
 
@@ -470,7 +480,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
     const buf = dt.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
 
     // 6. Upload no bucket
-    const path = `${userId}/${ano}/nbi-${numeroFmt}-${data.documento_id}.docx`;
+    const path = `${userId}/${ano}/nbi-${numeroBase}-${data.documento_id}.docx`;
     const { error: eU } = await supabaseAdmin.storage
       .from("nbi-documentos")
       .upload(path, buf, {
