@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { gerarNbi, baixarNbi, proximoNumeroPrevisto } from "@/lib/nbi.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { auditarPreGeracao } from "@/lib/nbi/auditoria";
+import { executarGeracaoNbi } from "@/lib/nbi/geracaoFluxo";
+
 import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
 import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
 import type { IntegranteComissao } from "@/lib/nbi/derivados";
@@ -456,10 +458,16 @@ function NovaNbiPage() {
   }
 
 
-  async function salvarRascunho() {
-    if (!userId) return;
+  /**
+   * Bloco 12E — ÚNICA fonte de verdade da persistência do rascunho.
+   * Devolve o resultado em vez de exibir interface, para poder ser reutilizada
+   * tanto pelo botão "Salvar rascunho" quanto pelo fluxo de geração.
+   */
+  async function persistirRascunho(): Promise<{ ok: boolean; documentoId: string | null; erro?: string }> {
+    if (!userId) return { ok: false, documentoId: null, erro: "Sessão não identificada." };
     setSalvando(true);
     try {
+
       const snapshot = rascunho.assuntos.map((a) => {
         const t = templatePor.get(a.tipo);
         const { texto, ausentes } = textoFinal(a);
@@ -593,22 +601,43 @@ function NovaNbiPage() {
         status: "rascunho",
       };
       if (documentoId) {
-        const { error } = await supabase.from("nbi_documents").update(payload).eq("id", documentoId);
+        // Nunca rebaixa um documento que já recebeu número: preserva status
+        // e numeração homologada, gravando apenas conteúdo e responsáveis.
+        const { data: atual } = await supabase
+          .from("nbi_documents")
+          .select("status,numero,numero_int")
+          .eq("id", documentoId)
+          .maybeSingle();
+        const jaNumerado = Boolean(atual?.numero_int);
+        const upd = jaNumerado
+          ? { ...payload, numero: atual?.numero ?? payload.numero, status: atual?.status ?? payload.status }
+          : payload;
+        const { error } = await supabase.from("nbi_documents").update(upd).eq("id", documentoId);
         if (error) throw error;
-        toast.success("Rascunho atualizado");
-      } else {
-        const { data, error } = await supabase.from("nbi_documents").insert([payload]).select("id").single();
-        if (error) throw error;
-        if (data?.id) setDocumentoId(data.id);
-        toast.success("Rascunho salvo com sucesso");
+        return { ok: true, documentoId };
       }
+      const { data, error } = await supabase.from("nbi_documents").insert([payload]).select("id").single();
+      if (error) throw error;
+      if (data?.id) setDocumentoId(data.id);
+      return { ok: true, documentoId: data?.id ?? null };
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao salvar rascunho");
+      return { ok: false, documentoId, erro: "Não foi possível salvar os dados do rascunho." };
     } finally {
       setSalvando(false);
     }
   }
+
+  /** Botão "Salvar rascunho" — camada de interface sobre a persistência única. */
+  async function salvarRascunho() {
+    const r = await persistirRascunho();
+    if (r.ok) {
+      toast.success(documentoId ? "Rascunho atualizado" : "Rascunho salvo com sucesso");
+    } else if (r.erro) {
+      toast.error("Erro ao salvar rascunho", { description: r.erro });
+    }
+  }
+
 
   if (loading) {
     return <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -670,6 +699,8 @@ function NovaNbiPage() {
           atualizarCampo={atualizarCampo}
           onBack={() => setEtapa(2)}
           onSalvar={salvarRascunho}
+          onPersistir={persistirRascunho}
+
           salvando={salvando}
           documentoId={documentoId}
           onRecarregarSubstituicoes={recarregarSubstituicoes}
@@ -1542,7 +1573,7 @@ function AssuntoCard({
 // ============ ETAPA 3 ============
 
 function Etapa3({
-  rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, salvando,
+  rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, onPersistir, salvando,
   documentoId, onRecarregarSubstituicoes, baseConsistencia,
 }: {
   rascunho: Rascunho;
@@ -1553,6 +1584,8 @@ function Etapa3({
   atualizarCampo: (assuntoId: string, chave: string, valor: string | boolean) => void;
   onBack: () => void;
   onSalvar: () => Promise<void> | void;
+  /** Bloco 12E — persistência sem interface, obrigatória antes de gerar. */
+  onPersistir: () => Promise<{ ok: boolean; documentoId: string | null; erro?: string }>;
   salvando: boolean;
   documentoId: string | null;
   onRecarregarSubstituicoes: () => Promise<void> | void;
@@ -1564,7 +1597,11 @@ function Etapa3({
   const prox = useServerFn(proximoNumeroPrevisto);
 
   const [gerando, setGerando] = useState(false);
+  // Bloco 12E — falha de geração precisa ficar visível na Etapa 3, não só em toast.
+  const [erroGeracao, setErroGeracao] = useState<string | null>(null);
+  const emExecucao = useRef(false);
   const [gerado, setGerado] = useState<{ numero: number; ano: number } | null>(null);
+
   const [confirmarAno, setConfirmarAno] = useState(false);
   // Bloco 10C — override de duplicidade exige confirmação explícita.
   const [duplicarMesmoAssim, setDuplicarMesmoAssim] = useState(false);
@@ -1685,49 +1722,65 @@ function Etapa3({
 
 
   async function handleGerar() {
+    // Bloco 12E — proteção contra duplo clique: uma única execução por vez.
+    if (emExecucao.current) return;
     if (!documentoId) {
-      toast.error("Salve o rascunho antes de gerar.");
+      const msg = "Salve o rascunho antes de gerar.";
+      setErroGeracao(msg);
+      toast.error(msg);
       return;
     }
     if (rascunho.modo_numeracao === "manual") {
       const n = parseInt(rascunho.numero.replace(/\D/g, ""), 10);
       if (!Number.isFinite(n) || n < 1) {
-        toast.error("Informe o número manual da NBI na Etapa 1.");
+        const msg = "Informe o número manual da NBI na Etapa 1.";
+        setErroGeracao(msg);
+        toast.error(msg);
         return;
       }
     }
     if (transicaoAno && !confirmarAno && rascunho.modo_numeracao === "automatico") {
-      toast.error(`Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`);
+      const msg = `Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`;
+      setErroGeracao(msg);
+      toast.error(msg);
       return;
     }
     setGerando(true);
-    try {
-      const r = await gerar({
-        data: {
-          documento_id: documentoId,
-          confirmar_novo_ano: confirmarAno,
-          modo_numeracao: rascunho.modo_numeracao,
-          numero_manual: rascunho.modo_numeracao === "manual"
-            ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
-            : null,
-          ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
-        },
-      });
-      if (!r.ok) {
-        toast.error("Falha ao gerar NBI", { description: r.code });
-      } else {
-        setGerado({ numero: r.numero ?? 0, ano: r.ano ?? new Date().getFullYear() });
-        // Assunções recém-registradas passam a valer para a próxima dispensa.
-        void onRecarregarSubstituicoes();
-
-        toast.success(`NBI nº ${String(r.numero ?? 0).padStart(3, "0")}/${r.ano} gerada`);
-      }
-    } catch (e) {
-      toast.error("Falha ao gerar NBI", { description: (e as Error).message });
-    } finally {
-      setGerando(false);
+    setErroGeracao(null);
+    // Fluxo único (Bloco 12E): persistir → gerar. Nenhuma reserva sem gravação.
+    const saida = await executarGeracaoNbi({
+      trava: emExecucao,
+      documentoId,
+      persistir: onPersistir,
+      anoPadrao: anoDoc,
+      gerar: (alvo) =>
+        gerar({
+          data: {
+            documento_id: alvo,
+            confirmar_novo_ano: confirmarAno,
+            modo_numeracao: rascunho.modo_numeracao,
+            numero_manual: rascunho.modo_numeracao === "manual"
+              ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
+              : null,
+            ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
+          },
+        }),
+    });
+    setGerando(false);
+    if (saida.estado === "ignorado") return;
+    if (saida.estado === "erro") {
+      setErroGeracao(saida.mensagem);
+      toast.error("Não foi possível gerar a NBI", { description: saida.mensagem });
+      return;
     }
+    setErroGeracao(null);
+    setGerado({ numero: saida.numero, ano: saida.ano });
+    // Assunções recém-registradas passam a valer para a próxima dispensa.
+    void onRecarregarSubstituicoes();
+    toast.success(`NBI nº ${String(saida.numero).padStart(3, "0")}/${saida.ano} gerada`);
   }
+
+
 
   async function handleBaixar() {
     if (!documentoId) return;
@@ -1878,10 +1931,24 @@ function Etapa3({
           </div>
         )}
 
+        {/* Bloco 12E — falha crítica sempre visível ao lado do botão de geração. */}
+        {erroGeracao && !gerado && (
+          <div
+            className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            data-testid="erro-geracao"
+            role="alert"
+          >
+            <div className="mb-1 flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" /> Não foi possível gerar a NBI.
+            </div>
+            <p className="text-xs">{erroGeracao}</p>
+          </div>
+        )}
+
         <div className="flex flex-wrap justify-between gap-2">
           <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar e corrigir</Button>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={onSalvar} disabled={salvando} data-testid="salvar-rascunho">
+            <Button variant="outline" onClick={onSalvar} disabled={salvando || gerando} data-testid="salvar-rascunho">
               {salvando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar rascunho
             </Button>
@@ -1889,8 +1956,9 @@ function Etapa3({
               <Button
                 onClick={handleGerar}
                 data-testid="gerar-nbi"
-                disabled={bloqueado || gerando || !documentoId || (transicaoAno && !confirmarAno)}
+                disabled={bloqueado || gerando || salvando || !documentoId || (transicaoAno && !confirmarAno)}
               >
+
                 {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
                 Gerar NBI (.docx)
               </Button>
