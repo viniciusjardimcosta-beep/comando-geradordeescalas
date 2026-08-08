@@ -191,7 +191,166 @@ export const gerarNbi = createServerFn({ method: "POST" })
 
     const anoLocal = new Date(doc.data_documento + "T00:00:00Z").getUTCFullYear();
 
-    // 2. Reserva número — modo manual ou automático
+    // =========================================================
+    // 2. PRÉ-VALIDAÇÃO ESTRUTURAL (Bloco 12E)
+    // Tudo que NÃO depende do número é verificado ANTES da reserva.
+    // Uma NBI estruturalmente inválida jamais consome um número oficial.
+    // =========================================================
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 2.1 Modelo mestre do storage (admin, arquivo do sistema)
+    const { data: modelo, error: eM } = await supabaseAdmin.storage
+      .from("nbi-documentos")
+      .download("_sistema/nbi-mestre-v4.docx");
+    if (eM || !modelo) throw new Error("Modelo mestre indisponível");
+    const modeloBuf = Buffer.from(await modelo.arrayBuffer());
+
+    // 2.2 Cabeçalho oficial — fonte única: nbi_settings da unidade emissora.
+    const { data: settings } = await supabase
+      .from("nbi_settings")
+      .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla, boletim_nome, boletim_sigla")
+      .eq("user_id", userId)
+      .maybeSingle();
+    // Bloco 10C — normalização institucional aplicada NO MOMENTO DA GERAÇÃO:
+    // configurações antigas ("15ª BATALHAO", "8º COMPANHIA") saem corrigidas
+    // sem exigir que o usuário reabra e salve as Configurações NBI.
+    // Linhas iniciadas por "!" são exceções confirmadas e saem literalmente.
+    const cabecalho = normalizarCabecalho({
+      estado: settings?.cabecalho_estado ?? "",
+      secretaria: settings?.cabecalho_secretaria ?? "",
+      corporacao: settings?.cabecalho_corporacao ?? "",
+      batalhao: settings?.cabecalho_batalhao ?? "",
+      subunidade: settings?.cabecalho_subunidade ?? settings?.unidade_nome ?? "",
+      cidade: settings?.cabecalho_cidade ?? "",
+    });
+    const cabecalhoFaltando: string[] = [];
+    if (!cabecalho.estado) cabecalhoFaltando.push("Estado");
+    if (!cabecalho.secretaria) cabecalhoFaltando.push("Secretaria");
+    if (!cabecalho.corporacao) cabecalhoFaltando.push("Corporação");
+    if (!cabecalho.batalhao) cabecalhoFaltando.push("Batalhão");
+    if (!cabecalho.subunidade) cabecalhoFaltando.push("Subunidade (Unidade)");
+    if (cabecalhoFaltando.length > 0) {
+      return {
+        ok: false as const,
+        code: `Cabeçalho oficial incompleto em Configurações NBI: ${cabecalhoFaltando.join(", ")}.`,
+      };
+    }
+
+    // 2.3 Mapa de títulos oficiais por código de template (uppercase p/ Word)
+    const { data: tpls } = await supabaseAdmin
+      .from("nbi_templates")
+      .select("codigo, titulo, titulo_documento");
+    const { tituloDocumentoDoRegistry } = await import("@/lib/nbi/motores/registry");
+    const tituloOficialPorCodigo = new Map<string, string>();
+    for (const t of tpls ?? []) {
+      const oficial = (
+        (t as { titulo_documento?: string | null }).titulo_documento
+        ?? t.titulo
+        ?? tituloDocumentoDoRegistry(t.codigo)
+        ?? ""
+      ).toUpperCase();
+      tituloOficialPorCodigo.set(t.codigo, oficial);
+    }
+
+    // 2.4 Monta seções a partir dos assuntos persistidos
+    const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
+    const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
+
+    // Agrupamento GLOBAL por tipo/título oficial: todos os itens do mesmo tipo
+    // ficam sob um único título, preservando a ordem de primeira aparição.
+    // Nunca duplica cabeçalho de seção mesmo que os assuntos sejam intercalados.
+    const secoesMap = new Map<string, { TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }>();
+    const ordemChaves: string[] = [];
+    for (const a of assuntosRaw) {
+      const codigo = (a as { tipo?: string; template_codigo?: string }).template_codigo
+        ?? (a as { tipo?: string }).tipo
+        ?? "";
+      const titulo = (
+        tituloOficialPorCodigo.get(codigo) ??
+        (a.titulo ?? "").toUpperCase()
+      ).trim();
+      if (!titulo) continue;
+      const itens = (a.texto_final ?? "")
+        .split(/\n{2,}/)
+        .map((t) => ({ TEXTO_ITEM: t.trim() }))
+        .filter((x) => x.TEXTO_ITEM.length > 0);
+      if (itens.length === 0) continue;
+      const chave = titulo;
+      if (!secoesMap.has(chave)) {
+        secoesMap.set(chave, { TITULO_SECAO: titulo, ITENS: [] });
+        ordemChaves.push(chave);
+      }
+      secoesMap.get(chave)!.ITENS.push(...itens);
+    }
+    const secoes = ordemChaves.map((k) => secoesMap.get(k)!);
+
+    // Bloco 10C — data sempre formatada, nunca concatenada manualmente.
+    const dataNota = formatarDataBR(doc.data_documento);
+
+    // 2.5 Placeholders que independem do número reservado.
+    const placeholdersBase: Record<string, string> = {
+      DATA_NOTA: dataNota,
+      DATA_DOCUMENTO: dataExtenso(doc.data_documento),
+
+      // Cabeçalho oficial configurável
+      ESTADO_CABECALHO: cabecalho.estado,
+      SECRETARIA_CABECALHO: cabecalho.secretaria,
+      CORPORACAO_CABECALHO: cabecalho.corporacao,
+      BATALHAO_CABECALHO: cabecalho.batalhao,
+      UNIDADE_CABECALHO: cabecalho.subunidade,
+      UNIDADE_SIGLA: settings?.unidade_sigla ?? "",
+
+      // RF-06 — nomenclatura do boletim definida em Configurações NBI.
+      BOLETIM_NOME: ((settings as { boletim_nome?: string | null } | null)?.boletim_nome ?? "").trim() || "Boletim",
+      BOLETIM_SIGLA: ((settings as { boletim_sigla?: string | null } | null)?.boletim_sigla ?? "").trim() || "BI",
+      LOCAL_DATA: `${cabecalho.cidade || settings?.unidade_sigla || ""}, ${dataExtenso(doc.data_documento)}`.trim(),
+
+      NOME_DIGITADOR: resp.digitador?.nome ?? "",
+      POSTO_QUADRO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
+      POSTO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
+      FUNCAO_DIGITADOR: resp.digitador?.funcao ?? "",
+      LOTACAO_DIGITADOR: resp.digitador?.lotacao ?? "",
+
+      NOME_COMANDANTE: resp.comandante?.nome ?? "",
+      POSTO_QUADRO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
+      POSTO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
+      FUNCAO_COMANDANTE: resp.comandante?.funcao ?? "",
+      LOTACAO_COMANDANTE: resp.comandante?.lotacao ?? "",
+
+      NOME_AUTORIDADE: resp.autoridade?.nome ?? "",
+      POSTO_QUADRO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
+      POSTO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
+      FUNCAO_AUTORIDADE: resp.autoridade?.funcao ?? "",
+      LOTACAO_AUTORIDADE: resp.autoridade?.lotacao ?? "",
+    };
+
+    // 2.6 Validação estrutural: nenhum campo obrigatório (independente do
+    // número) pode ser vazio, e o documento precisa ter ao menos uma seção.
+    const obrigatoriosBase = [
+      "DATA_NOTA",
+      "ESTADO_CABECALHO", "SECRETARIA_CABECALHO", "CORPORACAO_CABECALHO",
+      "BATALHAO_CABECALHO", "UNIDADE_CABECALHO",
+      "NOME_DIGITADOR", "POSTO_QUADRO_DIGITADOR", "FUNCAO_DIGITADOR",
+      "NOME_COMANDANTE", "POSTO_QUADRO_COMANDANTE", "FUNCAO_COMANDANTE",
+    ];
+    const ausentes: string[] = [];
+    for (const k of obrigatoriosBase) {
+      const v = placeholdersBase[k];
+      if (v === undefined || v === null || v === "" || v === "undefined" || v === "null" || v === "[object Object]") {
+        ausentes.push(k);
+      }
+    }
+    if (assuntosRaw.length === 0 || secoes.length === 0) ausentes.push("SECOES");
+    if (ausentes.length > 0) {
+      // Retorno ANTES de qualquer reserva: nenhum número é consumido.
+      return {
+        ok: false as const,
+        code: `Campos obrigatórios ausentes: ${ausentes.join(", ")}`,
+      };
+    }
+
+    // 3. Reserva número — modo manual ou automático
+
     let numero = doc.numero_int as number | null;
     let ano = doc.numero_ano_local as number | null;
 
@@ -282,174 +441,30 @@ export const gerarNbi = createServerFn({ method: "POST" })
       throw new Error("Número da NBI não pôde ser reservado");
     }
 
-    // 3. Baixa modelo mestre do storage (admin, arquivo do sistema)
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: modelo, error: eM } = await supabaseAdmin.storage
-      .from("nbi-documentos")
-      .download("_sistema/nbi-mestre-v4.docx");
-    if (eM || !modelo) throw new Error("Modelo mestre indisponível");
-    const modeloBuf = Buffer.from(await modelo.arrayBuffer());
-
-    // 3.1 Cabeçalho oficial — fonte única: nbi_settings da unidade emissora.
-    const { data: settings } = await supabase
-      .from("nbi_settings")
-      .select("cabecalho_estado, cabecalho_secretaria, cabecalho_corporacao, cabecalho_batalhao, cabecalho_subunidade, cabecalho_cidade, unidade_nome, unidade_sigla, boletim_nome, boletim_sigla")
-      .eq("user_id", userId)
-      .maybeSingle();
-    // Bloco 10C — normalização institucional aplicada NO MOMENTO DA GERAÇÃO:
-    // configurações antigas ("15ª BATALHAO", "8º COMPANHIA") saem corrigidas
-    // sem exigir que o usuário reabra e salve as Configurações NBI.
-    // Linhas iniciadas por "!" são exceções confirmadas e saem literalmente.
-    const cabecalho = normalizarCabecalho({
-      estado: settings?.cabecalho_estado ?? "",
-      secretaria: settings?.cabecalho_secretaria ?? "",
-      corporacao: settings?.cabecalho_corporacao ?? "",
-      batalhao: settings?.cabecalho_batalhao ?? "",
-      subunidade: settings?.cabecalho_subunidade ?? settings?.unidade_nome ?? "",
-      cidade: settings?.cabecalho_cidade ?? "",
-    });
-    const cabecalhoFaltando: string[] = [];
-    if (!cabecalho.estado) cabecalhoFaltando.push("Estado");
-    if (!cabecalho.secretaria) cabecalhoFaltando.push("Secretaria");
-    if (!cabecalho.corporacao) cabecalhoFaltando.push("Corporação");
-    if (!cabecalho.batalhao) cabecalhoFaltando.push("Batalhão");
-    if (!cabecalho.subunidade) cabecalhoFaltando.push("Subunidade (Unidade)");
-    if (cabecalhoFaltando.length > 0) {
-      return {
-        ok: false as const,
-        code: `Cabeçalho oficial incompleto em Configurações NBI: ${cabecalhoFaltando.join(", ")}.`,
-      };
-    }
-
-    // 3.2 Mapa de títulos oficiais por código de template (uppercase p/ Word)
-    const { data: tpls } = await supabaseAdmin
-      .from("nbi_templates")
-      .select("codigo, titulo, titulo_documento");
-    const { tituloDocumentoDoRegistry } = await import("@/lib/nbi/motores/registry");
-    const tituloOficialPorCodigo = new Map<string, string>();
-    for (const t of tpls ?? []) {
-      const oficial = (
-        (t as { titulo_documento?: string | null }).titulo_documento
-        ?? t.titulo
-        ?? tituloDocumentoDoRegistry(t.codigo)
-        ?? ""
-      ).toUpperCase();
-      tituloOficialPorCodigo.set(t.codigo, oficial);
-    }
-
-    // 4. Monta payload de placeholders + seções
-    const resp = (doc.responsaveis ?? {}) as unknown as SnapshotResponsaveis;
-    const assuntosRaw = (doc.assuntos ?? []) as unknown as SnapshotAssunto[];
-
-    // Agrupamento GLOBAL por tipo/título oficial: todos os itens do mesmo tipo
-    // ficam sob um único título, preservando a ordem de primeira aparição.
-    // Nunca duplica cabeçalho de seção mesmo que os assuntos sejam intercalados.
-    const secoesMap = new Map<string, { TITULO_SECAO: string; ITENS: Array<{ TEXTO_ITEM: string }> }>();
-    const ordemChaves: string[] = [];
-    for (const a of assuntosRaw) {
-      const codigo = (a as { tipo?: string; template_codigo?: string }).template_codigo
-        ?? (a as { tipo?: string }).tipo
-        ?? "";
-      const titulo = (
-        tituloOficialPorCodigo.get(codigo) ??
-        (a.titulo ?? "").toUpperCase()
-      ).trim();
-      if (!titulo) continue;
-      const itens = (a.texto_final ?? "")
-        .split(/\n{2,}/)
-        .map((t) => ({ TEXTO_ITEM: t.trim() }))
-        .filter((x) => x.TEXTO_ITEM.length > 0);
-      if (itens.length === 0) continue;
-      const chave = titulo;
-      if (!secoesMap.has(chave)) {
-        secoesMap.set(chave, { TITULO_SECAO: titulo, ITENS: [] });
-        ordemChaves.push(chave);
-      }
-      secoesMap.get(chave)!.ITENS.push(...itens);
-    }
-    const secoes = ordemChaves.map((k) => secoesMap.get(k)!);
-
-    // Bloco 12D — prefixo de numeração (ex.: "TESTE") vem de nbi_numeracao do
-    // próprio usuário. Ambientes de homologação usam prefixo próprio para que
-    // o documento jamais seja confundido com um documento oficial.
-    const { data: numRow } = await supabase
+    // 5. Prefixo de numeração e placeholders dependentes do número.
+    // Bloco 12D — prefixo (ex.: "TESTE") vem de nbi_numeracao do próprio usuário.
+    const { data: numRowPrefixo } = await supabase
       .from("nbi_numeracao")
       .select("prefixo")
       .eq("user_id", userId)
       .maybeSingle();
-    const prefixoNum = ((numRow?.prefixo ?? "") as string).trim();
+    const prefixoNum = ((numRowPrefixo?.prefixo ?? "") as string).trim();
     const numeroBase = String(numero).padStart(3, "0");
     const numeroFmt = prefixoNum ? `${prefixoNum} ${numeroBase}` : numeroBase;
-    // Bloco 10C — data sempre formatada, nunca concatenada manualmente.
-    const dataNota = formatarDataBR(doc.data_documento);
 
-    // Objeto explícito enviado ao docxtemplater. Nomes de chaves fixos
-    // acordados com o modelo mestre (sem acentos, sempre maiúsculo).
     const placeholders: Record<string, string> = {
+      ...placeholdersBase,
       NUMERO_NOTA: numeroFmt,
-      DATA_NOTA: dataNota,
       // Compatibilidade com chaves antigas do modelo mestre (caso ainda existam)
       NUMERO_NBI: numeroFmt,
       ANO_NBI: String(ano),
-      DATA_DOCUMENTO: dataExtenso(doc.data_documento),
-
-      // Cabeçalho oficial configurável
-      ESTADO_CABECALHO: cabecalho.estado,
-      SECRETARIA_CABECALHO: cabecalho.secretaria,
-      CORPORACAO_CABECALHO: cabecalho.corporacao,
-      BATALHAO_CABECALHO: cabecalho.batalhao,
-      UNIDADE_CABECALHO: cabecalho.subunidade,
-      UNIDADE_SIGLA: settings?.unidade_sigla ?? "",
-
-      // RF-06 — nomenclatura do boletim definida em Configurações NBI.
-      BOLETIM_NOME: ((settings as { boletim_nome?: string | null } | null)?.boletim_nome ?? "").trim() || "Boletim",
-      BOLETIM_SIGLA: ((settings as { boletim_sigla?: string | null } | null)?.boletim_sigla ?? "").trim() || "BI",
-      LOCAL_DATA: `${cabecalho.cidade || settings?.unidade_sigla || ""}, ${dataExtenso(doc.data_documento)}`.trim(),
-
-      NOME_DIGITADOR: resp.digitador?.nome ?? "",
-      POSTO_QUADRO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
-      POSTO_DIGITADOR: dedupPostoQuadro(resp.digitador?.posto_quadro),
-      FUNCAO_DIGITADOR: resp.digitador?.funcao ?? "",
-      LOTACAO_DIGITADOR: resp.digitador?.lotacao ?? "",
-
-      NOME_COMANDANTE: resp.comandante?.nome ?? "",
-      POSTO_QUADRO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
-      POSTO_COMANDANTE: dedupPostoQuadro(resp.comandante?.posto_quadro),
-      FUNCAO_COMANDANTE: resp.comandante?.funcao ?? "",
-      LOTACAO_COMANDANTE: resp.comandante?.lotacao ?? "",
-
-      NOME_AUTORIDADE: resp.autoridade?.nome ?? "",
-      POSTO_QUADRO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
-      POSTO_AUTORIDADE: dedupPostoQuadro(resp.autoridade?.posto_quadro),
-      FUNCAO_AUTORIDADE: resp.autoridade?.funcao ?? "",
-      LOTACAO_AUTORIDADE: resp.autoridade?.lotacao ?? "",
     };
-
-    // Validação pré-renderização: nenhum campo obrigatório pode ser
-    // undefined, null, vazio ou string "undefined"/"null".
-    const obrigatorios = [
-      "NUMERO_NOTA", "DATA_NOTA",
-      "ESTADO_CABECALHO", "SECRETARIA_CABECALHO", "CORPORACAO_CABECALHO",
-      "BATALHAO_CABECALHO", "UNIDADE_CABECALHO",
-      "NOME_DIGITADOR", "POSTO_QUADRO_DIGITADOR", "FUNCAO_DIGITADOR",
-      "NOME_COMANDANTE", "POSTO_QUADRO_COMANDANTE", "FUNCAO_COMANDANTE",
-    ];
-    const ausentes: string[] = [];
-    for (const k of obrigatorios) {
-      const v = placeholders[k];
-      if (v === undefined || v === null || v === "" || v === "undefined" || v === "null" || v === "[object Object]") {
-        ausentes.push(k);
-      }
-    }
-    if (secoes.length === 0) ausentes.push("SECOES");
-    if (ausentes.length > 0) {
-      return {
-        ok: false as const,
-        code: `Campos obrigatórios ausentes: ${ausentes.join(", ")}`,
-      };
+    if (!numeroFmt) {
+      return { ok: false as const, code: "Campos obrigatórios ausentes: NUMERO_NOTA" };
     }
 
-    // 5. Renderiza DOCX
+
+    // 6. Renderiza DOCX
     const PizZip = (await import("pizzip")).default;
     const Docxtemplater = (await import("docxtemplater")).default;
     const zip = new PizZip(modeloBuf);
