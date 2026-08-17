@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.nbi_reservar_numero(uuid, smallint, boolean) FROM anon;
