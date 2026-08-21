@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConsultaMensal } from "@/components/ferias/ConsultaMensal";
 import { Plane, Loader2, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -99,20 +101,8 @@ function FeriasPage() {
     (m.matricula ?? "").includes(filtro)
   );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <Plane className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Plano de Férias</h1>
-          <p className="text-sm text-muted-foreground">
-            Cadastre até 3 períodos por militar. O sistema marca <span className="font-mono">FER</span> automaticamente nos dias correspondentes.
-          </p>
-        </div>
-      </div>
-
+  const conteudoPorMilitar = (
+    <>
       <div className="panel flex flex-wrap items-end gap-3 p-4">
         <div className="space-y-1">
           <Label>Ano</Label>
@@ -123,6 +113,7 @@ function FeriasPage() {
           <Input placeholder="Nome ou matrícula" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
         </div>
       </div>
+
 
       {loading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
@@ -165,9 +156,37 @@ function FeriasPage() {
           })}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/15 text-primary">
+          <Plane className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Plano de Férias</h1>
+          <p className="text-sm text-muted-foreground">
+            Cadastre até 3 períodos por militar. O sistema marca <span className="font-mono">FER</span> automaticamente nos dias correspondentes.
+          </p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="militar" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="militar">Pesquisar por militar</TabsTrigger>
+          <TabsTrigger value="mes">Consultar por mês/ano</TabsTrigger>
+        </TabsList>
+        <TabsContent value="militar" className="space-y-6">{conteudoPorMilitar}</TabsContent>
+        <TabsContent value="mes">
+          <ConsultaMensal userId={user?.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
 
 function PeriodoEditor({
   periodo, ano, existente, saving, onSave, onRemove,
