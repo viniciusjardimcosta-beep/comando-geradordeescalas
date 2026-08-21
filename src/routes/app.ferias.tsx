@@ -99,20 +99,8 @@ function FeriasPage() {
     (m.matricula ?? "").includes(filtro)
   );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/15 text-primary">
-          <Plane className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Plano de Férias</h1>
-          <p className="text-sm text-muted-foreground">
-            Cadastre até 3 períodos por militar. O sistema marca <span className="font-mono">FER</span> automaticamente nos dias correspondentes.
-          </p>
-        </div>
-      </div>
-
+  const conteudoPorMilitar = (
+    <>
       <div className="panel flex flex-wrap items-end gap-3 p-4">
         <div className="space-y-1">
           <Label>Ano</Label>
@@ -123,6 +111,7 @@ function FeriasPage() {
           <Input placeholder="Nome ou matrícula" value={filtro} onChange={(e) => setFiltro(e.target.value)} />
         </div>
       </div>
+
 
       {loading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
