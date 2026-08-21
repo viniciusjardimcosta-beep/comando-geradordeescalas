@@ -154,9 +154,37 @@ function FeriasPage() {
           })}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary/15 text-primary">
+          <Plane className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Plano de Férias</h1>
+          <p className="text-sm text-muted-foreground">
+            Cadastre até 3 períodos por militar. O sistema marca <span className="font-mono">FER</span> automaticamente nos dias correspondentes.
+          </p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="militar" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="militar">Pesquisar por militar</TabsTrigger>
+          <TabsTrigger value="mes">Consultar por mês/ano</TabsTrigger>
+        </TabsList>
+        <TabsContent value="militar" className="space-y-6">{conteudoPorMilitar}</TabsContent>
+        <TabsContent value="mes">
+          <ConsultaMensal userId={user?.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
 
 function PeriodoEditor({
   periodo, ano, existente, saving, onSave, onRemove,
