@@ -19,7 +19,12 @@ type Celula = Severidade | null;
 
 /** null = nenhum achado. */
 const MATRIZ: Record<string, Record<TipoAfastamento, Celula>> = {
-  servico_extraordinario: { ferias: "bloqueio", licenca_paternidade: "bloqueio", luto: "alerta", nupcias: "alerta" },
+  // Serviço extraordinário EXECUTADO: o período informado é o mês/período de
+  // referência das horas, não os dias exatos de execução — sobreposição com
+  // afastamento é conferência administrativa (alerta), nunca proibição.
+  servico_extraordinario: { ferias: "alerta", licenca_paternidade: "alerta", luto: "alerta", nupcias: "alerta" },
+  // CONVOCAÇÃO FUTURA: refere-se a data/horário específicos de serviço a ser
+  // prestado — afastamento no mesmo período é incompatibilidade real. Mantido bloqueio.
   servico_extraordinario_convocacao: { ferias: "bloqueio", licenca_paternidade: "bloqueio", luto: "alerta", nupcias: "alerta" },
   viagem: { ferias: "alerta", licenca_paternidade: "alerta", luto: "alerta", nupcias: "alerta" },
   assuncao_funcao: { ferias: "alerta", licenca_paternidade: "alerta", luto: "alerta", nupcias: "alerta" },
