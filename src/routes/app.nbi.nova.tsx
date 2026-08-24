@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { gerarNbi, baixarNbi, proximoNumeroPrevisto } from "@/lib/nbi.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -195,7 +195,15 @@ function NovaNbiPage() {
   const [siglas, setSiglas] = useState<SiglaInstitucional[]>([]);
   const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
   // Bloco 12 — base do motor de consistência, carregada UMA vez em lote.
-  const { base: baseConsistencia } = useBaseConsistencia(userId ?? undefined);
+  const { base: baseConsistencia, recarregar: recarregarBaseConsistencia } = useBaseConsistencia(userId ?? undefined);
+
+  // Achado 2 — a base pode ficar desatualizada se um documento for cancelado em
+  // outra tela/aba. Recarrega apenas em transição explícita de etapa (sem polling).
+  const irParaEtapa = useCallback((n: 1 | 2 | 3) => {
+    setEtapa(n);
+    if (n !== 1) void recarregarBaseConsistencia();
+  }, [recarregarBaseConsistencia]);
+
 
 
   const [rascunho, setRascunho] = useState<Rascunho>({
@@ -665,7 +673,7 @@ function NovaNbiPage() {
         <Etapa1
           rascunho={rascunho}
           setRascunho={setRascunho}
-          onNext={() => setEtapa(2)}
+          onNext={() => irParaEtapa(2)}
         />
       )}
       {etapa === 2 && (
@@ -685,8 +693,8 @@ function NovaNbiPage() {
           atualizarCampo={atualizarCampo}
           remover={removerAssunto}
           mover={moverAssunto}
-          onBack={() => setEtapa(1)}
-          onNext={() => setEtapa(3)}
+          onBack={() => irParaEtapa(1)}
+          onNext={() => irParaEtapa(3)}
         />
       )}
       {etapa === 3 && (
@@ -697,7 +705,7 @@ function NovaNbiPage() {
           textoFinal={textoFinal}
           pendencias={pendencias}
           atualizarCampo={atualizarCampo}
-          onBack={() => setEtapa(2)}
+          onBack={() => irParaEtapa(2)}
           onSalvar={salvarRascunho}
           onPersistir={persistirRascunho}
 

@@ -344,8 +344,10 @@ describe("12C/E — matriz de conflitos", () => {
   });
 
   const cenarios: Array<[string, string, BaseConsistencia, "bloqueio" | "alerta"]> = [
-    ["servico_extraordinario", "ferias", feriasBase, "bloqueio"],
-    ["servico_extraordinario", "licenca_paternidade", afastamentoDoc("licenca_paternidade"), "bloqueio"],
+    // Achado 3 — serviço extraordinário executado: período é referência mensal → alerta.
+    ["servico_extraordinario", "ferias", feriasBase, "alerta"],
+    ["servico_extraordinario", "licenca_paternidade", afastamentoDoc("licenca_paternidade"), "alerta"],
+    ["servico_extraordinario_convocacao", "ferias", feriasBase, "bloqueio"],
     ["servico_extraordinario", "luto", afastamentoDoc("luto"), "alerta"],
     ["servico_extraordinario", "nupcias", afastamentoDoc("nupcias"), "alerta"],
     ["viagem", "ferias", feriasBase, "alerta"],
