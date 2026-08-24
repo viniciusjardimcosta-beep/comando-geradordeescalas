@@ -760,11 +760,11 @@ function ImportarPage() {
               value={observacoesTexto}
               onChange={(e) => setObservacoesTexto(e.target.value)}
               placeholder={`Exemplos:
-Sgt Fulano férias do dia 11 ao 20.
+Sgt Fulano de Tal férias do dia 11 ao 20.
 No dia 25 escalar 5 militares.
 Dia 04 reforçar com 1 COV extra.
-Sd Ciclano só pode entrar como CG.
-Cb Beltrano não escalar dia 15.`}
+Sd Sicrano de Tal só pode entrar como CG.
+Cb Beltrano de Tal não escalar dia 15.`}
             />
             <p className="text-xs text-muted-foreground">
               Regras automáticas: 24x72, folga mínima 12h, sigla padrão <span className="font-mono">2341</span>, 1 CG + ≥1 COV por dia.

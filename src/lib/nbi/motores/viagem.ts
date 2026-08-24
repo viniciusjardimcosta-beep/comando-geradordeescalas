@@ -29,7 +29,7 @@ export const motorViagem: MotorNbi = {
       contexto: {
         campos: {
           MISSAO: "participação em reunião de coordenação",
-          ORIGEM: "Osório", DESTINO: "Porto Alegre",
+          ORIGEM: "Campinas", DESTINO: "Curitiba",
           DATA_INICIO: "2026-03-10", retorno_no_mesmo_dia: true,
         },
       },

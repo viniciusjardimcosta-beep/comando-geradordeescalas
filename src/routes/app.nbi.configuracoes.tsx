@@ -382,21 +382,21 @@ function NbiConfiguracoesPage() {
                 <CampoLivreCorrigido id="cab_bat" value={form.cabecalho_batalhao}
                   onChange={(v) => setForm({ ...form, cabecalho_batalhao: v })}
                   modoInstitucional="caixa_alta"
-                  placeholder="Ex.: 3º BATALHÃO DE BOMBEIROS MILITAR" />
+                  placeholder="Ex.: 15º BATALHÃO DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="cab_sub">Linha 5 — Subunidade emissora</Label>
                 <CampoLivreCorrigido id="cab_sub" value={form.cabecalho_subunidade}
                   onChange={(v) => setForm({ ...form, cabecalho_subunidade: v })}
                   modoInstitucional="caixa_alta"
-                  placeholder="Ex.: 2ª COMPANHIA DE BOMBEIROS MILITAR" />
+                  placeholder="Ex.: 8ª COMPANHIA DE BOMBEIROS MILITAR" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="cab_cidade">Cidade (local do encerramento)</Label>
                 <CampoLivreCorrigido id="cab_cidade" value={form.cabecalho_cidade}
                   onChange={(v) => setForm({ ...form, cabecalho_cidade: v })}
                   modoToponimo
-                  placeholder="Ex.: Porto Alegre" />
+                  placeholder="Ex.: Campinas" />
               </div>
 
               {/* RF-06 — nomenclatura do boletim da unidade */}
@@ -425,13 +425,13 @@ function NbiConfiguracoesPage() {
                 <Label htmlFor="uni_nome">Nome da unidade (uso interno)</Label>
                 <Input id="uni_nome" value={form.unidade_nome}
                   onChange={(e) => setForm({ ...form, unidade_nome: e.target.value })}
-                  placeholder="Ex.: 12º Batalhão de Bombeiro Militar" />
+                  placeholder="Ex.: 15º Batalhão de Bombeiros Militar" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="uni_sigla">Sigla (uso interno)</Label>
                 <Input id="uni_sigla" value={form.unidade_sigla}
                   onChange={(e) => setForm({ ...form, unidade_sigla: e.target.value })}
-                  placeholder="Ex.: 12ºBBM" />
+                  placeholder="Ex.: 15ºBBM" />
               </div>
             </CardContent>
           </Card>

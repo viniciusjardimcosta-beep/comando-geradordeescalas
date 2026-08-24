@@ -13,12 +13,12 @@ import type { MilitarNbi } from "@/utils/nbi";
 
 const MILITAR: MilitarNbi = {
   id: "m1",
-  nome: "ADEMIR THOME GUNSCH",
-  nome_guerra: "GUNSCH",
+  nome: "FULANO DE TAL",
+  nome_guerra: "FULANO",
   posto_graduacao: "1ºSGT",
-  matricula: "2992760",
+  matricula: "0000001",
   quadro: "QPBM",
-  lotacao_nbi: "2ºPelBM/2ªCiaBM/12ºBBM PANAMBI",
+  lotacao_nbi: "6ºPelBM/8ªCiaBM/15ºBBM",
   funcao_atual: null,
   distribuicao_interna_nbi: null,
   genero_gramatical: "M",
@@ -27,9 +27,9 @@ const MILITAR: MilitarNbi = {
 const MILITAR_F: MilitarNbi = {
   ...MILITAR,
   id: "m2",
-  nome: "MARIANA PIZUTTI DALLABRIDA",
+  nome: "BELTRANA DE TAL",
   posto_graduacao: "SD",
-  matricula: "4843371",
+  matricula: "0000002",
   genero_gramatical: "F",
 };
 
@@ -132,8 +132,8 @@ describe("Bloco 11B — motor exclusivo", () => {
       MOTIVO: "ajustes no mapa por conta de ajustes de escala",
     }));
     expect(v.POSTO_QUADRO).toBe("1ºSGT QPBM");
-    expect(v.ID_FUNC).toBe("2992760");
-    expect(v.LOTACAO).toContain("PANAMBI");
+    expect(v.ID_FUNC).toBe("0000001");
+    expect(v.LOTACAO).toContain("15ºBBM");
     expect(v.MES_REFERENCIA).toBe("junho");
     expect(v.MES_COMPENSACAO).toBe("julho");
     expect(v.ARTIGO_O_A_CAP).toBe("O");
@@ -175,25 +175,25 @@ describe("Bloco 11B — motor exclusivo", () => {
 });
 
 describe("Bloco 11B — fidelidade aos exemplares oficiais", () => {
-  it("NBI 28/2025 — SD MARIANA, 4 horas, julho → agosto", () => {
+  it("NBI 28/2025 — SD BELTRANA, 4 horas, julho → agosto", () => {
     const v = motorFolgaCompensatoria.montarPlaceholders(ctx({
       SUBTIPO: "previsao", mes_referencia_sel: "2025-07", QTD_HORAS: "4",
       MOTIVO: "ajustes finais no mapa",
     }, MILITAR_F));
     expect(render(MODELO_PREVISAO, v)).toBe(
-      "A SD QPBM MARIANA PIZUTTI DALLABRIDA, ID FUNC 4843371, em virtude de ajustes finais no mapa, "
+      "A SD QPBM BELTRANA DE TAL, ID FUNC 0000002, em virtude de ajustes finais no mapa, "
       + "possui 4 horas a serem compensadas referentes ao mês de julho, conforme mapa de escala de "
       + "serviço executado. Há previsão de compensar estas horas no mês de agosto.",
     );
   });
 
-  it("NBI 18/2026 — 1ºSGT ADEMIR, 33 horas, junho → julho", () => {
+  it("NBI 18/2026 — 1ºSGT FULANO, 33 horas, junho → julho", () => {
     const v = motorFolgaCompensatoria.montarPlaceholders(ctx({
       SUBTIPO: "previsao", mes_referencia_sel: "2026-06", QTD_HORAS: "33",
       MOTIVO: "ajustes no mapa por conta de ajustes de escala",
     }));
     expect(render(MODELO_PREVISAO, v)).toBe(
-      "O 1ºSGT QPBM ADEMIR THOME GUNSCH, ID FUNC 2992760, em virtude de ajustes no mapa por conta de "
+      "O 1ºSGT QPBM FULANO DE TAL, ID FUNC 0000001, em virtude de ajustes no mapa por conta de "
       + "ajustes de escala, possui 33 horas a serem compensadas referentes ao mês de junho, conforme "
       + "mapa de escala de serviço executado. Há previsão de compensar estas horas no mês de julho.",
     );
@@ -204,7 +204,7 @@ describe("Bloco 11B — fidelidade aos exemplares oficiais", () => {
       SUBTIPO: "realizada", mes_referencia_sel: "2026-06", QTD_HORAS: "33",
     }));
     expect(render(MODELO_REALIZADA, v)).toBe(
-      "O 1ºSGT QPBM ADEMIR THOME GUNSCH, ID FUNC 2992760, do 2ºPelBM/2ªCiaBM/12ºBBM PANAMBI, "
+      "O 1ºSGT QPBM FULANO DE TAL, ID FUNC 0000001, do 6ºPelBM/8ªCiaBM/15ºBBM, "
       + "compensou, no mês de julho, 33 horas de serviço pendentes referentes ao mês de junho de 2026, "
       + "conforme mapa de escala de serviço executado naquele mês.",
     );

@@ -4,7 +4,7 @@
 // contrato estável que uma futura interpretação por IA deverá cumprir para
 // pré-montar um assunto a partir de uma frase livre, por exemplo:
 //
-//   "Primeiro período de férias do Soldado Silva"
+//   "Primeiro período de férias do SD Sicrano de Tal"
 //
 // O botão "Adicionar assunto" continua sendo o caminho oficial e obrigatório.
 // Um interpretador só poderá ser plugado depois de homologado, e nunca
