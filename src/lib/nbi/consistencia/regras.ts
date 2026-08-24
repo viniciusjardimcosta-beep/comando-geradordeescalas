@@ -284,7 +284,7 @@ export function regrasRedundancia(e: EntradaConsistencia): Achado[] {
           ? "Existe documento cancelado referente a este fato"
           : "Já existe uma NBI referente a este fato",
         motivo: cancelado
-          ? `A ${rotuloDocumento(d)} tratava do mesmo fato, mas está cancelada — não conta como duplicidade ativa.`
+          ? `Existe uma NBI cancelada referente a este fato (${rotuloDocumento(d)}). Ela não impede a geração de uma nova NBI.`
           : `A ${rotuloDocumento(d)} de ${d.data_documento} já registra o mesmo tipo, militar, período e origem.`,
         origem: "Histórico de documentos NBI (assinatura por motor)",
         acaoSugerida: cancelado ? "Apenas conferir o histórico." : "Visualizar o documento existente, voltar ou duplicar mesmo assim com confirmação.",
