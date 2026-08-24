@@ -1588,9 +1588,10 @@ function escalar(
   for (const m of militares) {
     if (!m.isAdm) continue;
     for (let d = 1; d <= dias; d++) {
-      // ADM nunca pode ter ORD — em nenhum dia (operacional é proibido para ADM).
+      // ADM nunca pode ter ORD OPERACIONAL — mas siglas de afastamento (FER, LTS...)
+      // são informativas e devem permanecer visíveis na planilha.
       const sOrd = ord.get(d)?.get(m.rowOrd);
-      if (sOrd) {
+      if (sOrd && !SIGLAS_AFASTAMENTO.has(sOrd)) {
         ord.get(d)!.delete(m.rowOrd);
         saneadosAdm.push(`${m.nome} dia ${d}: ORD ${sOrd} removido (ADM não opera)`);
       }
