@@ -161,15 +161,22 @@ export function regrasConflitoAfastamento(e: EntradaConsistencia): Achado[] {
     if (af.ferias_id) relacionados.push({ tipo: "ferias", id: af.ferias_id, rotulo: `${ROTULO_AFASTAMENTO[af.tipo]} ${af.inicio} a ${af.fim}` });
     if (af.documento_id) relacionados.push({ tipo: "documento", id: af.documento_id, rotulo: af.rotuloDocumento ?? "documento" });
 
+    const ehServicoExecutado = e.tipoAssunto === "servico_extraordinario";
     out.push(achado({
       regra: `conflito.${e.tipoAssunto}.${af.tipo}`,
       severidade: sev,
-      titulo: `Militar em ${ROTULO_AFASTAMENTO[af.tipo].toLowerCase()} no período selecionado`,
-      motivo: `O período informado (${inicio} a ${fim}) se sobrepõe a ${ROTULO_AFASTAMENTO[af.tipo].toLowerCase()} de ${af.inicio} a ${af.fim}.${ressalva ? ` ${ressalva}` : ""}`,
+      titulo: ehServicoExecutado
+        ? "Afastamento dentro do período de referência do serviço extraordinário"
+        : `Militar em ${ROTULO_AFASTAMENTO[af.tipo].toLowerCase()} no período selecionado`,
+      motivo: ehServicoExecutado
+        ? `Há afastamento registrado dentro do período de referência do serviço extraordinário (${ROTULO_AFASTAMENTO[af.tipo].toLowerCase()} de ${af.inicio} a ${af.fim}). Como o período informado representa o mês/período de referência e não os dias exatos de execução das horas, confirme se as horas foram realizadas fora do afastamento.${ressalva ? ` ${ressalva}` : ""}`
+        : `O período informado (${inicio} a ${fim}) se sobrepõe a ${ROTULO_AFASTAMENTO[af.tipo].toLowerCase()} de ${af.inicio} a ${af.fim}.${ressalva ? ` ${ressalva}` : ""}`,
       origem,
       acaoSugerida: sev === "bloqueio"
         ? "Alterar o período ou o militar antes de gerar."
-        : "Revisar o período e confirmar se o fato realmente ocorreu.",
+        : ehServicoExecutado
+          ? "Confirmar que as horas foram realizadas fora do afastamento."
+          : "Revisar o período e confirmar se o fato realmente ocorreu.",
       relacionados,
       confirmavel: sev === "alerta",
     }));
