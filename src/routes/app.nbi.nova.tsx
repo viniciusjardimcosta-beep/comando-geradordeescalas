@@ -195,7 +195,15 @@ function NovaNbiPage() {
   const [siglas, setSiglas] = useState<SiglaInstitucional[]>([]);
   const [substituicoes, setSubstituicoes] = useState<SubstituicaoAberta[]>([]);
   // Bloco 12 — base do motor de consistência, carregada UMA vez em lote.
-  const { base: baseConsistencia } = useBaseConsistencia(userId ?? undefined);
+  const { base: baseConsistencia, recarregar: recarregarBaseConsistencia } = useBaseConsistencia(userId ?? undefined);
+
+  // Achado 2 — a base pode ficar desatualizada se um documento for cancelado em
+  // outra tela/aba. Recarrega apenas em transição explícita de etapa (sem polling).
+  const irParaEtapa = useCallback((n: 1 | 2 | 3) => {
+    setEtapa(n);
+    if (n !== 1) void recarregarBaseConsistencia();
+  }, [recarregarBaseConsistencia]);
+
 
 
   const [rascunho, setRascunho] = useState<Rascunho>({
