@@ -10,7 +10,7 @@ import { ehVarianteInterna } from "@/utils/nbi-categorias";
 
 const MILITAR = {
   id: "m1",
-  nome: "Soldado Silva",
+  nome: "FULANO DE TAL",
   matricula: "1234567",
   posto_graduacao: "Soldado",
   quadro: "QPM",

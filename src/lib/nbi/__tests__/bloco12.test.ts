@@ -28,8 +28,8 @@ function base(p: Partial<BaseConsistencia> = {}): BaseConsistencia {
     ferias: p.ferias ?? [],
     substituicoes: p.substituicoes ?? [],
     militares: p.militares ?? [
-      { id: MIL, nome: "Soldado Silva", ativo: true },
-      { id: TIT, nome: "Sargento Souza", ativo: true },
+      { id: MIL, nome: "FULANO DE TAL", ativo: true },
+      { id: TIT, nome: "BELTRANO DE TAL", ativo: true },
     ],
     hoje: p.hoje ?? "2026-03-01",
   };

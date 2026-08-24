@@ -516,7 +516,7 @@ function MilitaresPage() {
                         id="lotacao_nbi"
                         value={form.lotacao_nbi}
                         onChange={(e) => setForm({ ...form, lotacao_nbi: e.target.value })}
-                        placeholder="Ex.: 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                        placeholder="Ex.: 6ºPelBM/8ªCiaBM/15ºBBM"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -525,7 +525,7 @@ function MilitaresPage() {
                         id="funcao_atual"
                         value={form.funcao_atual}
                         onChange={(e) => setForm({ ...form, funcao_atual: e.target.value })}
-                        placeholder="Ex.: Sgte do 2ºPelBM/1ªCiaBM/12ºBBM PANAMBI"
+                        placeholder="Ex.: Sgte do 6ºPelBM/8ªCiaBM/15ºBBM"
                       />
                       <p className="text-[11px] text-muted-foreground">
                         Cargo/função administrativa — diferente do papel operacional CG/COV.
@@ -537,7 +537,7 @@ function MilitaresPage() {
                         id="distribuicao_interna_nbi"
                         value={form.distribuicao_interna_nbi}
                         onChange={(e) => setForm({ ...form, distribuicao_interna_nbi: e.target.value })}
-                        placeholder="Ex.: 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"
+                        placeholder="Ex.: 2ºGBM/6ºPelBM/8ªCiaBM/15ºBBM"
                       />
                       <p className="text-[11px] text-muted-foreground">
                         Usada apenas para compor a função em NBIs de Assunção/Dispensa. Não altera o Gerador de Escalas.
@@ -558,7 +558,7 @@ function MilitaresPage() {
                         id="funcao_documental_nbi"
                         value={form.funcao_documental_nbi}
                         onChange={(e) => setForm({ ...form, funcao_documental_nbi: e.target.value })}
-                        placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 12ºBBM"
+                        placeholder="Ex.: 2º SGT DO SETOR DE VISTORIAS / SSeg / 15ºBBM"
                       />
                       <p className="text-[11px] text-muted-foreground">
                         Texto oficial usado em Assunção, Dispensa, Cargo Vago e Comissão. Quando
@@ -589,7 +589,7 @@ function MilitaresPage() {
                         ["secao_nbi", "Seção", "Ex.: 2ª Seção"],
                         ["subsecao_nbi", "Subseção", "Ex.: SSeg"],
                         ["setor_nbi", "Setor", "Ex.: Setor de Vistorias"],
-                        ["cidade_nbi", "Cidade", "Ex.: IJUÍ"],
+                        ["cidade_nbi", "Cidade", "Ex.: CAMPINAS"],
                       ] as const).map(([campo, label, ph]) => (
                         <div key={campo} className="grid gap-2">
                           <Label htmlFor={campo}>{label}</Label>

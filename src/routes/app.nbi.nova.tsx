@@ -1010,7 +1010,7 @@ function AssuntoCard({
     // nenhum critério identificado
     if (!info.matricula && !info.postoCanonico && info.termos.length === 0) {
       setAvisoSugestao(
-        'Não foi possível identificar o militar. Informe nome, matrícula ou posto. Ex.: "segundo período de férias do Soldado Silva".',
+        'Não foi possível identificar o militar. Informe nome, matrícula ou posto. Ex.: "segundo período de férias do SD Sicrano de Tal".',
       );
       return;
     }
@@ -1141,7 +1141,7 @@ function AssuntoCard({
         <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sugestão por frase (opcional)</Label>
         <div className="flex gap-2">
           <Input
-            placeholder='Ex.: "segundo período de férias do Soldado Silva"'
+            placeholder='Ex.: "segundo período de férias do SD Sicrano de Tal"'
             value={frase}
             onChange={(e) => setFrase(e.target.value)}
           />
@@ -2460,7 +2460,7 @@ function FuncaoComposta({
           onChange={onChange}
           extraWords={extraWords}
           capitalizacao="inicial"
-          placeholder='Ex.: "2ºSGT do 2ºGBM/1ºPelBM/1ªCiaBM/12ºBBM IJUÍ"'
+          placeholder='Ex.: "2ºSGT do 2ºGBM/6ºPelBM/8ªCiaBM/15ºBBM"'
         />
         <p className="mt-1 text-[11px] text-muted-foreground">
           Chave interna: <code>{chave}</code>. Nunca usar nome do militar como função.

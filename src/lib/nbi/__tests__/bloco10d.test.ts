@@ -39,7 +39,7 @@ describe("siglas institucionais canônicas", () => {
     expect(lot("slog")?.correcao).toBe("SLOG");
   });
   it("lotação com seção e cidade preserva siglas", () => {
-    expect(lot("SSCI/8ªCiaBM/15ºBBM PANAMBI")).toBeNull();
+    expect(lot("SSCI/8ªCiaBM/15ºBBM CAMPINAS")).toBeNull();
   });
 });
 
@@ -67,8 +67,8 @@ describe("auditoria pré-geração", () => {
     const r = auditarPreGeracao({
       ...base,
       assuntos: [{
-        titulo: "Viagem", militar: "Soldado Silva",
-        pendencias: ["função documental ausente no cadastro de Soldado Silva"],
+        titulo: "Viagem", militar: "FULANO DE TAL",
+        pendencias: ["função documental ausente no cadastro de FULANO DE TAL"],
         ausentes: [], texto: "texto oficial.",
       }],
     });
@@ -81,7 +81,7 @@ describe("auditoria pré-geração", () => {
     const r = auditarPreGeracao({
       ...base,
       assuntos: [{
-        titulo: "Assunção de função", militar: "Soldado Silva", titular: "Sgt Souza",
+        titulo: "Assunção de função", militar: "FULANO DE TAL", titular: "Sgt BELTRANO",
         exigeTitular: true, pendencias: [], ausentes: [],
         texto: "assume a função de Chefe da SSCI do 15ºBBM/8ªCiaBM/6ºPelBM.",
       }],
@@ -95,7 +95,7 @@ describe("auditoria pré-geração", () => {
     const r = auditarPreGeracao({
       ...base,
       divergenciasAno: ["Férias · Data início: 2025"],
-      assuntos: [{ titulo: "Férias", militar: "Soldado Silva", pendencias: [], ausentes: [], texto: "ok." }],
+      assuntos: [{ titulo: "Férias", militar: "FULANO DE TAL", pendencias: [], ausentes: [], texto: "ok." }],
     });
     expect(r.bloqueado).toBe(false);
     expect(r.alertas).toBe(1);
@@ -104,7 +104,7 @@ describe("auditoria pré-geração", () => {
   it("bloqueia resíduo técnico no texto oficial", () => {
     const r = auditarPreGeracao({
       ...base,
-      assuntos: [{ titulo: "Viagem", militar: "Soldado Silva", pendencias: [], ausentes: [], texto: "destino undefined." }],
+      assuntos: [{ titulo: "Viagem", militar: "FULANO DE TAL", pendencias: [], ausentes: [], texto: "destino undefined." }],
     });
     expect(r.bloqueado).toBe(true);
   });
