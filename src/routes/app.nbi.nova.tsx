@@ -615,15 +615,23 @@ function NovaNbiPage() {
         // e numeração homologada, gravando apenas conteúdo e responsáveis.
         const { data: atual } = await supabase
           .from("nbi_documents")
-          .select("status,numero,numero_int")
+          .select("status,numero,numero_int,snapshot")
           .eq("id", documentoId)
           .maybeSingle();
         const jaNumerado = Boolean(atual?.numero_int);
+        // Bloco 12H — o rascunho é substituído pela versão atual da tela, mas
+        // metadados estruturais (origem_documento_id, duplicado_em) do
+        // snapshot já gravado são preservados via allowlist.
+        const snapshotPreservado = JSON.parse(JSON.stringify(
+          comporSnapshot(atual?.snapshot ?? null, rascunho),
+        ));
+        const base = { ...payload, snapshot: snapshotPreservado };
         const upd = jaNumerado
-          ? { ...payload, numero: atual?.numero ?? payload.numero, status: atual?.status ?? payload.status }
-          : payload;
+          ? { ...base, numero: atual?.numero ?? payload.numero, status: atual?.status ?? payload.status }
+          : base;
         const { error } = await supabase.from("nbi_documents").update(upd).eq("id", documentoId);
         if (error) throw error;
+
         return { ok: true, documentoId };
       }
       const { data, error } = await supabase.from("nbi_documents").insert([payload]).select("id").single();
