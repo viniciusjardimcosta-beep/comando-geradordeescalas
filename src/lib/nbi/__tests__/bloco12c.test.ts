@@ -461,7 +461,8 @@ describe("12C/F — redundância", () => {
     expect(regras(r).alertas).not.toContain("redundancia.documento_ativo");
   });
 
-  it("apresentação duplicada para o mesmo afastamento é bloqueio", () => {
+  // Bloco 12G — duplicidade documental passou a ser alerta confirmável (não bloqueio).
+  it("apresentação duplicada para o mesmo afastamento é alerta confirmável", () => {
     const f = ferias("fer-d", "2026-02-01", "2026-02-10");
     const apres = doc({
       id: "d-ap", numero: "062", data_documento: "2026-02-11",
@@ -472,8 +473,11 @@ describe("12C/F — redundância", () => {
       campos: { DATA_APRESENTACAO: "2026-02-11", FERIAS_ID: "fer-d" },
       dataDocumento: "2026-02-11", base: base({ ferias: [f], documentos: [apres] }),
     });
-    expect(regras(r).bloqueios).toContain("apresentacao.duplicada");
+    expect(regras(r).bloqueios).not.toContain("apresentacao.duplicada");
+    const a = r.alertas.find((x) => x.regra === "apresentacao.duplicada");
+    expect(a?.confirmavel).toBe(true);
   });
+
 });
 
 // ============================================================
