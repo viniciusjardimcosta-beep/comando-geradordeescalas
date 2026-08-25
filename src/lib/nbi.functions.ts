@@ -658,25 +658,45 @@ export const cancelarNbi = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: doc } = await supabase
+
+    // Estado anterior: já cancelado é idempotente e NÃO gera nova auditoria.
+    const { data: antes } = await supabase
       .from("nbi_documents")
       .select("id,canceled_at")
       .eq("id", data.documento_id)
       .maybeSingle();
-    if (!doc) throw new Error("Documento não encontrado");
-    if (doc.canceled_at) return { ok: true as const, ja_cancelado: true };
-    const { error } = await supabase
-      .from("nbi_documents")
-      .update({
-        canceled_at: new Date().toISOString(),
-        cancel_reason: data.motivo || "sem motivo informado",
-        status: "cancelado",
-      })
-      .eq("id", data.documento_id);
+    if (!antes) throw new Error("Documento não encontrado");
+    if (antes.canceled_at) return { ok: true as const, ja_cancelado: true };
+
+    // Bloco 12G — o UPDATE direto era barrado pela policy (status = 'rascunho')
+    // e devolvia 0 linhas SEM erro, produzindo falso sucesso em NBI gerada.
+    // Agora o cancelamento passa por RPC dedicada (SECURITY DEFINER) que valida
+    // propriedade e altera SOMENTE status, canceled_at e cancel_reason.
+    const { error } = await supabase.rpc("nbi_cancelar_documento", {
+      _documento_id: data.documento_id,
+      _motivo: data.motivo,
+    });
     if (error) throw new Error("Falha ao cancelar");
-    await auditar(data.documento_id, userId, "cancelou", { motivo: data.motivo });
-    return { ok: true as const };
+
+    // Verificação obrigatória: sem estado cancelado confirmado no banco não há
+    // sucesso, não há auditoria de cancelamento e a UI recebe erro.
+    const { data: doc } = await supabase
+      .from("nbi_documents")
+      .select("id,status,canceled_at,cancel_reason")
+      .eq("id", data.documento_id)
+      .maybeSingle();
+    if (!doc || doc.status !== "cancelado" || !doc.canceled_at || !doc.cancel_reason) {
+      throw new Error("Falha ao cancelar");
+    }
+
+    await auditar(data.documento_id, userId, "cancelou", {
+      motivo: doc.cancel_reason,
+      canceled_at: doc.canceled_at,
+    });
+    return { ok: true as const, ja_cancelado: false };
   });
+
+
 
 // =============================================================
 // 6. DUPLICAR NBI (cria novo rascunho a partir do snapshot)
@@ -695,12 +715,21 @@ export const duplicarNbi = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!orig) throw new Error("Documento original não encontrado");
     const hoje = new Date().toISOString().slice(0, 10);
-    // snapshot com nova data e limpa numeração para novo rascunho
-    const snap = (orig.snapshot ?? {}) as { rascunho?: { numero?: string; data_documento?: string } };
+    // snapshot com nova data e limpa numeração para novo rascunho.
+    // Bloco 12G — rastreabilidade da origem dentro do próprio snapshot (sem
+    // alteração estrutural de tabela). O documento original NÃO é tocado.
+    const snap = (orig.snapshot ?? {}) as {
+      rascunho?: { numero?: string; data_documento?: string };
+      origem_documento_id?: string;
+      duplicado_em?: string;
+    };
     if (snap.rascunho) {
       snap.rascunho.numero = "";
       snap.rascunho.data_documento = hoje;
     }
+    snap.origem_documento_id = data.documento_id;
+    snap.duplicado_em = new Date().toISOString();
+
     const { data: novo, error } = await supabase
       .from("nbi_documents")
       .insert({
