@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { auditarPreGeracao } from "@/lib/nbi/auditoria";
 import { executarGeracaoNbi } from "@/lib/nbi/geracaoFluxo";
+import { comporSnapshot } from "@/lib/nbi/snapshotMeta";
 
 import { siglasUtilizadas, type SiglaInstitucional } from "@/lib/nbi/siglas";
 import { funcaoEfetiva, type IntegranteFuncao } from "@/lib/nbi/comissao";
