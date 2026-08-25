@@ -227,6 +227,10 @@ export function regrasApresentacao(e: EntradaConsistencia): Achado[] {
   }
 
   // Duas apresentações vinculadas ao mesmo afastamento.
+  // Bloco 12G — DUPLICIDADE DOCUMENTAL: a simples existência de outra NBI
+  // equivalente não torna o fato impossível. Passa a ser alerta CONFIRMÁVEL;
+  // a UI só permite prosseguir com confirmação explícita do operador.
+  // A incompatibilidade real (apresentacao.antes_do_fim, acima) segue bloqueio.
   const jaExiste = e.base.documentos.filter((d) =>
     documentoConfirmado(d) && d.id !== e.documentoId &&
     d.assuntos.some((a) => a.tipo === "apresentacao" && a.militar_id === e.militarId &&
@@ -236,14 +240,16 @@ export function regrasApresentacao(e: EntradaConsistencia): Achado[] {
   for (const d of jaExiste) {
     out.push(achado({
       regra: "apresentacao.duplicada",
-      severidade: "bloqueio",
+      severidade: "alerta",
       titulo: "Já existe apresentação vinculada a este afastamento",
-      motivo: `A ${rotuloDocumento(d)} já registra a apresentação deste militar para o mesmo afastamento.`,
+      motivo: `A ${rotuloDocumento(d)} já registra a apresentação deste militar para o mesmo afastamento. Este documento já registra uma ocorrência equivalente.`,
       origem: "Histórico de documentos NBI",
-      acaoSugerida: "Abrir o documento existente ou confirmar a duplicação intencional.",
+      acaoSugerida: "Abrir o documento existente ou confirmar explicitamente a geração de nova NBI.",
       relacionados: [{ tipo: "documento", id: d.id, rotulo: rotuloDocumento(d) }],
+      confirmavel: true,
     }));
   }
+
   return out;
 }
 

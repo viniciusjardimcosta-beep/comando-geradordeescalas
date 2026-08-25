@@ -28,6 +28,8 @@ import { avaliarConsistenciaNbi } from "@/lib/nbi/consistencia";
 import type { BaseConsistencia } from "@/lib/nbi/consistencia";
 import type { ItemAuditoria } from "@/lib/nbi/auditoria";
 import { detectarDuplicidades } from "@/lib/nbi/duplicidade";
+import { separarAchados } from "@/lib/nbi/duplicidadeDocumental";
+
 import { resolverDataDispensa } from "@/lib/nbi/dataDispensa";
 import {
   Loader2, Save, ArrowLeft, ArrowRight, Plus, Trash2, ChevronUp, ChevronDown,
@@ -1613,6 +1615,9 @@ function Etapa3({
   const [confirmarAno, setConfirmarAno] = useState(false);
   // Bloco 10C — override de duplicidade exige confirmação explícita.
   const [duplicarMesmoAssim, setDuplicarMesmoAssim] = useState(false);
+  // Bloco 12G — duplicidade DOCUMENTAL com NBI já existente exige confirmação explícita.
+  const [confirmarDuplicidade, setConfirmarDuplicidade] = useState(false);
+
   const [previsto, setPrevisto] = useState<{ proximo: number; ano_vigente: number; reiniciar_anualmente: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState<string | null>(null);
 
@@ -1656,6 +1661,7 @@ function Etapa3({
   const bloqueadoBase = semAssuntos || totalPend > 0 || (duplicados.length > 0 && !duplicarMesmoAssim);
 
 
+
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
 
@@ -1677,7 +1683,9 @@ function Etapa3({
   });
 
   // Bloco 12 — consistência institucional agregada dos assuntos do rascunho.
-  const itensConsistencia: ItemAuditoria[] = rascunho.assuntos.flatMap((a) => {
+  // Bloco 12G — duplicidade DOCUMENTAL sai do bucket automático e passa a exigir
+  // confirmação explícita; incompatibilidade institucional continua bloqueando.
+  const avaliacoes = rascunho.assuntos.map((a) => {
     const t = templates.find((x) => x.codigo === a.tipo);
     const nome = militares.find((m) => m.id === a.militar_id)?.nome ?? "militar não informado";
     const r = avaliarConsistenciaNbi({
@@ -1691,12 +1699,23 @@ function Etapa3({
       militarTitularId: a.militar_titular_id ?? null,
       base: baseConsistencia,
     });
-    const prefixo = `${t?.titulo ?? a.tipo} · ${nome}`;
+    return { prefixo: `${t?.titulo ?? a.tipo} · ${nome}`, r };
+  });
+
+  const duplicidadeDocumental = avaliacoes.flatMap(({ prefixo, r }) =>
+    separarAchados([...r.bloqueios, ...r.alertas]).duplicidadeDocumental
+      .map((x) => `${prefixo}: ${x.motivo}`),
+  );
+
+  const itensConsistencia: ItemAuditoria[] = avaliacoes.flatMap(({ prefixo, r }) => {
+    const bloq = separarAchados(r.bloqueios).institucionais;
+    const alerta = separarAchados(r.alertas).institucionais;
     return [
-      ...r.bloqueios.map((x) => ({ status: "erro" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
-      ...r.alertas.map((x) => ({ status: "alerta" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
+      ...bloq.map((x) => ({ status: "erro" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
+      ...alerta.map((x) => ({ status: "alerta" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
     ];
   });
+
 
   // Bloco 10D — auditoria pré-geração (somente leitura, nunca altera dados).
   const auditoria = auditarPreGeracao({
@@ -1724,7 +1743,12 @@ function Etapa3({
       : previsto !== null,
   });
 
-  const bloqueado = bloqueadoBase || auditoria.bloqueado;
+  // Bloco 12G — duplicidade documental bloqueia ATÉ a confirmação explícita.
+  const bloqueado =
+    bloqueadoBase ||
+    auditoria.bloqueado ||
+    (duplicidadeDocumental.length > 0 && !confirmarDuplicidade);
+
 
 
 
@@ -1753,6 +1777,14 @@ function Etapa3({
       toast.error(msg);
       return;
     }
+    // Bloco 12G — duplicidade documental nunca é ignorada em silêncio.
+    if (duplicidadeDocumental.length > 0 && !confirmarDuplicidade) {
+      const msg = "Já existe NBI relacionada a este fato. Confirme explicitamente antes de gerar outra.";
+      setErroGeracao(msg);
+      toast.error(msg);
+      return;
+    }
+
     setGerando(true);
     setErroGeracao(null);
     // Fluxo único (Bloco 12E): persistir → gerar. Nenhuma reserva sem gravação.
@@ -1862,7 +1894,38 @@ function Etapa3({
           </div>
         )}
 
+        {/* Bloco 12G — DUPLICIDADE DOCUMENTAL: confirmação explícita, nunca aviso ignorável */}
+        {duplicidadeDocumental.length > 0 && !gerado && (
+          <div
+            className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+            data-testid="duplicidade-documental"
+          >
+            <div className="mb-2 flex items-center gap-2 font-semibold text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              Já existe NBI relacionada a este fato
+            </div>
+            <ul className="list-disc pl-5 text-xs">
+              {duplicidadeDocumental.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Isto é duplicidade documental, não impedimento institucional. Volte e corrija, ou
+              confirme abaixo que deseja gerar uma nova NBI mesmo assim.
+            </p>
+            <label className="mt-2 flex items-center gap-2 text-xs font-medium">
+              <input
+                type="checkbox"
+                data-testid="confirmar-duplicidade-documental"
+                checked={confirmarDuplicidade}
+                onChange={(e) => setConfirmarDuplicidade(e.target.checked)}
+              />
+              Gerar mesmo assim — confirmo que desejo emitir nova NBI sobre este fato
+            </label>
+          </div>
+        )}
+
         {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
+
+
 
         {divergenciasAno.length > 0 && !gerado && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">

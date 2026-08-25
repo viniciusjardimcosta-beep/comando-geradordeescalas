@@ -1150,6 +1150,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      nbi_cancelar_documento: {
+        Args: { _documento_id: string; _motivo: string }
+        Returns: {
+          cancel_reason: string
+          canceled_at: string
+          id: string
+          status: string
+        }[]
+      }
       nbi_reservar_numero: {
         Args: {
           _ano_local: number
