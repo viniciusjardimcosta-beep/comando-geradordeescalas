@@ -742,6 +742,8 @@ function NovaNbiPage() {
           documentoId={documentoId}
           onRecarregarSubstituicoes={recarregarSubstituicoes}
           baseConsistencia={baseConsistencia}
+          candidatoNumero={candidatoNumero}
+
 
         />
       )}
