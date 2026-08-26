@@ -91,7 +91,7 @@ export function militar(over: Partial<MilitarFake> & { nome: string }): MilitarF
   const nome = over.nome;
   return {
     rowOrd: seqRow += 3,
-    nome,
+    nome: "",
     nomeNorm: nome
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
