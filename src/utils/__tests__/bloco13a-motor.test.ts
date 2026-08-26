@@ -330,14 +330,19 @@ describe("lançamentos diretos", () => {
   });
 
   it("HE24 é desdobrada em HE16 (D) + HE8 (D+1)", () => {
-    const ms = guarnicao();
+    // Militar fora do ciclo 24h (escala parcial) para isolar a regra do
+    // desdobramento — em militar operacional as etapas posteriores de limite
+    // diário/carga ajustam as horas do dia.
+    const parcial = militar({ nome: "PARCIAL DE TAL", matricula: "0000091", tipoEscala: "parcial" });
+    const ms = [...guarnicao(), parcial];
     const r = rodar({
       militares: ms, mes: MES, ano: ANO,
-      ia: { lancamentos: [{ matricula: ms[0].matricula, dias: [9], linha: "HE", sigla: "HE24" }] },
+      ia: { lancamentos: [{ matricula: parcial.matricula, dias: [9], linha: "HE", sigla: "HE24" }] },
     });
-    expect(r.he.get(9)?.get(ms[0].rowOrd)).toBe("HE16");
-    expect(r.he.get(10)?.get(ms[0].rowOrd)).toBe("HE8");
+    expect(r.he.get(9)?.get(parcial.rowOrd)).toBe("HE16");
+    expect(r.he.get(10)?.get(parcial.rowOrd)).toBe("HE8");
   });
+
 
   it("EXP6 e EXP9 são aceitos na linha EXP", () => {
     const ms = guarnicao();
