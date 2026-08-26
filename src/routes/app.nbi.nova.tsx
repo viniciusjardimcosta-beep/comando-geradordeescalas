@@ -1826,10 +1826,15 @@ function Etapa3({
   });
 
   // Bloco 12G — duplicidade documental bloqueia ATÉ a confirmação explícita.
+  // Bloco 12I — número ATIVO bloqueia sempre; número CANCELADO bloqueia até a
+  // escolha explícita entre reutilizar e usar o próximo número.
   const bloqueado =
     bloqueadoBase ||
     auditoria.bloqueado ||
-    (duplicidadeDocumental.length > 0 && !confirmarDuplicidade);
+    (duplicidadeDocumental.length > 0 && !confirmarDuplicidade) ||
+    numeroAtivoBloqueado ||
+    decisaoReutilizacaoPendente;
+
 
 
 
