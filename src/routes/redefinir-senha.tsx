@@ -100,7 +100,19 @@ function ResetPasswordPage() {
           <p className="text-center text-sm text-muted-foreground">
             Abrindo link de recuperação...
           </p>
+        ) : pendente ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Sua nova senha já foi salva, mas a liberação do acesso não foi confirmada.
+              Clique abaixo para concluir.
+            </p>
+            <Button className="w-full" disabled={busy} onClick={handleConcluir}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Concluir acesso
+            </Button>
+          </div>
         ) : (
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="new-pass">Nova senha</Label>
