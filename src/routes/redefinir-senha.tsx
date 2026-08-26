@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Loader2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { finalizarSenhaTemporaria } from "@/lib/auth/finalizarSenhaTemporaria";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/redefinir-senha")({
   component: ResetPasswordPage,
@@ -14,9 +16,12 @@ export const Route = createFileRoute("/redefinir-senha")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [pass, setPass] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendente, setPendente] = useState(false);
   const [ready, setReady] = useState(false);
+
 
   useEffect(() => {
     // Supabase processa o token automaticamente do hash da URL
