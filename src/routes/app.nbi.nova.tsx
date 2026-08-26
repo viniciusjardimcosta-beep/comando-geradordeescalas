@@ -2031,6 +2031,65 @@ function Etapa3({
           </div>
         )}
 
+        {/* Bloco 12I — número em uso por NBI ATIVA: bloqueio absoluto */}
+        {numeroAtivoBloqueado && !gerado && (
+          <div
+            className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+            data-testid="numero-ativo-bloqueado"
+          >
+            <div className="mb-1 flex items-center gap-2 font-semibold text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Número {String(numeroAlvo).padStart(3, "0")}/{anoDoc} já está em uso por uma NBI ativa
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Não há confirmação possível: escolha outro número na Etapa 1 ou cancele a NBI que
+              ocupa este número antes de reutilizá-lo.
+            </p>
+          </div>
+        )}
+
+        {/* Bloco 12I — número de NBI CANCELADA: escolha explícita */}
+        {estadoNumero?.estado === "cancelado" && !gerado && (
+          <div
+            className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+            data-testid="reutilizacao-numero-cancelada"
+          >
+            <div className="mb-2 flex items-center gap-2 font-semibold text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              O número {String(numeroAlvo).padStart(3, "0")}/{anoDoc} pertence a uma NBI cancelada
+            </div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              A reutilização é permitida, mas exige decisão explícita. Reutilizar não altera a
+              contagem oficial de numeração.
+            </p>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  type="radio"
+                  name="escolha-numero-nbi"
+                  data-testid="escolha-reutilizar"
+                  checked={escolhaNumero === "reutilizar"}
+                  onChange={() => setEscolhaNumero("reutilizar")}
+                />
+                Reutilizar o número {String(numeroAlvo).padStart(3, "0")}/{anoDoc}
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  type="radio"
+                  name="escolha-numero-nbi"
+                  data-testid="escolha-proximo"
+                  checked={escolhaNumero === "proximo"}
+                  onChange={() => setEscolhaNumero("proximo")}
+                />
+                Usar o próximo número disponível
+                {previsto ? ` (${String(previsto.proximo).padStart(3, "0")}/${previsto.ano_vigente})` : ""}
+              </label>
+            </div>
+          </div>
+        )}
+
+
+
         {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
 
 
