@@ -455,6 +455,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
         });
         numero = n; ano = a;
         await auditar(data.documento_id, userId, "reservou", { numero, ano, modo: "manual" });
+        }
+
       } else {
         const { data: rpc, error: eR } = await supabase.rpc("nbi_reservar_numero", {
           _documento_id: data.documento_id,
