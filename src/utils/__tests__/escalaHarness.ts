@@ -89,14 +89,10 @@ let seqRow = 12;
 
 export function militar(over: Partial<MilitarFake> & { nome: string }): MilitarFake {
   const nome = over.nome;
-  return {
-    rowOrd: seqRow += 3,
-    nome: "",
-    nomeNorm: nome
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim(),
+  const base: MilitarFake = {
+    rowOrd: (seqRow += 3),
+    nome,
+    nomeNorm: "",
     matricula: "0000000",
     posto: "Soldado QPBM",
     postoCat: "sd",
@@ -109,9 +105,16 @@ export function militar(over: Partial<MilitarFake> & { nome: string }): MilitarF
     afastDias: new Set<number>(),
     afastSigla: new Map<number, string>(),
     tipoEscala: "24h",
-    ...over,
   };
+  const m = { ...base, ...over };
+  m.nomeNorm = m.nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  return m;
 }
+
 
 export function resetRows(): void {
   seqRow = 12;
