@@ -1,0 +1,1933 @@
+/* ARQUIVO GERADO AUTOMATICAMENTE PELOS TESTES — NÃO EDITAR.
+   Cópia fiel de src/utils/escala.functions.ts (sem a server function). */
+/* eslint-disable */
+// @ts-nocheck
+import { z } from "zod";
+import {
+  loadXlsx,
+  saveXlsx,
+  getSheetXml,
+  readCell,
+  iterRows,
+  applyEdits,
+  writeSheetXml,
+  makeRef,
+  type CellEdit,
+} from "./xlsx-surgical";
+
+/* ------------------------------------------------------------------ */
+/* Tipos                                                              */
+/* ------------------------------------------------------------------ */
+
+const ParametrosSchema = z.object({
+  militaresPorDia: z.number().int().min(1).max(20).default(4),
+  minCovPorDia: z.number().int().min(0).max(10).default(1),
+  minCgPorDia: z.number().int().min(0).max(10).default(1),
+  observacoesTexto: z.string().max(10000).default(""),
+  /**
+   * Modo de geração:
+   *  - "auto": gera 24x72, tapa furos com HE, completa carga (CM/EXP) e entrega escala final.
+   *  - "ordinario_puro": gera apenas a ordinária 24x72 respeitando indisponibilidades.
+   *    NÃO tapa furos, NÃO lança HE, NÃO completa carga. Apenas registra alertas dos problemas.
+   */
+  modo: z.enum(["auto", "ordinario_puro"]).default("auto"),
+});
+
+const InputSchema = z.object({
+  fileBase64: z.string().min(100).max(11_000_000), // ~8 MB after base64
+  fileName: z.string().min(1).max(255),
+  mes: z.number().int().min(1).max(12),
+  ano: z.number().int().min(2024).max(2100),
+  parametros: ParametrosSchema,
+  /** ignorar aviso de mês/ano divergente da planilha */
+  forcarMesAno: z.boolean().optional().default(false),
+  /** Militares que estavam de serviço no último dia do mês anterior. Iniciam o mês com apenas 8h. */
+  viradaAnterior: z.array(z.object({
+    militarId: z.string().uuid(),
+    tipo: z.enum(["ord", "he"]).default("ord"),
+  })).optional().default([]),
+});
+
+type Alerta = { tipo: "info" | "warn" | "error"; msg: string };
+type FalhaCritica = { dia: number; etapa: string; motivo: string };
+type Furo = { dia: number; escalados: number; faltantes: number; cg: number; cov: number };
+
+/** Tetos de segurança contra loops degenerados no motor. Cada iteração interna
+ *  acrescenta no máximo 1 militar/HE — 200 por dia é muito acima do alvo
+ *  máximo (20) e cobre fallback CG/COV/forçar. MAX_ITER_TOTAL evita qualquer
+ *  travamento global mesmo em meses de 31 dias com configuração patológica. */
+const MAX_ITER_POR_DIA = 200;
+const MAX_ITER_TOTAL = 50_000;
+class EscalaLoopError extends Error {
+  constructor(public dia: number, public etapa: string) {
+    super(`Loop excedeu limite seguro na etapa "${etapa}" (dia ${dia}).`);
+    this.name = "EscalaLoopError";
+  }
+}
+
+// Siglas válidas extraídas do glossário da planilha oficial
+const SIGLAS_AFASTAMENTO = new Set([
+  "RDC","F","LTS","OP","VIA","LAS","LFC","LGE","LAD","LPA","LE","LIP","FE",
+  "LCC","LIN","TRA","FJ","RSP","FER","DIS","LGL","LNJ","LAA","CBA","CTSP","C",
+  "TRF","CA1","FN","FNJ","DCP","DSP","AFM","DOA","LRP","LSI","PRD","AGA","AGM",
+  "PRA","PRS","PPR","PSC","PRT","LAI","CPR","CPS","LAC","LCJ","LFE","PRE","DES",
+  "EDT","AJS","AGJ","LMC","LDC","LQE","LQP","PR","CA","RR","CA2","CA3","CA4",
+  "FC1","FC2","FC3","FC4","FC5","FC6",
+]);
+const SIGLAS_ORD_VALIDAS = new Set([
+  "1","2","3","4","12","13","14","23","24","34","123","124","134","234","1234","2341",
+  "C1","C2","C3","C4","OS","IN","SSCI",
+  "SS03","SS06","SS09","SS12","SS15","SS18","SS21","SS24",
+  "CV1","CV2","CV3","CV4","CV5","CV6","CV7","CV8","CV9","CV10","CV11","CV12",
+  ...Array.from(SIGLAS_AFASTAMENTO),
+]);
+const SIGLAS_COMP_VALIDAS = new Set<string>();
+for (let i = 1; i <= 12; i++) SIGLAS_COMP_VALIDAS.add(`EXP${i}`);
+for (let i = 1; i <= 16; i++) SIGLAS_COMP_VALIDAS.add(`CM${i}`);
+for (let i = 1; i <= 8; i++) SIGLAS_COMP_VALIDAS.add(`TELE${i}`);
+const SIGLAS_HE_VALIDAS = new Set<string>();
+for (let i = 1; i <= 24; i++) SIGLAS_HE_VALIDAS.add(`HE${i}`);
+
+interface AfastamentoIA {
+  matricula?: string;
+  nome?: string;
+  diaInicio: number;
+  diaFim: number;
+  motivo?: string;
+  /** sigla específica da planilha — ex: FER, LTS, LAA, F, RDC */
+  sigla?: string;
+}
+interface LancamentoIA {
+  matricula?: string;
+  nome?: string;
+  dias: number[];
+  /** linha onde lançar: ORD (padrão), EXP (expediente/compensação) ou HE (hora extra) */
+  linha?: "ORD" | "EXP" | "HE";
+  /** sigla exata a lançar (ex: HE6, CM3, EXP9, 123, 2341, C2) */
+  sigla: string;
+  /** lançamento sintético gerado pelo sistema — não emite alerta individual */
+  __silent?: boolean;
+}
+interface ReforcoIA {
+  dia: number;
+  militaresPorDia?: number;
+  minCov?: number;
+  minCg?: number;
+  obs?: string;
+}
+interface ExcecaoIA {
+  matricula?: string;
+  nome?: string;
+  dias: number[];
+  acao: "nao_escalar" | "somente_cg" | "somente_cov" | "obrigatorio";
+}
+interface ViradaAnteriorIA {
+  matricula?: string;
+  nome?: string;
+  /** "ord" = serviço 24h ordinário em D31 do mês anterior; "he" = HE 24h em D31 anterior */
+  tipo: "ord" | "he";
+}
+interface LimiteHeIA {
+  /** filtro por posto/papel: "sgt", "sd", "cb", "ten", "all". Mutuamente exclusivo com nome/matrícula. */
+  postoOuPapel?: "sgt" | "sd" | "cb" | "ten" | "all";
+  matricula?: string;
+  nome?: string;
+  /** teto absoluto de HE no mês para o(s) alvo(s). */
+  maxHoras: number;
+  /** preferir distribuir HE igualmente entre os alvos. */
+  equalizar?: boolean;
+  /** preferir blocos longos (HE16+HE8 = 24h) em vez de fragmentar em HE6/HE8 isolados. */
+  evitarFragmentar?: boolean;
+}
+interface InterpretacaoIA {
+  afastamentos: AfastamentoIA[];
+  reforcos: ReforcoIA[];
+  excecoes: ExcecaoIA[];
+  lancamentos: LancamentoIA[];
+  viradaAnterior: ViradaAnteriorIA[];
+  limitesHe: LimiteHeIA[];
+}
+
+const NOMES_MES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function normMatricula(s: unknown): string {
+  return String(s ?? "").replace(/\D/g, "");
+}
+function normNome(s: unknown): string {
+  return String(s ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim();
+}
+function diasNoMes(mes: number, ano: number) {
+  return new Date(ano, mes, 0).getDate();
+}
+
+function dataKey(ano: number, mes: number, dia: number) {
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
+function pascoaGregoriana(ano: number) {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+function feriadosBrasil(ano: number) {
+  const keys = new Set<string>();
+  const add = (mes: number, dia: number) => keys.add(dataKey(ano, mes, dia));
+  [
+    [1, 1], [4, 21], [5, 1], [9, 7], [9, 20], [10, 12], [11, 2], [11, 15], [11, 20], [12, 25],
+  ].forEach(([mes, dia]) => add(mes, dia));
+  const pascoa = pascoaGregoriana(ano);
+  const addRel = (offset: number) => {
+    const d = new Date(pascoa);
+    d.setUTCDate(d.getUTCDate() + offset);
+    add(d.getUTCMonth() + 1, d.getUTCDate());
+  };
+  addRel(-48); // Carnaval segunda
+  addRel(-47); // Carnaval terça
+  addRel(-2);  // Sexta-feira Santa
+  addRel(60);  // Corpus Christi
+  return keys;
+}
+
+function isFeriado(ano: number, mes: number, dia: number) {
+  return feriadosBrasil(ano).has(dataKey(ano, mes, dia));
+}
+
+function isDiaExpediente(ano: number, mes: number, dia: number) {
+  const dow = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  return dow >= 1 && dow <= 5 && !isFeriado(ano, mes, dia);
+}
+
+function rotuloSemana(ano: number, mes: number, dia: number) {
+  return ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."][
+    new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()
+  ];
+}
+
+function excelSerialUTC(ano: number, mes: number, dia: number) {
+  return Math.floor(Date.UTC(ano, mes - 1, dia) / 86400000) + 25569;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lovable AI — interpretar observações livres em JSON                */
+/* ------------------------------------------------------------------ */
+
+async function interpretarObservacoes(
+  texto: string,
+  efetivo: { nome: string; matricula: string }[],
+  mes: number,
+  ano: number,
+): Promise<InterpretacaoIA> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  const vazia: InterpretacaoIA = { afastamentos: [], reforcos: [], excecoes: [], lancamentos: [], viradaAnterior: [], limitesHe: [] };
+  if (!apiKey || !texto.trim()) return vazia;
+
+  const efetivoCompacto = efetivo
+    .slice(0, 200)
+    .map((m) => `${m.matricula}|${m.nome}`)
+    .join("\n");
+
+  const sys = `Você é um interpretador de observações de escala militar (BM).
+Mês alvo: ${NOMES_MES[mes - 1]}/${ano}.
+
+Converta o texto do usuário em JSON estruturado com 6 seções:
+
+1) afastamentos: períodos em que militar NÃO entra na escala ordinária.
+   - motivos comuns → sigla a lançar na célula do dia (linha ORD):
+     férias=FER, licença tratamento saúde=LTS, LP=LP, licença gestante=LGE, licença paternidade=LPA,
+     licença adoção=LAD, dispensa=DIS, curso=CA, folga=F, RDC=RDC, afastamento médico=AFM,
+     luto=LNJ, atestado curto=FE, licença alun/aluno=LAA, trânsito=TRA, etc.
+   - Se o usuário disser só "férias", use "FER". Se falar só "licença" sem detalhar, use "LTS".
+
+2) lancamentos: comandos diretos de sigla em dias específicos, em linhas específicas:
+   - linha "HE" (hora extra) → siglas HE1..HE24
+   - linha "EXP" (expediente/compensação) → siglas EXP1..EXP12, CM1..CM16, TELE1..TELE8
+   - linha "ORD" (padrão) → siglas numéricas (123, 12, 1, 2, 3, 4, 23, 234), C1..C4, OS, CV1..CV12, SSxx
+   - NUNCA usar a sigla "2341" — serviço de 24h é representado por "234" no dia D + "1" no dia D+1 automaticamente.
+   - Ex.: "dia 04 lançar HE2 para todos" → lancamentos com sigla=HE2, linha=HE, dias=[4] (sem nome = todos).
+   - Ex.: "Sgt X CM3 dia 10" → sigla=CM3, linha=EXP, dias=[10], nome=X.
+
+3) reforcos: alterar a quantidade padrão de militares/COV/CG em dias específicos.
+
+4) excecoes: regras pontuais (nao_escalar, somente_cg, somente_cov, obrigatorio).
+
+5) viradaAnterior: militares que estavam de SERVIÇO no ÚLTIMO DIA do mês ANTERIOR (esse serviço termina às 08h do dia 01 do mês corrente).
+   - tipo "ord": fez serviço 24h ordinário em D31 (ou D28/D30) anterior. No dia 01 do mês atual recebe automaticamente
+     ORD=1 (madrugada 02h-08h) + EXP=CM2 (00h-02h fechando 8h da virada). Bloqueia ORD nos dias 1 e 2.
+   - tipo "he": fez HE 24h em D31 anterior. No dia 01 atual recebe HE=HE8.
+   - Frases típicas: "Sgt X de serviço dia 31 do mês passado", "Cb Y fez serviço no último dia do mês anterior",
+     "Sd Z entrou de HE no fim do mês passado".
+
+6) limitesHe: tetos de HE no mês e regras de equalização. **OBRIGATÓRIO** preencher SEMPRE que o usuário mencionar QUALQUER uma destas palavras:
+   limite, máximo, máx, teto, no max, até X horas, igualar, equalizar, distribuir igual, dividir igual,
+   distribuição igualitária, equilibrar, mesma quantidade, todos com a mesma carga, distribuídas igualmente.
+   - "limitar HE dos sargentos a 24h cada, igualmente distribuídas" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "limitar as HE dos sargentos em 24 cada um igualmente distribuidas" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "no máximo 24 HE para os sgts e equalizar" → { postoOuPapel: "sgt", maxHoras: 24, equalizar: true }
+   - "equalizar HE dos soldados" / "distribuir HE dos sd igualmente" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true }
+   - "equalizar HE dos soldados sem fragmentar muito" → { postoOuPapel: "sd", maxHoras: 999, equalizar: true, evitarFragmentar: true }
+   - "Sgt X no máximo 12h de HE no mês" → { nome: "X", maxHoras: 12 }
+   - postoOuPapel aceita: "sgt", "sd", "cb", "ten", "all". Use "all" para todos.
+   - Se o usuário pedir várias regras (ex.: "sgts limitados a 24 e soldados equalizados"), gere UMA entrada para CADA regra.
+   - equalizar=true → motor distribui HE preferindo quem tem MENOS HE no mês.
+   - evitarFragmentar=true → motor prefere lançar HE em blocos maiores (HE16/HE8) e evita HE3/HE4 isolados.
+   - Sempre que houver "limite máximo" + "equalizado/igualitário/distribuído igual", marcar equalizar=true.
+   - NUNCA deixe limitesHe vazio se o usuário pediu qualquer forma de equalização ou limite.
+
+Identifique militares por matrícula quando possível; senão por nome.
+Dias sem mês explícito são do mês corrente. Sempre devolva inteiros 1-31.
+Se a observação não pedir nada que caiba numa seção, deixe array vazio.`;
+
+  const tools = [{
+    type: "function",
+    function: {
+      name: "interpretar_observacoes",
+      description: "Estrutura observações em afastamentos, lançamentos, reforços, exceções e virada do mês anterior.",
+      parameters: {
+        type: "object",
+        properties: {
+          afastamentos: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                diaInicio: { type: "integer" },
+                diaFim: { type: "integer" },
+                motivo: { type: "string" },
+                sigla: { type: "string" },
+              },
+              required: ["diaInicio", "diaFim"],
+            },
+          },
+          lancamentos: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                dias: { type: "array", items: { type: "integer" } },
+                linha: { type: "string", enum: ["ORD", "EXP", "HE"] },
+                sigla: { type: "string" },
+              },
+              required: ["dias", "sigla"],
+            },
+          },
+          reforcos: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                dia: { type: "integer" },
+                militaresPorDia: { type: "integer" },
+                minCov: { type: "integer" },
+                minCg: { type: "integer" },
+                obs: { type: "string" },
+              },
+              required: ["dia"],
+            },
+          },
+          excecoes: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                dias: { type: "array", items: { type: "integer" } },
+                acao: {
+                  type: "string",
+                  enum: ["nao_escalar", "somente_cg", "somente_cov", "obrigatorio"],
+                },
+              },
+              required: ["dias", "acao"],
+            },
+          },
+          viradaAnterior: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                tipo: { type: "string", enum: ["ord", "he"] },
+              },
+              required: ["tipo"],
+            },
+          },
+          limitesHe: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                postoOuPapel: { type: "string", enum: ["sgt", "sd", "cb", "ten", "all"] },
+                matricula: { type: "string" },
+                nome: { type: "string" },
+                maxHoras: { type: "integer" },
+                equalizar: { type: "boolean" },
+                evitarFragmentar: { type: "boolean" },
+              },
+              required: ["maxHoras"],
+            },
+          },
+        },
+        required: ["afastamentos", "lancamentos", "reforcos", "excecoes", "viradaAnterior", "limitesHe"],
+      },
+    },
+  }];
+
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: sys },
+          {
+            role: "user",
+            content:
+              `Efetivo (matrícula|nome):\n${efetivoCompacto}\n\n` +
+              `Observações do usuário:\n${texto}`,
+          },
+        ],
+        tools,
+        tool_choice: { type: "function", function: { name: "interpretar_observacoes" } },
+      }),
+    });
+    if (!r.ok) {
+      console.error("AI gateway", r.status, await r.text().catch(() => ""));
+      return vazia;
+    }
+    const j = await r.json();
+    const args = j?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) return vazia;
+    const parsed = JSON.parse(args) as Partial<InterpretacaoIA>;
+    return {
+      afastamentos: Array.isArray(parsed.afastamentos) ? parsed.afastamentos : [],
+      lancamentos: Array.isArray(parsed.lancamentos) ? parsed.lancamentos : [],
+      reforcos: Array.isArray(parsed.reforcos) ? parsed.reforcos : [],
+      excecoes: Array.isArray(parsed.excecoes) ? parsed.excecoes : [],
+      viradaAnterior: Array.isArray(parsed.viradaAnterior) ? parsed.viradaAnterior : [],
+      limitesHe: Array.isArray(parsed.limitesHe) ? parsed.limitesHe : [],
+    };
+  } catch (e) {
+    console.error("interpretarObservacoes", e);
+    return vazia;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Motor de escala                                                    */
+/* ------------------------------------------------------------------ */
+
+interface MilitarRT {
+  rowOrd: number; // linha 1-indexed da linha ORD (R12, R15, ...)
+  nome: string;
+  nomeNorm: string;
+  matricula: string;
+  /** posto/graduação textual (ex.: "1º Sargento QPBM", "Soldado QPBM – 1ª Classe", "1º Tenente QTBM"). */
+  posto: string;
+  /** categoria simplificada para limites de HE: "ten" | "sgt" | "cb" | "sd" | "outro". */
+  postoCat: "ten" | "sgt" | "cb" | "sd" | "outro";
+  isCov: boolean;
+  isCg: boolean;
+  isAdm: boolean;
+  ativo: boolean;
+  cargaH: number;
+  ultimoServico: number;
+  afastDias: Set<number>;
+  afastSigla: Map<number, string>; // dia -> sigla afastamento (ex: FER, LTS)
+  /** ordem do grupo de escala ordinária (1..N). undefined = sem grupo definido */
+  grupoOrdem?: number;
+  /** "24h" = ciclo operacional 24x72; "parcial" = só turnos curtos em dias úteis */
+  tipoEscala: "24h" | "parcial";
+}
+
+function classificarPosto(p: string): "ten" | "sgt" | "cb" | "sd" | "outro" {
+  const s = (p ?? "").toLowerCase();
+  if (s.includes("tenente") || /\bten\b/.test(s)) return "ten";
+  if (s.includes("sargento") || /\bsgt\b/.test(s) || /\bsg\b/.test(s)) return "sgt";
+  if (s.includes("cabo") || /\bcb\b/.test(s)) return "cb";
+  if (s.includes("soldado") || /\bsd\b/.test(s)) return "sd";
+  return "outro";
+}
+
+function escalar(
+  militares: MilitarRT[],
+  dias: number,
+  mes: number,
+  ano: number,
+  par: z.infer<typeof ParametrosSchema>,
+  ia: InterpretacaoIA,
+  alertas: Alerta[],
+  falhasCriticas: FalhaCritica[] = [],
+  furos: Furo[] = [],
+): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
+  let iterTotal = 0;
+  const tick = (dia: number, etapa: string) => {
+    if (++iterTotal > MAX_ITER_TOTAL) throw new EscalaLoopError(dia, etapa);
+  };
+  const ord = new Map<number, Map<number, string>>();
+  const expm = new Map<number, Map<number, string>>();
+  const he = new Map<number, Map<number, string>>();
+  for (let d = 1; d <= dias; d++) {
+    ord.set(d, new Map());
+    expm.set(d, new Map());
+    he.set(d, new Map());
+  }
+
+  const findMilitar = (matricula?: string, nome?: string): MilitarRT | undefined => {
+    const mn = normMatricula(matricula);
+    if (mn) {
+      const m = militares.find((x) => x.matricula === mn);
+      if (m) return m;
+    }
+    if (nome) {
+      const nm = normNome(nome);
+      return militares.find((x) => x.nomeNorm.includes(nm) || nm.includes(x.nomeNorm));
+    }
+    return undefined;
+  };
+
+  // ===== Limites de HE (vindos de ia.limitesHe) =====
+  // Para cada militar, calcular o teto de HE no mês e flags equalizar/evitarFragmentar.
+  const limiteHePorMilitar = new Map<number, { max: number; equalizar: boolean; evitarFragmentar: boolean }>();
+  const aplicaLimiteEm = (m: MilitarRT, lim: LimiteHeIA) => {
+    const cur = limiteHePorMilitar.get(m.rowOrd);
+    const max = Math.min(cur?.max ?? Number.POSITIVE_INFINITY, lim.maxHoras);
+    limiteHePorMilitar.set(m.rowOrd, {
+      max,
+      equalizar: !!(cur?.equalizar || lim.equalizar),
+      evitarFragmentar: !!(cur?.evitarFragmentar || lim.evitarFragmentar),
+    });
+  };
+  for (const lim of ia.limitesHe ?? []) {
+    if (lim.matricula || lim.nome) {
+      const m = findMilitar(lim.matricula, lim.nome);
+      if (m) aplicaLimiteEm(m, lim);
+      continue;
+    }
+    const cat = lim.postoOuPapel ?? "all";
+    for (const m of militares) {
+      if (cat === "all" || m.postoCat === cat) aplicaLimiteEm(m, lim);
+    }
+  }
+  // Soma de horas HE já lançadas no mês para um militar
+  const horasHeMes = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = he.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      const mt = /^HE(\d{1,2})$/i.exec(s);
+      if (mt) total += Number(mt[1]);
+    }
+    return total;
+  };
+  const limiteRestanteHe = (m: MilitarRT): number => {
+    const lim = limiteHePorMilitar.get(m.rowOrd);
+    if (!lim) return Number.POSITIVE_INFINITY;
+    return Math.max(0, lim.max - horasHeMes(m));
+  };
+  // 0ª ETAPA — Virada do mês anterior.
+  // Militares que fizeram serviço/HE 24h em D31 do mês passado recebem no dia 01:
+  //   - tipo "ord" → ORD=1 (madrugada) + EXP=CM2 (00h-02h). +8h carga. Bloqueia ORD dias 1 e 2.
+  //   - tipo "he"  → HE=HE8. Bloqueia ORD no dia 1.
+  const bloqueioPosVirada = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) bloqueioPosVirada.set(d, new Set());
+
+  /* ---- Carga horária mensal ---- */
+  // Carga base por dias do mês (mesma fórmula da planilha)
+  const cargaBase = (d: number): number =>
+    ({ 28: 160, 29: 165, 30: 171, 31: 177 } as Record<number, number>)[d] ?? 177;
+
+  const ORD_HORAS: Record<string, number> = {
+    "1": 6, "2": 6, "3": 6, "4": 6,
+    "12": 12, "13": 12, "14": 12, "23": 12, "24": 12, "34": 12,
+    "123": 18, "124": 18, "134": 18, "234": 18,
+    "1234": 24, "2341": 24,
+  };
+  const horasOrdSigla = (s: string): number => ORD_HORAS[s] ?? 0;
+
+  const horasOrdAcumuladas = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && !SIGLAS_AFASTAMENTO.has(s)) total += horasOrdSigla(s);
+    }
+    return total;
+  };
+
+  const horasCompSigla = (s: string): number => {
+    const mt = /^(?:EXP|CM|TELE)(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasCompDia = (m: MilitarRT, d: number): number => {
+    const s = expm.get(d)?.get(m.rowOrd);
+    return s ? horasCompSigla(s) : 0;
+  };
+  const horasExpSigla = horasCompSigla;
+  const horasExpDia = horasCompDia;
+  const horasCompAcumuladas = (m: MilitarRT): number => {
+    let total = 0;
+    for (let d = 1; d <= dias; d++) total += horasCompDia(m, d);
+    return total;
+  };
+  const horasOrdinariasAcumuladas = (m: MilitarRT): number =>
+    horasOrdAcumuladas(m) + horasCompAcumuladas(m);
+
+  const horasHeSigla = (s: string): number => {
+    const mt = /^HE(\d{1,2})$/i.exec(s.trim());
+    return mt ? Number(mt[1]) : 0;
+  };
+  const horasHeDia = (m: MilitarRT, d: number): number => {
+    const s = he.get(d)?.get(m.rowOrd);
+    return s ? horasHeSigla(s) : 0;
+  };
+
+  const horasOcupadasNoDia = (m: MilitarRT, d: number): number => {
+    let total = 0;
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) {
+      if (SIGLAS_AFASTAMENTO.has(sOrd)) return 24;
+      total += horasOrdSigla(sOrd);
+    }
+    total += horasCompDia(m, d);
+    total += horasHeDia(m, d);
+    return total;
+  };
+
+  // Carga mensal proporcional ao número de dias afastados.
+  // Usa Math.round para casar com o cálculo manual da planilha (ex.: 119.9 -> 120),
+  // evitando split indevido em CM5+HE1 quando o turno cheio de 6h fecharia exato.
+  const cargaMensalProporcional = (af: number): number => {
+    const bruto = cargaBase(dias) * (1 - af / dias);
+    return Math.round(bruto);
+  };
+
+  // Teto ORD do militar: carga base reduzida proporcionalmente pelos dias de afastamento.
+  // Calculado uma vez por chamada porque os afastamentos da etapa 1 já estão lançados.
+  const cargaMaxOrdCache = new Map<number, number>();
+  const cargaMaxOrd = (m: MilitarRT): number => {
+    const cached = cargaMaxOrdCache.get(m.rowOrd);
+    if (cached !== undefined) return cached;
+    let af = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && SIGLAS_AFASTAMENTO.has(s)) af++;
+    }
+    const teto = cargaMensalProporcional(af);
+    cargaMaxOrdCache.set(m.rowOrd, teto);
+    return teto;
+  };
+  const viradasAplicadas: string[] = [];
+  for (const v of ia.viradaAnterior ?? []) {
+    const m = findMilitar(v.matricula, v.nome);
+    if (!m) continue;
+    if (v.tipo === "ord") {
+      ord.get(1)!.set(m.rowOrd, "1");
+      expm.get(1)!.set(m.rowOrd, "CM2");
+      m.cargaH += 8;
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      if (dias >= 2) bloqueioPosVirada.get(2)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (ORD 1+CM2 dia 01)`);
+    } else if (v.tipo === "he") {
+      he.get(1)!.set(m.rowOrd, "HE8");
+      bloqueioPosVirada.get(1)!.add(m.rowOrd);
+      viradasAplicadas.push(`${m.nome} (HE8 dia 01)`);
+    }
+  }
+  if (viradasAplicadas.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Virada do mês anterior aplicada: ${viradasAplicadas.join(", ")}.`,
+    });
+  }
+
+  // 1) aplica afastamentos (na linha ORD com a sigla correspondente)
+  for (const af of ia.afastamentos) {
+    const m = findMilitar(af.matricula, af.nome);
+    if (!m) {
+      alertas.push({ tipo: "warn", msg: `Afastamento ignorado: militar não encontrado (${af.nome ?? af.matricula})` });
+      continue;
+    }
+    const ini = Math.max(1, Math.min(dias, af.diaInicio));
+    const fim = Math.max(ini, Math.min(dias, af.diaFim));
+    let sigla = (af.sigla ?? "").toUpperCase().trim();
+    if (!SIGLAS_AFASTAMENTO.has(sigla)) {
+      // inferir por motivo
+      const mot = normNome(af.motivo);
+      if (mot.includes("ferias")) sigla = "FER";
+      else if (mot.includes("licenca") && mot.includes("saude")) sigla = "LTS";
+      else if (mot.includes("gestante")) sigla = "LGE";
+      else if (mot.includes("paternidade")) sigla = "LPA";
+      else if (mot.includes("luto") || mot.includes("nojo")) sigla = "LNJ";
+      else if (mot.includes("curso")) sigla = "CA";
+      else if (mot.includes("dispensa")) sigla = "DIS";
+      else if (mot.includes("medic")) sigla = "AFM";
+      else if (mot.includes("folga")) sigla = "F";
+      else sigla = "LTS";
+    }
+    for (let d = ini; d <= fim; d++) {
+      m.afastDias.add(d);
+      m.afastSigla.set(d, sigla);
+      ord.get(d)!.set(m.rowOrd, sigla);
+    }
+    // alerta consolidado: um por período (não um por dia)
+    const motivoTxt = af.motivo ?? (sigla === "FER" ? "férias" : "afastamento");
+    if (ini === fim) {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} no dia ${ini} (${motivoTxt}).` });
+    } else {
+      alertas.push({ tipo: "info", msg: `${m.nome}: ${sigla} do dia ${ini} ao dia ${fim} (${motivoTxt}).` });
+    }
+  }
+
+  // 2) lançamentos diretos (HE/EXP/ORD)
+  for (const l of ia.lancamentos) {
+    const sigla = l.sigla.toUpperCase().trim();
+    const linha: "ORD" | "EXP" | "HE" =
+      l.linha ??
+      (SIGLAS_HE_VALIDAS.has(sigla) ? "HE" :
+       SIGLAS_COMP_VALIDAS.has(sigla) ? "EXP" : "ORD");
+    const setDest = linha === "HE" ? he : linha === "EXP" ? expm : ord;
+    const validSet = linha === "HE" ? SIGLAS_HE_VALIDAS : linha === "EXP" ? SIGLAS_COMP_VALIDAS : SIGLAS_ORD_VALIDAS;
+    if (!validSet.has(sigla)) {
+      alertas.push({ tipo: "warn", msg: `Sigla "${sigla}" ignorada (fora do glossário da linha ${linha}).` });
+      continue;
+    }
+
+    // sem nome → aplicar a todos os militares
+    const alvos: MilitarRT[] = l.nome || l.matricula
+      ? [findMilitar(l.matricula, l.nome)].filter((x): x is MilitarRT => !!x)
+      : militares;
+    if ((l.nome || l.matricula) && alvos.length === 0) {
+      alertas.push({ tipo: "warn", msg: `Lançamento ignorado: militar não encontrado (${l.nome ?? l.matricula}).` });
+      continue;
+    }
+
+    for (const d of l.dias) {
+      if (d < 1 || d > dias) continue;
+      for (const m of alvos) {
+        // ADM nunca recebe lançamento ORD (escala operacional 24x72) — em nenhum dia.
+        if (m.isAdm && linha === "ORD") {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ORD ${sigla} ignorado para ${m.nome} dia ${d}: militar ADM não entra em escala operacional.`,
+          });
+          continue;
+        }
+        // ADM em sábado/domingo/feriado: nada de EXP nem HE.
+        if (m.isAdm && (linha === "EXP" || linha === "HE") && !isDiaExpediente(ano, mes, d)) {
+          alertas.push({
+            tipo: "warn",
+            msg: `Lançamento ${sigla} ignorado para ${m.nome} dia ${d}: ADM não trabalha em fds/feriado.`,
+          });
+          continue;
+        }
+        if (linha === "ORD" && (sigla === "2341" || sigla === "1234")) {
+          // Serviço 24h SEMPRE em duas células: 234 em D + 1 em D+1
+          ord.get(d)!.set(m.rowOrd, "234");
+          if (d < dias && !ord.get(d + 1)!.has(m.rowOrd)) ord.get(d + 1)!.set(m.rowOrd, "1");
+        } else if (linha === "HE" && (sigla === "HE24" || sigla === "HE23")) {
+          // HE 24h SEMPRE em par HE16 + HE8 (regra confirmada pelo usuário)
+          he.get(d)!.set(m.rowOrd, "HE16");
+          if (d < dias) he.get(d + 1)!.set(m.rowOrd, "HE8");
+        } else {
+          setDest.get(d)!.set(m.rowOrd, sigla);
+        }
+      }
+    }
+    if (!l.__silent) {
+      alertas.push({
+        tipo: "info",
+        msg: `Lançado ${sigla} (${linha}) em ${alvos.length} militar(es) nos dias ${l.dias.join(",")}.`,
+      });
+    }
+  }
+
+  // 3) exceções
+  const naoEscalar: Map<number, Set<number>> = new Map();
+  const obrigatorio: Map<number, Set<number>> = new Map();
+  const apenasFuncao: Map<number, Map<number, "CG" | "COV">> = new Map();
+  for (let d = 1; d <= dias; d++) {
+    naoEscalar.set(d, new Set());
+    obrigatorio.set(d, new Set());
+    apenasFuncao.set(d, new Map());
+  }
+  // mesclar afastamentos (não escalar nos dias de afastamento)
+  for (const m of militares) {
+    for (const d of m.afastDias) naoEscalar.get(d)?.add(m.rowOrd);
+  }
+  for (const ex of ia.excecoes) {
+    const m = findMilitar(ex.matricula, ex.nome);
+    if (!m) continue;
+    for (const d of ex.dias) {
+      if (d < 1 || d > dias) continue;
+      if (ex.acao === "nao_escalar") naoEscalar.get(d)!.add(m.rowOrd);
+      else if (ex.acao === "obrigatorio") obrigatorio.get(d)!.add(m.rowOrd);
+      else if (ex.acao === "somente_cg") apenasFuncao.get(d)!.set(m.rowOrd, "CG");
+      else if (ex.acao === "somente_cov") apenasFuncao.get(d)!.set(m.rowOrd, "COV");
+    }
+  }
+
+  const reforcoMap = new Map<number, ReforcoIA>();
+  for (const r of ia.reforcos) reforcoMap.set(r.dia, r);
+
+  const SIGLA_ORD_DIA = "234";
+  const SIGLA_ORD_MADRUGADA = "1";
+  const COOLDOWN_DIAS = 2; // 24h trabalho + 12h folga → próxima entrada em D+2
+
+  const inicioServico = new Map<number, Set<number>>();
+  for (let d = 1; d <= dias; d++) inicioServico.set(d, new Set());
+  const marcaInicioServico = (m: MilitarRT, dia: number) => inicioServico.get(dia)?.add(m.rowOrd);
+
+  // Para cumprir o mínimo diário, conta quem INICIA jornada no dia D — seja ORD,
+  // CM+HE ou HE pura. A célula "1" do dia seguinte é só continuação da jornada
+  // anterior e não pode abrir vaga extra nem impedir a próxima guarnição de entrar.
+  const estaEmServico24 = (m: MilitarRT, dia: number) =>
+    inicioServico.get(dia)?.has(m.rowOrd) ||
+    ord.get(dia)?.get(m.rowOrd) === SIGLA_ORD_DIA;
+
+  // No último dia do mês, só temos 16h físicas disponíveis (08h–00h);
+  // as 8h restantes (00h–08h do dia 1 do mês seguinte) ficam na escala do mês subsequente.
+  const horasMaximasNoDia = (dia: number) => (dia === dias ? 18 : 24);
+
+  const siglaOrdPorHoras = (h: number): string | null => {
+    if (h >= 18) return "234";
+    if (h >= 12) return "23";
+    if (h >= 6) return "2";
+    return null;
+  };
+
+  // Lança uma jornada real de serviço pela linha do tempo física 2→3→4→1.
+  // Primeiro consome carga ordinária mensal em blocos operacionais de 6h; CM só
+  // fecha a fração final menor que 6h dentro do bloco real, e o restante físico
+  // do serviço vira HE no dia correto da sequência.
+  const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
+    const ultimoDia = dia === dias;
+    const setHe = (d: number, h: number) => {
+      if (h <= 0) return;
+      const atual = he.get(d)!.get(m.rowOrd);
+      const jaLancado = atual ? horasHeSigla(atual) : 0;
+      he.get(d)!.set(m.rowOrd, `HE${jaLancado + h}`);
+      m.cargaH += h;
+    };
+    const setCm = (d: number, h: number) => {
+      if (h <= 0) return;
+      const atual = expm.get(d)!.get(m.rowOrd);
+      const jaLancado = atual && /^CM\d{1,2}$/i.test(atual) ? horasCompSigla(atual) : 0;
+      expm.get(d)!.set(m.rowOrd, `CM${jaLancado + h}`);
+      m.cargaH += h;
+    };
+    const lancaPorLinhaDoTempo = (saldoOrdInicial: number, limiteHeInicial: number) => {
+      const blocos: Array<{ sigla: "2" | "3" | "4" | "1"; d: number }> = [
+        { sigla: "2", d: dia },
+        { sigla: "3", d: dia },
+        { sigla: "4", d: dia },
+        ...(ultimoDia ? [] : [{ sigla: "1" as const, d: dia + 1 }]),
+      ];
+      const ordPartes = new Map<number, string[]>();
+      const cmPorDia = new Map<number, number>();
+      const hePorDia = new Map<number, number>();
+      let saldoOrd = Math.max(0, saldoOrdInicial);
+      let restanteHe = limiteHeInicial;
+
+      const addOrd = (d: number, sigla: string) => {
+        const partes = ordPartes.get(d) ?? [];
+        partes.push(sigla);
+        ordPartes.set(d, partes);
+      };
+      const addCm = (d: number, h: number) => cmPorDia.set(d, (cmPorDia.get(d) ?? 0) + h);
+      const addHe = (d: number, h: number) => {
+        const lancar = Math.min(h, restanteHe);
+        if (lancar <= 0) return;
+        hePorDia.set(d, (hePorDia.get(d) ?? 0) + lancar);
+        restanteHe -= lancar;
+      };
+
+      for (const bloco of blocos) {
+        if (saldoOrd >= 6) {
+          addOrd(bloco.d, bloco.sigla);
+          saldoOrd -= 6;
+          continue;
+        }
+        if (saldoOrd > 0) {
+          addCm(bloco.d, saldoOrd);
+          addHe(bloco.d, 6 - saldoOrd);
+          saldoOrd = 0;
+          continue;
+        }
+        addHe(bloco.d, 6);
+      }
+
+      for (const [d, partes] of ordPartes) {
+        ord.get(d)!.set(m.rowOrd, partes.join(""));
+        m.cargaH += partes.length * 6;
+      }
+      for (const [d, h] of cmPorDia) setCm(d, h);
+      for (const [d, h] of hePorDia) setHe(d, h);
+    };
+
+    // Decisão ORD/CM/HE pela carga mensal, aplicada dentro da linha do tempo real.
+    const espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    let restanteHe = limiteRestanteHe(m);
+    lancaPorLinhaDoTempo(espacoOrd, restanteHe);
+
+    marcaInicioServico(m, dia);
+    m.ultimoServico = dia;
+  };
+
+  for (let dia = 1; dia <= dias; dia++) {
+    const slot = ord.get(dia)!; // slot já pode conter lançamentos/afastamentos
+
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
+
+    const indisp = naoEscalar.get(dia)!;
+    const apFunc = apenasFuncao.get(dia)!;
+    const obriga = obrigatorio.get(dia)!;
+
+    // militares já com lançamento não-ordinário no dia (ex: CM3, HE6 externo) devem contar como ocupados
+    const jaOcupado = (m: MilitarRT): boolean => {
+      if (slot.has(m.rowOrd)) return true;
+      // EXP/HE lançamentos não inviabilizam escala ORD, mas afastamentos sim (já estão em slot)
+      return false;
+    };
+
+    const elegivel = (m: MilitarRT, papel: "CG" | "COV" | "BM") => {
+      if (!m.ativo) return false;
+      if (m.isAdm) return false; // ADM nunca entra na escala operacional
+      if (m.tipoEscala === "parcial") return false; // parcial não entra em ciclo 24h
+      if (indisp.has(m.rowOrd)) return false;
+      if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
+      if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
+      if (jaOcupado(m)) return false;
+      if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+      if (m.ultimoServico > 0 && dia - m.ultimoServico < COOLDOWN_DIAS) return false;
+      const restr = apFunc.get(m.rowOrd);
+      if (restr) {
+        if (restr === "CG" && !m.isCg) return false;
+        if (restr === "COV" && !m.isCov) return false;
+        if (papel !== restr) return false;
+      }
+      if (papel === "CG" && !m.isCg) return false;
+      if (papel === "COV" && !m.isCov) return false;
+      return true;
+    };
+
+    // Ordem preferencial: militares do grupo da vez (rotação 24x72 por grupo) primeiro,
+    // depois o resto por menor carga.
+    // Em ciclo 24x72 com 4 grupos, grupo do dia D = ((D-1) mod 4) + 1
+    const grupoDoDia = ((dia - 1) % 4) + 1;
+    // REGRA RÍGIDA: na escala ORDINÁRIA só entram militares do grupo da vez
+    // (ou sem grupo definido — usam rotação por menor carga). Cross-group é
+    // proibido aqui — qualquer furo restante será tapado SOMENTE como HE na
+    // etapa seguinte. Isto reproduz o comportamento do escalante humano:
+    // monta a 24x72 base sem interferência, só depois corrige falhas.
+    // Espaço ORD restante no mês (carga - acumulado). Militares sem espaço
+    // só geram HE no plantão e devem ser DEPRIORIZADOS — rule "procurar outro
+    // militar disponível antes de ultrapassar a carga ordinária".
+    const espacoOrdRestante = (m: MilitarRT): number =>
+      Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    const ordenar = (a: MilitarRT, b: MilitarRT): number => {
+      // 1º: quem ainda tem espaço ORD no mês vem antes de quem já fechou
+      const semA = espacoOrdRestante(a) <= 0 ? 1 : 0;
+      const semB = espacoOrdRestante(b) <= 0 ? 1 : 0;
+      if (semA !== semB) return semA - semB;
+      // 2º: menor carga acumulada
+      if (a.cargaH !== b.cargaH) return a.cargaH - b.cargaH;
+      // 3º: serviço mais antigo
+      return a.ultimoServico - b.ultimoServico;
+    };
+    const escolher = (papel: "CG" | "COV" | "BM"): MilitarRT | null => {
+      const noGrupo = militares
+        .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
+        .sort(ordenar);
+      if (noGrupo[0]) return noGrupo[0];
+      // Militares sem grupo definido (config legada): entram por menor carga
+      const semGrupo = militares
+        .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
+        .sort(ordenar);
+      return semGrupo[0] ?? null;
+      // NÃO há fallback cross-group em ORD: furo vira HE na etapa 4.
+    };
+
+    // obrigatórios primeiro
+    for (const rowOrd of obriga) {
+      const m = militares.find((x) => x.rowOrd === rowOrd);
+      if (m && !slot.has(rowOrd) && !m.isAdm) {
+        lancaServico24(m, dia);
+      }
+    }
+
+    // CGs
+    let cgEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
+    let _itCg = 0;
+    while (cgEscalados < minCg && _itCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:CG");
+      const cg = escolher("CG");
+      if (!cg) break; // furo será reavaliado depois da etapa de HE
+      lancaServico24(cg, dia);
+      cgEscalados++;
+    }
+
+    // COVs
+    let covEscalados = militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    let _itCov = 0;
+    while (covEscalados < minCov && _itCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:COV");
+      const cov = escolher("COV");
+      if (!cov) break;
+      lancaServico24(cov, dia);
+      covEscalados++;
+    }
+
+    // completar
+    const escalados24 = () => militares.filter((m) => estaEmServico24(m, dia)).length;
+    let _itFill = 0;
+    while (escalados24() < totalAlvo && _itFill++ < MAX_ITER_POR_DIA) {
+      tick(dia, "ord:fill");
+      const m = escolher("BM") ?? escolher("CG") ?? escolher("COV");
+      if (!m) break;
+      lancaServico24(m, dia);
+    }
+  }
+
+  /* 4ª ETAPA — Tapar furos com HE: dias em que a ordinária ficou abaixo do alvo
+     recebem militares elegíveis (não-ADM, sem indisponibilidade no dia, sem
+     ordinária no dia, respeitando cooldown de 12h ≈ 1 dia) lançados como HE24. */
+  for (let dia = 1; dia <= dias; dia++) {
+    const slotOrd = ord.get(dia)!;
+    const slotHe = he.get(dia)!;
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
+
+    // conta militares efetivamente em serviço operacional no dia
+    const escalados24 = militares.filter((m) => estaEmServico24(m, dia)).length;
+    let faltam = totalAlvo - escalados24;
+    if (faltam <= 0) continue;
+
+    const indisp = naoEscalar.get(dia)!;
+    // MODO ORDINÁRIO PURO: pula tapamento de furos com HE; segue direto pro diagnóstico.
+    if (par.modo === "auto") {
+    // Candidatos para HE: lançamento é previsão de necessidade de HE.
+    // BLOQUEIOS DE FOLGA: HE só vale se o militar estiver realmente livre — sem
+    // ORD adjacente (folga 12h pré-plantão D+1 e pós-plantão D-1).
+    const candidatos = militares
+      .filter((m) => {
+        if (!m.ativo) return false;
+        if (m.isAdm) return false;
+        if (m.tipoEscala === "parcial") return false;
+        if (indisp.has(m.rowOrd)) return false;
+        if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
+        if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
+        if (slotOrd.has(m.rowOrd)) return false; // já tem algo na ORD
+        if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+        // BLOQUEIO PRÉ-PLANTÃO: se o militar entra de ORD 234 no D+1, não pode HE em D
+        if (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234") return false;
+        // BLOQUEIO PÓS-PLANTÃO: se o militar saiu de ORD 234 em D-1 (com "1" em D), bloqueia
+        if (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234") return false;
+        if (slotHe.has(m.rowOrd)) return false;
+        if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+        // Respeita teto de HE no mês: bloqueia se já atingiu o limite (sem espaço para 1h sequer)
+        if (limiteRestanteHe(m) <= 0) return false;
+        return true;
+      });
+
+    // Equalização: se algum candidato tem flag `equalizar`, ordena por menor HE no mês.
+    // Caso contrário, prioriza MAIOR margem ORD restante (carga_mensal − acumulado).
+    // Militares próximos do teto são deprioridados — assim o tapamento de furo não
+    // empurra ninguém pra HE quando ainda há gente com folga ordinária.
+    const algumEqualizar = candidatos.some((m) => limiteHePorMilitar.get(m.rowOrd)?.equalizar);
+    const margemOrd = (m: MilitarRT): number =>
+      Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    candidatos.sort((a, b) => {
+      if (algumEqualizar) {
+        const ha = horasHeMes(a), hb = horasHeMes(b);
+        if (ha !== hb) return ha - hb;
+      }
+      const ma = margemOrd(a), mb = margemOrd(b);
+      if (ma !== mb) return mb - ma; // maior margem primeiro
+      return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+    });
+
+    const usadosHe = new Set<number>();
+    /**
+     * Tenta lançar HE para cobrir 1 vaga do dia. Estratégia:
+     * 1) Se cabe HE 24h (HE16+HE8) e o militar não viola descanso → preferido (mantém turno fechado).
+     * 2) Senão fragmenta: lança HE de tamanho viável (8h, 12h, 16h, 6h) no próprio dia,
+     *    respeitando espaço físico (16h úteis), teto mensal de HE e flag evitarFragmentar.
+     * Retorna true se conseguiu lançar (vaga preenchida), false se nada coube.
+     */
+    const escalaHeCheio = (m: MilitarRT): boolean => {
+      const restante = limiteRestanteHe(m);
+      const lim = limiteHePorMilitar.get(m.rowOrd);
+      // tenta HE 24h fechado primeiro
+      if (restante >= 24 && (dia >= dias || !he.get(dia + 1)?.has(m.rowOrd))) {
+        lancaServico24(m, dia, true);
+        usadosHe.add(m.rowOrd);
+        faltam--;
+        return true;
+      }
+      // se proibido fragmentar, desiste deste candidato
+      if (lim?.evitarFragmentar) return false;
+      // fragmenta no próprio dia respeitando espaço físico
+      const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
+      const h = Math.min(restante, espacoFisico, horasMaximasNoDia(dia));
+      if (h <= 0) return false;
+      // arredonda pra blocos típicos (8, 12, 16, 6) — preferindo o maior que couber
+      let bloco = h;
+      for (const cand of [16, 12, 8, 6]) {
+        if (cand <= h) { bloco = cand; break; }
+      }
+      he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
+      m.cargaH += bloco;
+      marcaInicioServico(m, dia);
+      m.ultimoServico = dia;
+      usadosHe.add(m.rowOrd);
+      faltam--;
+      return true;
+    };
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
+
+    let _itHeCg = 0;
+    while (faltam > 0 && cgAtuais() < minCg && _itHeCg++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:CG");
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
+      if (!m) break;
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd); // marca pra não tentar de novo
+    }
+    let _itHeCov = 0;
+    while (faltam > 0 && covAtuais() < minCov && _itHeCov++ < MAX_ITER_POR_DIA) {
+      tick(dia, "he:COV");
+      const m = candidatos.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
+      if (!m) break;
+      if (!escalaHeCheio(m)) usadosHe.add(m.rowOrd);
+    }
+    for (const m of candidatos) {
+      if (faltam <= 0) break;
+      if (usadosHe.has(m.rowOrd)) continue;
+      escalaHeCheio(m);
+    }
+
+    // ===== EXCEÇÃO: efetivo mínimo tem PRIORIDADE ABSOLUTA sobre teto de HE =====
+    // Se ainda faltam militares (ou CG/COV) após esgotar candidatos respeitando o
+    // limite mensal de HE, fazemos uma 2ª passada IGNORANDO o teto de HE.
+    // Prioridade: 1) efetivo mínimo  2) CG  3) COV  4) distribuição  5) limites HE.
+    // Cada lançamento como exceção é registrado em `alertas` (tipo info).
+    const precisaForcar = () =>
+      faltam > 0 || cgAtuais() < minCg || covAtuais() < minCov;
+
+    if (precisaForcar()) {
+      const candidatosForcados = militares
+        .filter((m) => {
+          if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") return false;
+          if (indisp.has(m.rowOrd)) return false;
+          if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
+          if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (slotOrd.has(m.rowOrd)) return false;
+          if (dia < dias && ord.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234") return false;
+          if (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234") return false;
+          if (slotHe.has(m.rowOrd)) return false;
+          if (dia < dias && he.get(dia + 1)?.has(m.rowOrd)) return false;
+          if (usadosHe.has(m.rowOrd)) return false;
+          // ÚNICA diferença: NÃO checa limiteRestanteHe — efetivo mínimo > teto HE.
+          return true;
+        })
+        .sort((a, b) => {
+          // prioriza quem tem MAIOR teto restante (menos exceção) e menor carga
+          const ra = limiteRestanteHe(a);
+          const rb = limiteRestanteHe(b);
+          if (ra !== rb) return rb - ra;
+          return a.cargaH - b.cargaH || a.ultimoServico - b.ultimoServico;
+        });
+
+      const forcar = (m: MilitarRT) => {
+        // lança HE24 ignorando teto, registra exceção
+        const heAntes = horasHeMes(m);
+        // emula escalaHeCheio mas sem limites
+        if (dia >= dias || !he.get(dia + 1)?.has(m.rowOrd)) {
+          lancaServico24(m, dia, true);
+        } else {
+          // sem espaço pra 24h — fragmenta no dia
+          const espacoFisico = Math.max(0, horasMaximasNoDia(dia) - horasOcupadasNoDia(m, dia));
+          const h = Math.min(espacoFisico, horasMaximasNoDia(dia));
+          if (h <= 0) return false;
+          let bloco = h;
+          for (const cand of [16, 12, 8, 6]) { if (cand <= h) { bloco = cand; break; } }
+          he.get(dia)!.set(m.rowOrd, `HE${bloco}`);
+          m.cargaH += bloco;
+          marcaInicioServico(m, dia);
+          m.ultimoServico = dia;
+        }
+        usadosHe.add(m.rowOrd);
+        faltam--;
+        const lim = limiteHePorMilitar.get(m.rowOrd);
+        const teto = lim?.max ?? Infinity;
+        if (Number.isFinite(teto)) {
+          alertas.push({
+            tipo: "info",
+            msg: `Dia ${dia}: ${m.nome} escalado como EXCEÇÃO ao limite de HE (já tinha ${heAntes}h, teto ${teto}h) para garantir efetivo mínimo de ${totalAlvo} militares.`,
+          });
+        }
+        return true;
+      };
+
+      // 1º CG, 2º COV, 3º preencher total
+      let _itFcCg = 0;
+      while (precisaForcar() && cgAtuais() < minCg && _itFcCg++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:CG");
+        const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCg);
+        if (!m) break;
+        if (!forcar(m)) usadosHe.add(m.rowOrd);
+      }
+      let _itFcCov = 0;
+      while (precisaForcar() && covAtuais() < minCov && _itFcCov++ < MAX_ITER_POR_DIA) {
+        tick(dia, "forcar:COV");
+        const m = candidatosForcados.find((x) => !usadosHe.has(x.rowOrd) && x.isCov);
+        if (!m) break;
+        if (!forcar(m)) usadosHe.add(m.rowOrd);
+      }
+      for (const m of candidatosForcados) {
+        if (faltam <= 0) break;
+        if (usadosHe.has(m.rowOrd)) continue;
+        forcar(m);
+      }
+    }
+    } // fim if (par.modo === "auto") — ordinário puro pula HE-filling
+
+    // Helpers para o diagnóstico (independente de modo).
+    const cgAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCg).length;
+    const covAtuais = () => militares.filter((m) => estaEmServico24(m, dia) && m.isCov).length;
+    const escalados24Final = militares.filter((m) => estaEmServico24(m, dia)).length;
+    const faltamFinal = Math.max(0, totalAlvo - escalados24Final);
+
+    // Diagnóstico: se ainda falta gente após esgotar candidatos, explica o porquê
+    // ao usuário. Conta os motivos pelos quais militares operacionais ficaram de
+    // fora para que o alerta seja acionável (ex: "todos os CG atingiram o teto
+    // de 24h de HE configurado nas observações").
+    const cgFalta = Math.max(0, minCg - cgAtuais());
+    const covFalta = Math.max(0, minCov - covAtuais());
+    const efetivoFalta = faltamFinal;
+    if (efetivoFalta > 0 || cgFalta > 0 || covFalta > 0) {
+      // recontagem de motivos sobre o universo operacional (não-ADM, não-parcial, ativo)
+      const universo = militares.filter(
+        (m) => m.ativo && !m.isAdm && m.tipoEscala !== "parcial",
+      );
+      const motivos = {
+        afastado: 0,
+        ordNoDia: 0,
+        descansoPosPlantao: 0,
+        descansoPrePlantao: 0,
+        jaTemHe: 0,
+        tetoHeAtingido: 0,
+      };
+      const tetoHeMilitares: string[] = [];
+      for (const m of universo) {
+        if (estaEmServico24(m, dia)) continue; // já está cobrindo
+        const indispDia = indisp.has(m.rowOrd);
+        const posVir = bloqueioPosVirada.get(dia)?.has(m.rowOrd) ?? false;
+        const ordHoje = slotOrd.has(m.rowOrd);
+        const ordAmanha = dia < dias && ord.get(dia + 1)?.has(m.rowOrd);
+        const heAmanha = dia < dias && he.get(dia + 1)?.has(m.rowOrd);
+        const heHoje = slotHe.has(m.rowOrd);
+        const tetoHe = limiteRestanteHe(m) <= 0;
+        if (indispDia) motivos.afastado++;
+        else if (ordHoje) motivos.ordNoDia++;
+        else if (posVir || (dia > 1 && ord.get(dia - 1)?.get(m.rowOrd) === "234"))
+          motivos.descansoPosPlantao++;
+        else if (ordAmanha || (dia < dias && ord.get(dia + 1)?.get(m.rowOrd) === "234"))
+          motivos.descansoPrePlantao++;
+        else if (heHoje || heAmanha) motivos.jaTemHe++;
+        else if (tetoHe) {
+          motivos.tetoHeAtingido++;
+          tetoHeMilitares.push(m.nome);
+        }
+      }
+
+      const detalhes: string[] = [];
+      if (motivos.tetoHeAtingido > 0) {
+        detalhes.push(
+          `${motivos.tetoHeAtingido} militar(es) já atingiram o teto de HE configurado` +
+            (tetoHeMilitares.length <= 4
+              ? ` (${tetoHeMilitares.join(", ")})`
+              : ""),
+        );
+      }
+      if (motivos.afastado > 0) detalhes.push(`${motivos.afastado} afastado(s)`);
+      if (motivos.descansoPosPlantao > 0)
+        detalhes.push(`${motivos.descansoPosPlantao} em descanso pós-plantão`);
+      if (motivos.descansoPrePlantao > 0)
+        detalhes.push(`${motivos.descansoPrePlantao} bloqueado(s) por plantão no dia seguinte`);
+      if (motivos.jaTemHe > 0) detalhes.push(`${motivos.jaTemHe} já com HE no dia/véspera`);
+      if (motivos.ordNoDia > 0) detalhes.push(`${motivos.ordNoDia} já em ORD no dia`);
+
+      // Formato dos rótulos:
+      //  - falta CG / falta COV / falta CG e COV (sem número — função específica)
+      //  - falta N militar(es) quando só falta efetivo genérico
+      const partes: string[] = [];
+      if (cgFalta > 0) partes.push("CG");
+      if (covFalta > 0) partes.push("COV");
+      if (partes.length === 0 && efetivoFalta > 0) {
+        partes.push(`${efetivoFalta} militar${efetivoFalta > 1 ? "es" : ""}`);
+      }
+
+      const motivoTxt = detalhes.length > 0
+        ? ` Motivo: ${detalhes.join("; ")}.`
+        : " Não há candidatos disponíveis no efetivo.";
+
+      alertas.push({
+        tipo: "error",
+        msg: `Dia ${dia}: guarnição mínima incompleta — falta ${partes.join(" e ")}.${motivoTxt}`,
+      });
+      // Falha crítica — sinaliza para interromper geração após o motor terminar
+      // (não interrompemos aqui para coletar todos os dias problemáticos do mês).
+      // MODO ORDINÁRIO PURO: furos são esperados (não há HE para tapar);
+      // ficam apenas como alerta + relatório, sem abortar a geração.
+      if (par.modo === "auto") {
+        falhasCriticas.push({
+          dia,
+          etapa: cgFalta > 0 || covFalta > 0 ? "guarnicao_minima" : "efetivo",
+          motivo:
+            `Não foi possível completar o efetivo do dia ${dia}. ` +
+            `Nenhum militar disponível atende todas as regras (faltam: ` +
+            `${efetivoFalta} militar(es)` +
+            (cgFalta > 0 ? `, ${cgFalta} CG` : "") +
+            (covFalta > 0 ? `, ${covFalta} COV` : "") +
+            `).${motivoTxt}`,
+        });
+      }
+    }
+  }
+
+  /* 5ª ETAPA — Acerto de carga horária mensal.
+     Para cada militar ativo (não-ADM): se a soma de horas ORD ficou
+     abaixo da carga mínima do mês, lança CM (complemento) na linha EXP
+     do último serviço; se ultrapassou, converte o excedente em HE. */
+
+  // (cargaBase, ORD_HORAS, horasOrdSigla, horasOrdAcumuladas e cargaMaxOrd já
+  //  declarados antes da etapa 3 — necessários no momento da escolha do plantão.)
+  const horasOrdMes = horasOrdinariasAcumuladas;
+
+  // Dias afastados por militar (qualquer sigla de afastamento conta para reduzir carga)
+  const diasAfastadoMap = new Map<number, number>();
+  for (const m of militares) {
+    let count = 0;
+    for (let d = 1; d <= dias; d++) {
+      const s = ord.get(d)?.get(m.rowOrd);
+      if (s && SIGLAS_AFASTAMENTO.has(s)) count++;
+    }
+    diasAfastadoMap.set(m.rowOrd, count);
+  }
+
+  // Encontra dia do último serviço 24h ORD do militar (sigla "234")
+  const ultimoServico24 = (m: MilitarRT): number | null => {
+    for (let d = dias; d >= 1; d--) {
+      if (ord.get(d)?.get(m.rowOrd) === "234") return d;
+    }
+    return null;
+  };
+
+  // Verifica se militar está livre num dia para receber HE/CM avulso
+  // (sem ORD operacional, sem afastamento, sem HE já lançado, sem indisponibilidade)
+  const diaLivreParaLancamento = (m: MilitarRT, d: number): boolean => {
+    const sOrd = ord.get(d)?.get(m.rowOrd);
+    if (sOrd) return false; // qualquer ORD bloqueia (serviço, afastamento, parcial)
+    if (he.get(d)?.has(m.rowOrd)) return false;
+    if (naoEscalar.get(d)?.has(m.rowOrd)) return false;
+    if (bloqueioPosVirada.get(d)?.has(m.rowOrd)) return false;
+    return true;
+  };
+
+  const acertosCm: string[] = [];
+  const acertosHe: string[] = [];
+  const cmAvulso: string[] = [];
+
+  /**
+   * Espaço útil restante no dia para receber CM/EXP/HE complementar.
+   * - Limite operacional: 16h úteis por dia (regra de exemplo: ORD 23 + CM4 fecha 16h).
+   * - No último dia do mês, mantém o mesmo teto.
+   * - Se o militar já tem plantão 24h no dia, retorna 0.
+   */
+  const espacoLivreNoDia = (m: MilitarRT, d: number): number => {
+    const ocup = horasOcupadasNoDia(m, d);
+    if (ocup >= 16) return 0;
+    return 16 - ocup;
+  };
+
+  const acertosExpAdm: string[] = [];
+
+  for (const m of militares) {
+    if (!m.ativo) continue;
+
+    // Fluxo único: cap do ADM e complemento CM do operacional rodam em qualquer
+    // modo (auto ou ordinario_puro), garantindo a carga mensal proporcional.
+
+
+    // ===== ADM: ajustar EXP ao alvo mensal proporcional =====
+    // Pode tanto FALTAR (completar) quanto SOBRAR (cortar dos últimos dias).
+    // Militar ADM nunca pode estourar a carga mensal.
+    if (m.isAdm) {
+      const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
+      const alvoAdm = cargaMensalProporcional(diasAfAdm);
+      let totalExp = 0;
+      for (let d = 1; d <= dias; d++) totalExp += horasExpDia(m, d);
+
+      if (alvoAdm <= 0) {
+        // sem alvo (afastado o mês inteiro) — limpar qualquer EXP residual
+        for (let d = 1; d <= dias; d++) expm.get(d)?.delete(m.rowOrd);
+        continue;
+      }
+
+      if (totalExp > alvoAdm) {
+        // SOBRA → encurtar/remover EXP do último dia útil para o primeiro
+        let excedente = totalExp - alvoAdm;
+        const cortes: string[] = [];
+        for (let d = dias; d >= 1 && excedente > 0; d--) {
+          const sAtual = expm.get(d)?.get(m.rowOrd);
+          if (!sAtual) continue;
+          const hAtual = horasExpSigla(sAtual);
+          if (hAtual <= 0) continue;
+          const tipo = /^(EXP|CM|TELE)/i.exec(sAtual)?.[1].toUpperCase() ?? "EXP";
+          const cortar = Math.min(hAtual, excedente);
+          const novaH = hAtual - cortar;
+          if (novaH <= 0) {
+            expm.get(d)!.delete(m.rowOrd);
+          } else {
+            expm.get(d)!.set(m.rowOrd, `${tipo}${novaH}`);
+          }
+          excedente -= cortar;
+          cortes.push(`d${d} -${cortar}h`);
+        }
+        const reduzido = (totalExp - alvoAdm) - excedente;
+        acertosExpAdm.push(`${m.nome} (-${reduzido}h EXP — teto mensal: ${cortes.join(", ")})`);
+        continue;
+      }
+
+      let faltamAdm = alvoAdm - totalExp;
+      if (faltamAdm <= 0) continue;
+      // 1ª passada: aumentar siglas EXP existentes até 12h por dia
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue; // afastamento
+        const sAtual = expm.get(d)?.get(m.rowOrd);
+        if (!sAtual) continue;
+        const hAtual = horasExpSigla(sAtual);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sAtual)?.[1].toUpperCase() ?? "EXP";
+        const espacoLivre = 12 - hAtual;
+        if (espacoLivre <= 0) continue;
+        const add = Math.min(faltamAdm, espacoLivre);
+        expm.get(d)!.set(m.rowOrd, `${tipo}${hAtual + add}`);
+        faltamAdm -= add;
+      }
+      // 2ª passada: lançar EXP novo em dias úteis ainda vazios
+      for (let d = 1; d <= dias && faltamAdm > 0; d++) {
+        if (!isDiaExpediente(ano, mes, d)) continue;
+        if (naoEscalar.get(d)?.has(m.rowOrd)) continue;
+        if (ord.get(d)?.has(m.rowOrd)) continue;
+        if (expm.get(d)?.has(m.rowOrd)) continue;
+        const add = Math.min(faltamAdm, 12);
+        expm.get(d)!.set(m.rowOrd, `EXP${add}`);
+        faltamAdm -= add;
+      }
+      const fechado = (alvoAdm - totalExp) - faltamAdm;
+      if (fechado > 0) acertosExpAdm.push(`${m.nome} (+${fechado}h EXP)`);
+      if (faltamAdm > 0) acertosExpAdm.push(`${m.nome} (faltam ${faltamAdm}h — sem dia útil livre)`);
+      continue;
+    }
+
+    const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
+    const cargaMin = cargaMensalProporcional(diasAf);
+    if (cargaMin <= 0) continue;
+    const cargaOrd = horasOrdMes(m);
+
+    if (cargaOrd === cargaMin) continue;
+
+    if (cargaOrd > cargaMin) {
+      // Defensivo: a etapa 3 (lancaServico24) agora trava o crescimento de ORD
+      // no teto da carga mensal, lançando HE automaticamente quando o plantão
+      // estouraria. Se mesmo assim sobrou excedente (ex.: lançamentos manuais
+      // de ORD via observações ou exceção `obrigatorio`), apenas registra alerta
+      // — NÃO converte em HE colado em dia aleatório, pra não criar a "HE fantasma".
+      const excedente = cargaOrd - cargaMin;
+      acertosHe.push(`${m.nome} (+${excedente}h ORD acima da carga mensal — verifique lançamentos manuais)`);
+    } else {
+      // FALTANTE → CM puro em dias úteis livres até bater cargaMin. ZERO HE.
+      // O plantão 234 (D) + 1 (D+1) já fecha 24h físicas — não tocamos no dia do plantão
+      // para não criar jornadas de 30h nem inflar a carga mensal (AK em vermelho).
+      let faltam = cargaMin - cargaOrd;
+      const totalFaltam = faltam;
+
+      // Lança CM avulso em dias úteis livres, respeitando o limite físico do dia
+      // (espacoLivreNoDia já desconta plantões e afastamentos).
+      while (faltam > 0) {
+        let lancou = false;
+        for (let d = 1; d <= dias; d++) {
+          if (!isDiaExpediente(ano, mes, d)) continue;
+          if (!diaLivreParaLancamento(m, d)) continue;
+          if (expm.get(d)?.has(m.rowOrd)) continue;
+          const espaco = espacoLivreNoDia(m, d);
+          if (espaco <= 0) continue;
+          const cm = Math.min(faltam, 16, espaco);
+          if (cm <= 0) continue;
+          expm.get(d)!.set(m.rowOrd, `CM${cm}`);
+          faltam -= cm;
+          lancou = true;
+          break;
+        }
+        if (!lancou) break;
+      }
+
+      const fechou = totalFaltam - faltam;
+      if (fechou > 0) acertosCm.push(`${m.nome} (${fechou}h CM)`);
+      if (faltam > 0) acertosCm.push(`${m.nome} (faltam ${faltam}h — sem dia livre p/ CM)`);
+    }
+  }
+
+  if (acertosCm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Complemento de carga (CM) lançado: ${acertosCm.join(", ")}.`,
+    });
+  }
+  if (cmAvulso.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Complemento avulso (sem serviço 24h restante): ${cmAvulso.join(", ")}.`,
+    });
+  }
+  if (acertosHe.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Atenção — carga ORD acima da prevista (provável lançamento manual): ${acertosHe.join(", ")}.`,
+    });
+  }
+  if (acertosExpAdm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Expediente complementar (ADM): ${acertosExpAdm.join(", ")}.`,
+    });
+  }
+
+  /* 6ª ETAPA — Sanidade final: nenhuma combinação ORD+EXP+HE pode passar de
+     24h físicas no mesmo dia. Se encontrar, ajusta primeiro EXP/CM/TELE para
+     baixo, depois HE. Emite alerta para cada correção. */
+  const correcoes: string[] = [];
+  for (const m of militares) {
+    for (let d = 1; d <= dias; d++) {
+      const ocup = horasOcupadasNoDia(m, d);
+      if (ocup <= 24) continue;
+      let excesso = ocup - 24;
+      // 1) reduz EXP/CM/TELE
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp && excesso > 0) {
+        const hExp = horasExpSigla(sExp);
+        const tipo = /^(EXP|CM|TELE)/i.exec(sExp)?.[1].toUpperCase() ?? "EXP";
+        const cortar = Math.min(excesso, hExp);
+        const novo = hExp - cortar;
+        if (novo > 0) expm.get(d)!.set(m.rowOrd, `${tipo}${novo}`);
+        else expm.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sExp}→${novo > 0 ? `${tipo}${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+      // 2) reduz HE se ainda sobra
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe && excesso > 0) {
+        const hHe = horasHeSigla(sHe);
+        const cortar = Math.min(excesso, hHe);
+        const novo = hHe - cortar;
+        if (novo > 0) he.get(d)!.set(m.rowOrd, `HE${novo}`);
+        else he.get(d)!.delete(m.rowOrd);
+        excesso -= cortar;
+        correcoes.push(`${m.nome} dia ${d}: ${sHe}→${novo > 0 ? `HE${novo}` : "vazio"} (excesso ${cortar}h)`);
+      }
+    }
+  }
+  if (correcoes.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Combinações que passariam de 24h no mesmo dia foram ajustadas automaticamente: ${correcoes.join("; ")}.`,
+    });
+  }
+
+  /* 6.5ª ETAPA — ADM nunca tem EXP/HE em sábado, domingo ou feriado.
+     Defesa em profundidade contra lançamentos manuais da IA, feriados
+     estaduais ausentes da lista nacional e resíduos do XML original. */
+  const saneadosAdm: string[] = [];
+  for (const m of militares) {
+    if (!m.isAdm) continue;
+    for (let d = 1; d <= dias; d++) {
+      // ADM nunca pode ter ORD OPERACIONAL — mas siglas de afastamento (FER, LTS...)
+      // são informativas e devem permanecer visíveis na planilha.
+      const sOrd = ord.get(d)?.get(m.rowOrd);
+      if (sOrd && !SIGLAS_AFASTAMENTO.has(sOrd)) {
+        ord.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d}: ORD ${sOrd} removido (ADM não opera)`);
+      }
+      // EXP/HE só em dia útil; em fds/feriado, limpa.
+      if (isDiaExpediente(ano, mes, d)) continue;
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp) {
+        expm.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): EXP ${sExp} removido (fds/feriado)`);
+      }
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe) {
+        he.get(d)!.delete(m.rowOrd);
+        saneadosAdm.push(`${m.nome} dia ${d} (${rotuloSemana(ano, mes, d)}): HE ${sHe} removido (fds/feriado)`);
+      }
+    }
+  }
+  if (saneadosAdm.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `ADM saneado (sem EXP/HE em fds/feriado): ${saneadosAdm.join("; ")}.`,
+    });
+  }
+
+  /* 6.6ª ETAPA — ADM: HE só pode existir após atingir a carga mensal completa
+     via EXP/CM. Se a soma EXP+CM do mês ficou abaixo do alvo, qualquer HE
+     lançada (manual via observações) é removida — regime ADM é separado do
+     operacional e EXP é a fonte primária da carga ordinária. */
+  const heAdmRemovidas: string[] = [];
+  for (const m of militares) {
+    if (!m.isAdm) continue;
+    const diasAfAdm = diasAfastadoMap.get(m.rowOrd) ?? 0;
+    const alvoAdm = cargaMensalProporcional(diasAfAdm);
+    let totalExpAdm = 0;
+    for (let d = 1; d <= dias; d++) totalExpAdm += horasExpDia(m, d);
+    if (totalExpAdm >= alvoAdm) continue; // carga completa: HE permitida
+    for (let d = 1; d <= dias; d++) {
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (!sHe) continue;
+      he.get(d)!.delete(m.rowOrd);
+      heAdmRemovidas.push(`${m.nome} dia ${d}: HE ${sHe} removida (carga ordinária EXP/CM ainda não atingida: ${totalExpAdm}h/${alvoAdm}h)`);
+    }
+  }
+  if (heAdmRemovidas.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `HE ADM removida (regra: HE só após fechar carga mensal via EXP/CM): ${heAdmRemovidas.join("; ")}.`,
+    });
+  }
+
+  /* 7ª ETAPA — Validação final: furos de guarnição e conflitos de descanso. */
+  const furosMsg: string[] = [];
+  const conflitosDescanso: string[] = [];
+  for (let dia = 1; dia <= dias; dia++) {
+    const ref = reforcoMap.get(dia);
+    const totalAlvo = ref?.militaresPorDia ?? par.militaresPorDia;
+    const minCov = ref?.minCov ?? par.minCovPorDia;
+    const minCg = ref?.minCg ?? par.minCgPorDia;
+
+    // Conta somente jornadas iniciadas no dia; madrugada/HE8 do plantão anterior não abre vaga nova.
+    const cobertos = militares.filter((m) => estaEmServico24(m, dia));
+    const cgs = cobertos.filter((m) => m.isCg).length;
+    const covs = cobertos.filter((m) => m.isCov).length;
+
+    const faltaEfetivo = cobertos.length < totalAlvo;
+    const faltaCg = cgs < minCg;
+    const faltaCov = covs < minCov;
+
+    if (faltaEfetivo) {
+      furosMsg.push(`dia ${dia}: ${cobertos.length}/${totalAlvo} militares`);
+    }
+    if (faltaCg) furosMsg.push(`dia ${dia}: ${cgs}/${minCg} CG`);
+    if (faltaCov) furosMsg.push(`dia ${dia}: ${covs}/${minCov} COV`);
+
+    if (faltaEfetivo || faltaCg || faltaCov) {
+      furos.push({
+        dia,
+        escalados: cobertos.length,
+        faltantes: Math.max(0, totalAlvo - cobertos.length),
+        cg: cgs,
+        cov: covs,
+      });
+    }
+  }
+  if (furosMsg.length) {
+    alertas.push({
+      tipo: "error",
+      msg: `Furos de guarnição (sem efetivo disponível): ${furosMsg.slice(0, 20).join("; ")}${furosMsg.length > 20 ? "..." : ""}.`,
+    });
+  }
+
+  // Revalidação de descanso: militar não pode ter ORD/HE em 2 dias consecutivos
+  // (folga mínima 12h após plantão de 24h).
+  for (const m of militares) {
+    if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") continue;
+    for (let d = 1; d < dias; d++) {
+      const hojeAtivo = estaEmServico24(m, d);
+      if (!hojeAtivo) continue;
+      const amanhaAtivo = estaEmServico24(m, d + 1);
+      if (amanhaAtivo) {
+        conflitosDescanso.push(`${m.nome} (dias ${d}→${d + 1})`);
+      }
+    }
+  }
+  if (conflitosDescanso.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: `Possíveis violações de descanso (12h): ${conflitosDescanso.slice(0, 15).join(", ")}${conflitosDescanso.length > 15 ? "..." : ""}.`,
+    });
+  }
+
+  /* 8ª ETAPA — Reconciliação Final de Carga (ORD→HE).
+     Recalcula a carga DIRETAMENTE da grade final que será gravada na planilha
+     (ord/expm/he) — não depende dos acumuladores intermediários.
+       alvoOrd  = Math.round(cargaMaxOrd(m))   (ex.: 176.7 → 177)
+       ordinária = Σ ORD/EFE + Σ EXP/CM/TELE
+       he        = Σ HE
+       diferença = ordinária - alvoOrd
+     Se diferença ∈ [1..4]h, busca um lançamento complementar (CM/EXP/TELE)
+     com h > diferença em um dia SEM HE para o militar e converte:
+        XXXn  →  XXX(n - diferença)  +  HE(diferença)   (mesmo dia permitido)
+     Total de horas trabalhadas inalterado. Permitida coexistência CM+HE no
+     mesmo dia apenas como fechamento de carga.
+     Idempotente: após aplicar, a diferença vira 0; e dias com HE pré-existente
+     do militar nunca são reescritos.
+     NÃO mexe em ORD ("234"/"1"), NÃO toca em ADM, NÃO redistribui dias,
+     NÃO ultrapassa o teto mensal de HE do militar. Se não conseguir corrigir
+     com segurança, emite alerta específico identificando o militar. */
+  const reconciliadosOk: string[] = [];
+  const reconciliadosFalha: string[] = [];
+  for (const m of militares) {
+    if (!m.ativo) continue;
+    if (m.isAdm) continue;
+    if (m.tipoEscala === "parcial") continue;
+
+    const alvoOrd = Math.round(cargaMaxOrd(m));
+    if (alvoOrd <= 0) continue;
+
+    // Lê direto da grade final (ord/expm/he) que será escrita na planilha.
+    let ordinariaAntes = 0;
+    let heAntes = 0;
+    for (let d = 1; d <= dias; d++) {
+      const sOrd = ord.get(d)?.get(m.rowOrd);
+      if (sOrd && !SIGLAS_AFASTAMENTO.has(sOrd)) ordinariaAntes += horasOrdSigla(sOrd);
+      const sExp = expm.get(d)?.get(m.rowOrd);
+      if (sExp) ordinariaAntes += horasCompSigla(sExp);
+      const sHe = he.get(d)?.get(m.rowOrd);
+      if (sHe) heAntes += horasHeSigla(sHe);
+    }
+    const diferenca = ordinariaAntes - alvoOrd;
+    if (diferenca <= 0 || diferenca > 4) continue;
+
+    const restanteHe = limiteRestanteHe(m);
+    if (restanteHe < diferenca) {
+      const msg = `Reconciliação não aplicada para ${m.nome}: teto mensal de HE atingido (+${diferenca}h).`;
+      reconciliadosFalha.push(msg);
+      console.warn("[reconciliacao]", { militar: m.nome, alvoOrd, ordinariaAntes, heAntes, acao: "skip-teto-he" });
+      continue;
+    }
+
+    // Candidatos: qualquer lançamento complementar (CM/EXP/TELE) divisível.
+    // Preferir maior h para preservar margem; sem HE pré-existente no dia.
+    const candidatos: Array<{ d: number; prefixo: string; h: number }> = [];
+    for (let d = 1; d <= dias; d++) {
+      const s = expm.get(d)?.get(m.rowOrd);
+      if (!s) continue;
+      const mt = /^(CM|EXP|TELE)(\d{1,2})$/i.exec(s.trim());
+      if (!mt) continue;
+      const h = Number(mt[2]);
+      if (h <= diferenca) continue;            // não zerar o lançamento
+      if (he.get(d)?.has(m.rowOrd)) continue;  // idempotência
+      candidatos.push({ d, prefixo: mt[1].toUpperCase(), h });
+    }
+    candidatos.sort((a, b) => b.h - a.h);
+
+    if (candidatos.length === 0) {
+      const msg = `Reconciliação não aplicada para ${m.nome}: não foi encontrado lançamento final divisível (+${diferenca}h).`;
+      reconciliadosFalha.push(msg);
+      console.warn("[reconciliacao]", { militar: m.nome, alvoOrd, ordinariaAntes, heAntes, acao: "sem-candidato" });
+      continue;
+    }
+
+    const c = candidatos[0];
+    const novoH = c.h - diferenca;
+    const novoLanc = `${c.prefixo}${novoH}`;
+    const novaHe = `HE${diferenca}`;
+    expm.get(c.d)!.set(m.rowOrd, novoLanc);
+    he.get(c.d)!.set(m.rowOrd, novaHe);
+
+    const ordinariaDepois = ordinariaAntes - diferenca;
+    const heDepois = heAntes + diferenca;
+    const acao = `dia ${c.d}: ${c.prefixo}${c.h} → ${novoLanc} + ${novaHe}`;
+    reconciliadosOk.push(`${m.nome} ${acao}`);
+    console.info("[reconciliacao]", {
+      militar: m.nome,
+      alvoOrd,
+      ordinariaAntes,
+      heAntes,
+      acao,
+      ordinariaDepois,
+      heDepois,
+    });
+  }
+  if (reconciliadosOk.length) {
+    alertas.push({
+      tipo: "info",
+      msg: `Reconciliação final ORD→HE aplicada: ${reconciliadosOk.join("; ")}.`,
+    });
+  }
+  if (reconciliadosFalha.length) {
+    alertas.push({
+      tipo: "warn",
+      msg: reconciliadosFalha.join(" "),
+    });
+  }
+
+  /* 8.5ª ETAPA — VALIDAÇÃO FINAL DE HE: nenhuma célula HE pode exceder HE16.
+     Se HE>16 num dia D, limita D em HE16 e empurra o excedente para D+1
+     (somando com HE existente). Mantém o total de horas inalterado. */
+  {
+    const nomePorRow = new Map<number, string>();
+    for (const m of militares) nomePorRow.set(m.rowOrd, m.nome);
+    const correcoesHe: string[] = [];
+    const alertasHe: string[] = [];
+    for (let d = 1; d <= dias; d++) {
+      const mapDia = he.get(d)!;
+      for (const [row, sigla] of Array.from(mapDia.entries())) {
+        const mt = /^HE(\d{1,2})$/i.exec(sigla);
+        if (!mt) continue;
+        const h = Number(mt[1]);
+        if (h <= 16) continue;
+        const excesso = h - 16;
+        const nome = nomePorRow.get(row) ?? `row ${row}`;
+        if (d >= dias) {
+          alertasHe.push(`HE acima do limite diário: ${nome}, dia ${d}, valor HE${h} (sem dia seguinte para realocar)`);
+          continue;
+        }
+        mapDia.set(row, "HE16");
+        const mapNext = he.get(d + 1)!;
+        const sigNext = mapNext.get(row);
+        let hNext = 0;
+        if (sigNext) {
+          const mn = /^HE(\d{1,2})$/i.exec(sigNext);
+          if (mn) hNext = Number(mn[1]);
+        }
+        const novoNext = Math.min(24, hNext + excesso);
+        const sobra = hNext + excesso - novoNext;
+        mapNext.set(row, `HE${novoNext}`);
+        correcoesHe.push(`${nome} dia ${d}: HE${h}→HE16 + dia ${d + 1}: ${sigNext ?? "vazio"}→HE${novoNext}`);
+        if (sobra > 0) {
+          alertasHe.push(`HE acima do limite diário: ${nome}, dia ${d + 1}, sobra ${sobra}h não realocada`);
+        }
+      }
+    }
+    if (correcoesHe.length) {
+      alertas.push({ tipo: "info", msg: `HE normalizada (limite HE16/dia): ${correcoesHe.join("; ")}.` });
+    }
+    for (const a of alertasHe) alertas.push({ tipo: "warn", msg: a });
+  }
+
+  /* 8.6ª ETAPA — LIMITE DIÁRIO DE 16h (ORD + CM/EXP + HE).
+     Exceção única: ORD === "234" sozinho no dia (18h, sem CM/HE).
+     Quando total > 16 fora da exceção: reduz HE do dia até 16 e empurra
+     o excedente para HE do dia seguinte, preservando o total físico. */
+  {
+    const nomePorRow = new Map<number, string>();
+    for (const m of militares) nomePorRow.set(m.rowOrd, m.nome);
+    const correcoes16: string[] = [];
+    const alertas16: string[] = [];
+    const rowsAll = militares.map((m) => m.rowOrd);
+
+    for (let pass = 0; pass < 3; pass++) {
+      let mudou = false;
+      for (let d = 1; d <= dias; d++) {
+        for (const row of rowsAll) {
+          const ordSig = ord.get(d)?.get(row) ?? "";
+          const expSig = expm.get(d)?.get(row) ?? "";
+          const heSig = he.get(d)?.get(row) ?? "";
+          const hOrd = horasOrdSigla(ordSig);
+          const hExp = expSig ? horasExpSigla(expSig) : 0;
+          const mHe = /^HE(\d{1,2})$/i.exec(heSig);
+          const hHe = mHe ? Number(mHe[1]) : 0;
+          const total = hOrd + hExp + hHe;
+          if (total <= 16) continue;
+          // Exceção: 234 puro (18h), sem CM/HE
+          if (ordSig === "234" && hExp === 0 && hHe === 0) continue;
+
+          const nome = nomePorRow.get(row) ?? `row ${row}`;
+          const excesso = total - 16;
+          const reduzHe = Math.min(hHe, excesso);
+          const novoHe = hHe - reduzHe;
+          if (reduzHe > 0) {
+            if (novoHe > 0) he.get(d)!.set(row, `HE${novoHe}`);
+            else he.get(d)!.delete(row);
+            mudou = true;
+            if (d < dias) {
+              const mapNext = he.get(d + 1)!;
+              const sigNext = mapNext.get(row) ?? "";
+              const mn = /^HE(\d{1,2})$/i.exec(sigNext);
+              const hNext = mn ? Number(mn[1]) : 0;
+              const somado = Math.min(24, hNext + reduzHe);
+              const sobra = hNext + reduzHe - somado;
+              mapNext.set(row, `HE${somado}`);
+              correcoes16.push(`${nome} dia ${d}: total ${total}h→16h (HE${hHe}→${novoHe ? `HE${novoHe}` : "—"}, +${reduzHe}h em dia ${d + 1})`);
+              if (sobra > 0) {
+                alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d + 1} (sobra ${sobra}h não realocada).`);
+              }
+            } else {
+              alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d} (sem dia seguinte para realocar ${reduzHe}h).`);
+            }
+          }
+          const restante = excesso - reduzHe;
+          if (restante > 0) {
+            alertas16.push(`Total diário acima de 16h fora da exceção 234: ${nome}, dia ${d} (excedente ${restante}h em ORD/CM não pôde ser reduzido com segurança).`);
+          }
+        }
+      }
+      if (!mudou) break;
+    }
+    if (correcoes16.length) {
+      alertas.push({ tipo: "info", msg: `Limite diário 16h aplicado: ${correcoes16.join("; ")}.` });
+    }
+    for (const a of alertas16) alertas.push({ tipo: "warn", msg: a });
+  }
+
+  return { ord, exp: expm, he };
+}
+
+
+
+
+/* ------------------------------------------------------------------ */
+/* Server function                                                    */
+/* ------------------------------------------------------------------ */
+
+
+export { escalar, classificarPosto, isFeriado, isDiaExpediente, rotuloSemana, diasNoMes, dataKey, excelSerialUTC, feriadosBrasil, normMatricula, normNome, SIGLAS_AFASTAMENTO, SIGLAS_ORD_VALIDAS, SIGLAS_COMP_VALIDAS, SIGLAS_HE_VALIDAS, ParametrosSchema };
