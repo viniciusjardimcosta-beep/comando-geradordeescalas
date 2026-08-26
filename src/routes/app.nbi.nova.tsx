@@ -1613,7 +1613,7 @@ function AssuntoCard({
 
 function Etapa3({
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, onPersistir, salvando,
-  documentoId, onRecarregarSubstituicoes, baseConsistencia,
+  documentoId, onRecarregarSubstituicoes, baseConsistencia, candidatoNumero,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -1629,11 +1629,14 @@ function Etapa3({
   documentoId: string | null;
   onRecarregarSubstituicoes: () => Promise<void> | void;
   baseConsistencia: BaseConsistencia;
+  /** Bloco 12I — número de NBI cancelada candidato à reutilização. */
+  candidatoNumero: { numero: number; ano: number; origem_id: string } | null;
 
 }) {
   const gerar = useServerFn(gerarNbi);
   const baixar = useServerFn(baixarNbi);
   const prox = useServerFn(proximoNumeroPrevisto);
+  const consultarNumero = useServerFn(consultarNumeroNbi);
 
   const [gerando, setGerando] = useState(false);
   // Bloco 12E — falha de geração precisa ficar visível na Etapa 3, não só em toast.
@@ -1646,6 +1649,12 @@ function Etapa3({
   const [duplicarMesmoAssim, setDuplicarMesmoAssim] = useState(false);
   // Bloco 12G — duplicidade DOCUMENTAL com NBI já existente exige confirmação explícita.
   const [confirmarDuplicidade, setConfirmarDuplicidade] = useState(false);
+  // Bloco 12I — decisão explícita sobre o número: reutilizar o cancelado ou
+  // usar o próximo disponível. Nenhuma das duas ocorre em silêncio.
+  const [escolhaNumero, setEscolhaNumero] = useState<"reutilizar" | "proximo" | null>(null);
+  const [estadoNumero, setEstadoNumero] = useState<
+    { estado: "livre" | "cancelado" | "ativo"; documento_id: string | null } | null
+  >(null);
 
   const [previsto, setPrevisto] = useState<{ proximo: number; ano_vigente: number; reiniciar_anualmente: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState<string | null>(null);
@@ -1653,6 +1662,7 @@ function Etapa3({
   useEffect(() => {
     void prox().then((p) => setPrevisto(p));
   }, []);
+
 
   const resumoPend = rascunho.assuntos.map((a) => {
     const t = templates.find((x) => x.codigo === a.tipo);
