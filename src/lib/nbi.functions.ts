@@ -95,6 +95,47 @@ export const proximoNumeroPrevisto = createServerFn({ method: "GET" })
   });
 
 // =============================================================
+// 2B. ESTADO DE UM NÚMERO (Bloco 12I) — informativo, nunca reserva.
+// livre | cancelado (reutilização possível) | ativo (bloqueio absoluto)
+// =============================================================
+export const consultarNumeroNbi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { numero: number; ano: number }) => ({
+    numero: Number(input.numero),
+    ano: Number(input.ano),
+  }))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    if (!Number.isFinite(data.numero) || data.numero < 1 || !Number.isFinite(data.ano)) {
+      return { estado: "livre" as const, documento_id: null, cancel_reason: null, canceled_at: null };
+    }
+    const { data: docs } = await supabase
+      .from("nbi_documents")
+      .select("id,status,canceled_at,cancel_reason")
+      .eq("user_id", userId)
+      .eq("numero_ano_local", data.ano)
+      .eq("numero_int", data.numero)
+      .limit(10);
+    const lista = docs ?? [];
+    const ativo = lista.find((d) => d.status !== "cancelado");
+    if (ativo) {
+      return { estado: "ativo" as const, documento_id: ativo.id, cancel_reason: null, canceled_at: null };
+    }
+    const cancelado = lista[0];
+    if (cancelado) {
+      return {
+        estado: "cancelado" as const,
+        documento_id: cancelado.id,
+        cancel_reason: cancelado.cancel_reason,
+        canceled_at: cancelado.canceled_at,
+      };
+    }
+    return { estado: "livre" as const, documento_id: null, cancel_reason: null, canceled_at: null };
+  });
+
+
+
+// =============================================================
 // 3. GERAR DOCX — reserva (se necessário) → renderiza → upload → generated_at
 // =============================================================
 interface SnapshotSubstituicao {
