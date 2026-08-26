@@ -1138,6 +1138,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      finalizar_senha_temporaria: {
+        Args: never
+        Returns: {
+          id: string
+          password_temporary: boolean
+        }[]
+      }
       get_user_status: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["user_status"]
