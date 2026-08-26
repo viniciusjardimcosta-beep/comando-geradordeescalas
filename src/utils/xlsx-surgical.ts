@@ -297,7 +297,9 @@ function upsertRow(xml: string, rowNum: number, edits: CellEdit[], skipped?: Ski
     newInner = insertCellsInOrder(newInner, additions);
   }
 
-  const rebuilt = `<row${allAttrs ? " " + allAttrs : ""}>${newInner}</row>`;
+  // O atributo r="N" é consumido pela regex; reinseri-lo é obrigatório para
+  // manter o índice da linha (idempotência em edições subsequentes).
+  const rebuilt = `<row r="${rowNum}"${allAttrs ? " " + allAttrs : ""}>${newInner}</row>`;
   return xml.replace(m[0], rebuilt);
 }
 
