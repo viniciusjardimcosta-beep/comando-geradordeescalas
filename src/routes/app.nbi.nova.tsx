@@ -191,6 +191,10 @@ function NovaNbiPage() {
   const [salvando, setSalvando] = useState(false);
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   const [documentoId, setDocumentoId] = useState<string | null>(null);
+  // Bloco 12I — número CANDIDATO à reutilização, herdado de uma duplicação de
+  // NBI cancelada. Candidato NUNCA é aplicado sozinho: a decisão é explícita.
+  const [candidatoNumero, setCandidatoNumero] = useState<{ numero: number; ano: number; origem_id: string } | null>(null);
+
 
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
