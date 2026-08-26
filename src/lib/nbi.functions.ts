@@ -794,7 +794,7 @@ export const duplicarNbi = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: orig } = await supabase
       .from("nbi_documents")
-      .select("snapshot,responsaveis,assuntos,titulo,data_documento")
+      .select("snapshot,responsaveis,assuntos,titulo,data_documento,status,numero_int,numero_ano_local")
       .eq("id", data.documento_id)
       .maybeSingle();
     if (!orig) throw new Error("Documento original não encontrado");
@@ -803,16 +803,33 @@ export const duplicarNbi = createServerFn({ method: "POST" })
     // Bloco 12G — rastreabilidade da origem dentro do próprio snapshot (sem
     // alteração estrutural de tabela). O documento original NÃO é tocado.
     const snap = (orig.snapshot ?? {}) as {
-      rascunho?: { numero?: string; data_documento?: string };
+      rascunho?: { numero?: string; data_documento?: string; modo_numeracao?: string };
       origem_documento_id?: string;
       duplicado_em?: string;
+      numero_candidato_reutilizacao?: string;
+      numero_candidato_origem_id?: string;
     };
     if (snap.rascunho) {
       snap.rascunho.numero = "";
       snap.rascunho.data_documento = hoje;
+      // Bloco 12I — a cópia NUNCA herda o modo manual da origem: reutilizar
+      // um número é decisão explícita, tomada na Conferência.
+      snap.rascunho.modo_numeracao = "automatico";
     }
     snap.origem_documento_id = data.documento_id;
     snap.duplicado_em = new Date().toISOString();
+    // Bloco 12I — número CANDIDATO à reutilização (nunca aplicado sozinho).
+    delete snap.numero_candidato_reutilizacao;
+    delete snap.numero_candidato_origem_id;
+    if (
+      orig.status === "cancelado" &&
+      orig.numero_int != null &&
+      orig.numero_ano_local === parseInt(hoje.slice(0, 4), 10)
+    ) {
+      snap.numero_candidato_reutilizacao = `${orig.numero_int}/${orig.numero_ano_local}`;
+      snap.numero_candidato_origem_id = data.documento_id;
+    }
+
 
     const { data: novo, error } = await supabase
       .from("nbi_documents")
