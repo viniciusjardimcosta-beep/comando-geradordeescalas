@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { gerarNbi, baixarNbi, proximoNumeroPrevisto } from "@/lib/nbi.functions";
+import { gerarNbi, baixarNbi, proximoNumeroPrevisto, consultarNumeroNbi } from "@/lib/nbi.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -191,6 +191,10 @@ function NovaNbiPage() {
   const [salvando, setSalvando] = useState(false);
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   const [documentoId, setDocumentoId] = useState<string | null>(null);
+  // Bloco 12I — número CANDIDATO à reutilização, herdado de uma duplicação de
+  // NBI cancelada. Candidato NUNCA é aplicado sozinho: a decisão é explícita.
+  const [candidatoNumero, setCandidatoNumero] = useState<{ numero: number; ano: number; origem_id: string } | null>(null);
+
 
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [militares, setMilitares] = useState<MilitarNbi[]>([]);
@@ -291,15 +295,29 @@ function NovaNbiPage() {
           .from("nbi_documents")
           .select("id,snapshot,status")
           .eq("id", rascId).eq("user_id", uid).maybeSingle();
-        const snap = (doc?.snapshot as { rascunho?: Rascunho } | null)?.rascunho;
+        const snapTop = (doc?.snapshot ?? null) as {
+          rascunho?: Rascunho;
+          numero_candidato_reutilizacao?: string;
+          numero_candidato_origem_id?: string;
+        } | null;
+        const snap = snapTop?.rascunho;
         if (snap && Array.isArray(snap.assuntos)) {
           setRascunho(snap);
           setDocumentoId(doc!.id);
+          const cand = snapTop?.numero_candidato_reutilizacao;
+          const candOrigem = snapTop?.numero_candidato_origem_id;
+          if (cand && candOrigem) {
+            const [n, a] = cand.split("/").map((v) => parseInt(v, 10));
+            if (Number.isFinite(n) && Number.isFinite(a)) {
+              setCandidatoNumero({ numero: n, ano: a, origem_id: candOrigem });
+            }
+          }
           toast.success("Rascunho restaurado");
         } else if (doc) {
           toast.error("Rascunho sem dados estruturados");
         }
       }
+
     } catch (e) {
       console.error("Erro ao carregar dados NBI", e);
       toast.error("Falha ao carregar dados do módulo NBI");
@@ -724,6 +742,8 @@ function NovaNbiPage() {
           documentoId={documentoId}
           onRecarregarSubstituicoes={recarregarSubstituicoes}
           baseConsistencia={baseConsistencia}
+          candidatoNumero={candidatoNumero}
+
 
         />
       )}
@@ -1591,9 +1611,17 @@ function AssuntoCard({
 
 // ============ ETAPA 3 ============
 
+/** Número digitado no modo manual (ou null quando o modo é automático). */
+function modoManualEtapa3(r: Rascunho): number | null {
+  if (r.modo_numeracao !== "manual") return null;
+  const n = parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function Etapa3({
+
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, onPersistir, salvando,
-  documentoId, onRecarregarSubstituicoes, baseConsistencia,
+  documentoId, onRecarregarSubstituicoes, baseConsistencia, candidatoNumero,
 }: {
   rascunho: Rascunho;
   templates: TemplateRow[];
@@ -1609,11 +1637,14 @@ function Etapa3({
   documentoId: string | null;
   onRecarregarSubstituicoes: () => Promise<void> | void;
   baseConsistencia: BaseConsistencia;
+  /** Bloco 12I — número de NBI cancelada candidato à reutilização. */
+  candidatoNumero: { numero: number; ano: number; origem_id: string } | null;
 
 }) {
   const gerar = useServerFn(gerarNbi);
   const baixar = useServerFn(baixarNbi);
   const prox = useServerFn(proximoNumeroPrevisto);
+  const consultarNumero = useServerFn(consultarNumeroNbi);
 
   const [gerando, setGerando] = useState(false);
   // Bloco 12E — falha de geração precisa ficar visível na Etapa 3, não só em toast.
@@ -1626,6 +1657,12 @@ function Etapa3({
   const [duplicarMesmoAssim, setDuplicarMesmoAssim] = useState(false);
   // Bloco 12G — duplicidade DOCUMENTAL com NBI já existente exige confirmação explícita.
   const [confirmarDuplicidade, setConfirmarDuplicidade] = useState(false);
+  // Bloco 12I — decisão explícita sobre o número: reutilizar o cancelado ou
+  // usar o próximo disponível. Nenhuma das duas ocorre em silêncio.
+  const [escolhaNumero, setEscolhaNumero] = useState<"reutilizar" | "proximo" | null>(null);
+  const [estadoNumero, setEstadoNumero] = useState<
+    { estado: "livre" | "cancelado" | "ativo"; documento_id: string | null } | null
+  >(null);
 
   const [previsto, setPrevisto] = useState<{ proximo: number; ano_vigente: number; reiniciar_anualmente: boolean } | null>(null);
   const [motivoCancelamento, setMotivoCancelamento] = useState<string | null>(null);
@@ -1633,6 +1670,7 @@ function Etapa3({
   useEffect(() => {
     void prox().then((p) => setPrevisto(p));
   }, []);
+
 
   const resumoPend = rascunho.assuntos.map((a) => {
     const t = templates.find((x) => x.codigo === a.tipo);
@@ -1673,6 +1711,41 @@ function Etapa3({
 
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
+
+  // ---- Bloco 12I — estado do número pretendido -------------------------
+  const numeroManualDigitado = modoManualEtapa3(rascunho);
+  // Alvo: número digitado (modo manual) ou candidato herdado da duplicação
+  // de uma NBI cancelada. Candidato só vale para o mesmo ano do documento.
+  const numeroAlvo =
+    numeroManualDigitado ??
+    (candidatoNumero && candidatoNumero.ano === anoDoc ? candidatoNumero.numero : null);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!numeroAlvo || !Number.isFinite(anoDoc)) {
+      setEstadoNumero(null);
+      setEscolhaNumero(null);
+      return;
+    }
+    void consultarNumero({ data: { numero: numeroAlvo, ano: anoDoc } }).then((r) => {
+      if (!vivo) return;
+      setEstadoNumero({ estado: r.estado, documento_id: r.documento_id });
+      setEscolhaNumero(null);
+    });
+    return () => { vivo = false; };
+  }, [numeroAlvo, anoDoc]);
+
+  // Colisão com NBI ATIVA: bloqueio absoluto, sem contorno pela interface.
+  const numeroAtivoBloqueado = estadoNumero?.estado === "ativo";
+  // Número de NBI CANCELADA: exige escolha explícita do operador.
+  const decisaoReutilizacaoPendente =
+    estadoNumero?.estado === "cancelado" && escolhaNumero === null;
+  const reutilizando =
+    estadoNumero?.estado === "cancelado" &&
+    escolhaNumero === "reutilizar" &&
+    Boolean(estadoNumero.documento_id) &&
+    Boolean(numeroAlvo);
+
 
   // RF-07 — datas informadas nos assuntos cujo ano diverge do ano do documento.
   const divergenciasAno = rascunho.assuntos.flatMap((a) => {
@@ -1753,10 +1826,15 @@ function Etapa3({
   });
 
   // Bloco 12G — duplicidade documental bloqueia ATÉ a confirmação explícita.
+  // Bloco 12I — número ATIVO bloqueia sempre; número CANCELADO bloqueia até a
+  // escolha explícita entre reutilizar e usar o próximo número.
   const bloqueado =
     bloqueadoBase ||
     auditoria.bloqueado ||
-    (duplicidadeDocumental.length > 0 && !confirmarDuplicidade);
+    (duplicidadeDocumental.length > 0 && !confirmarDuplicidade) ||
+    numeroAtivoBloqueado ||
+    decisaoReutilizacaoPendente;
+
 
 
 
@@ -1771,7 +1849,7 @@ function Etapa3({
       toast.error(msg);
       return;
     }
-    if (rascunho.modo_numeracao === "manual") {
+    if (rascunho.modo_numeracao === "manual" && !reutilizando && escolhaNumero !== "proximo") {
       const n = parseInt(rascunho.numero.replace(/\D/g, ""), 10);
       if (!Number.isFinite(n) || n < 1) {
         const msg = "Informe o número manual da NBI na Etapa 1.";
@@ -1780,7 +1858,26 @@ function Etapa3({
         return;
       }
     }
-    if (transicaoAno && !confirmarAno && rascunho.modo_numeracao === "automatico") {
+    // Bloco 12I — número em uso por NBI ATIVA: bloqueio absoluto.
+    if (numeroAtivoBloqueado) {
+      const msg = `O número ${String(numeroAlvo).padStart(3, "0")}/${anoDoc} já está em uso por uma NBI ativa. Utilize outro número.`;
+      setErroGeracao(msg);
+      toast.error(msg);
+      return;
+    }
+    if (decisaoReutilizacaoPendente) {
+      const msg = `Escolha explicitamente entre reutilizar ${String(numeroAlvo).padStart(3, "0")}/${anoDoc} ou usar o próximo número disponível.`;
+      setErroGeracao(msg);
+      toast.error(msg);
+      return;
+    }
+    // Modo efetivo: reutilização é sempre manual; "usar próximo" é automático.
+    const modoEfetivo: "manual" | "automatico" = reutilizando
+      ? "manual"
+      : escolhaNumero === "proximo"
+        ? "automatico"
+        : rascunho.modo_numeracao;
+    if (transicaoAno && !confirmarAno && modoEfetivo === "automatico") {
       const msg = `Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`;
       setErroGeracao(msg);
       toast.error(msg);
@@ -1807,14 +1904,16 @@ function Etapa3({
           data: {
             documento_id: alvo,
             confirmar_novo_ano: confirmarAno,
-            modo_numeracao: rascunho.modo_numeracao,
-            numero_manual: rascunho.modo_numeracao === "manual"
-              ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
+            modo_numeracao: modoEfetivo,
+            numero_manual: modoEfetivo === "manual"
+              ? (reutilizando ? numeroAlvo : parseInt(rascunho.numero.replace(/\D/g, ""), 10))
               : null,
-            ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
+            ano_manual: modoEfetivo === "manual" ? anoDoc : null,
+            reutilizar_numero_de: reutilizando ? estadoNumero?.documento_id ?? null : null,
           },
         }),
     });
+
     setGerando(false);
     if (saida.estado === "ignorado") return;
     if (saida.estado === "erro") {
@@ -1931,6 +2030,65 @@ function Etapa3({
             </label>
           </div>
         )}
+
+        {/* Bloco 12I — número em uso por NBI ATIVA: bloqueio absoluto */}
+        {numeroAtivoBloqueado && !gerado && (
+          <div
+            className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm"
+            data-testid="numero-ativo-bloqueado"
+          >
+            <div className="mb-1 flex items-center gap-2 font-semibold text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              Número {String(numeroAlvo).padStart(3, "0")}/{anoDoc} já está em uso por uma NBI ativa
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Não há confirmação possível: escolha outro número na Etapa 1 ou cancele a NBI que
+              ocupa este número antes de reutilizá-lo.
+            </p>
+          </div>
+        )}
+
+        {/* Bloco 12I — número de NBI CANCELADA: escolha explícita */}
+        {estadoNumero?.estado === "cancelado" && !gerado && (
+          <div
+            className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm"
+            data-testid="reutilizacao-numero-cancelada"
+          >
+            <div className="mb-2 flex items-center gap-2 font-semibold text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              O número {String(numeroAlvo).padStart(3, "0")}/{anoDoc} pertence a uma NBI cancelada
+            </div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              A reutilização é permitida, mas exige decisão explícita. Reutilizar não altera a
+              contagem oficial de numeração.
+            </p>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  type="radio"
+                  name="escolha-numero-nbi"
+                  data-testid="escolha-reutilizar"
+                  checked={escolhaNumero === "reutilizar"}
+                  onChange={() => setEscolhaNumero("reutilizar")}
+                />
+                Reutilizar o número {String(numeroAlvo).padStart(3, "0")}/{anoDoc}
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  type="radio"
+                  name="escolha-numero-nbi"
+                  data-testid="escolha-proximo"
+                  checked={escolhaNumero === "proximo"}
+                  onChange={() => setEscolhaNumero("proximo")}
+                />
+                Usar o próximo número disponível
+                {previsto ? ` (${String(previsto.proximo).padStart(3, "0")}/${previsto.ano_vigente})` : ""}
+              </label>
+            </div>
+          </div>
+        )}
+
+
 
         {/* RF-07 — alerta informativo de ano divergente (não bloqueia a emissão) */}
 

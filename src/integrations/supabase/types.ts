@@ -1172,6 +1172,19 @@ export type Database = {
           reservado: boolean
         }[]
       }
+      nbi_reutilizar_numero: {
+        Args: {
+          _ano: number
+          _documento_id: string
+          _numero: number
+          _origem_documento_id: string
+        }
+        Returns: {
+          ano: number
+          numero: number
+          reutilizado: boolean
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user"

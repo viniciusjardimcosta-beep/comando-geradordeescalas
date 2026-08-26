@@ -95,6 +95,47 @@ export const proximoNumeroPrevisto = createServerFn({ method: "GET" })
   });
 
 // =============================================================
+// 2B. ESTADO DE UM NÚMERO (Bloco 12I) — informativo, nunca reserva.
+// livre | cancelado (reutilização possível) | ativo (bloqueio absoluto)
+// =============================================================
+export const consultarNumeroNbi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { numero: number; ano: number }) => ({
+    numero: Number(input.numero),
+    ano: Number(input.ano),
+  }))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    if (!Number.isFinite(data.numero) || data.numero < 1 || !Number.isFinite(data.ano)) {
+      return { estado: "livre" as const, documento_id: null, cancel_reason: null, canceled_at: null };
+    }
+    const { data: docs } = await supabase
+      .from("nbi_documents")
+      .select("id,status,canceled_at,cancel_reason")
+      .eq("user_id", userId)
+      .eq("numero_ano_local", data.ano)
+      .eq("numero_int", data.numero)
+      .limit(10);
+    const lista = docs ?? [];
+    const ativo = lista.find((d) => d.status !== "cancelado");
+    if (ativo) {
+      return { estado: "ativo" as const, documento_id: ativo.id, cancel_reason: null, canceled_at: null };
+    }
+    const cancelado = lista[0];
+    if (cancelado) {
+      return {
+        estado: "cancelado" as const,
+        documento_id: cancelado.id,
+        cancel_reason: cancelado.cancel_reason,
+        canceled_at: cancelado.canceled_at,
+      };
+    }
+    return { estado: "livre" as const, documento_id: null, cancel_reason: null, canceled_at: null };
+  });
+
+
+
+// =============================================================
 // 3. GERAR DOCX — reserva (se necessário) → renderiza → upload → generated_at
 // =============================================================
 interface SnapshotSubstituicao {
@@ -170,13 +211,17 @@ export const gerarNbi = createServerFn({ method: "POST" })
     modo_numeracao?: "manual" | "automatico";
     numero_manual?: number | null;
     ano_manual?: number | null;
+    /** Bloco 12I — UUID da NBI cancelada cujo número será reutilizado. */
+    reutilizar_numero_de?: string | null;
   }) => ({
     documento_id: asUuid(input.documento_id),
     confirmar_novo_ano: Boolean(input.confirmar_novo_ano),
     modo_numeracao: input.modo_numeracao === "manual" ? "manual" as const : "automatico" as const,
     numero_manual: input.numero_manual != null ? Number(input.numero_manual) : null,
     ano_manual: input.ano_manual != null ? Number(input.ano_manual) : null,
+    reutilizar_numero_de: input.reutilizar_numero_de ? asUuid(input.reutilizar_numero_de) : null,
   }))
+
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
@@ -365,18 +410,54 @@ export const gerarNbi = createServerFn({ method: "POST" })
         if (a !== anoLocal) {
           return { ok: false as const, code: `Ano informado (${a}) diverge do ano da data do documento (${anoLocal}).` };
         }
-        // Colisão: mesmo user_id + ano + numero já emitido (mesmo cancelado — número não reutilizado)
+        // Bloco 12I — REUTILIZAÇÃO CONTROLADA de número de NBI CANCELADA.
+        // Só ocorre com confirmação explícita, via RPC dedicada.
+        if (data.reutilizar_numero_de) {
+          const { error: eRe } = await supabase.rpc("nbi_reutilizar_numero", {
+            _documento_id: data.documento_id,
+            _origem_documento_id: data.reutilizar_numero_de,
+            _numero: n,
+            _ano: a,
+          });
+          if (eRe) return { ok: false as const, code: eRe.message };
+          // Rastreabilidade no snapshot (allowlist de snapshotMeta).
+          const { supabaseAdmin: saR } = await import("@/integrations/supabase/client.server");
+          const { data: snapAtual } = await supabase
+            .from("nbi_documents").select("snapshot").eq("id", data.documento_id).maybeSingle();
+          const base = (snapAtual?.snapshot ?? {}) as Record<string, unknown>;
+          await saR.from("nbi_documents").update({
+            snapshot: {
+              ...base,
+              numero_reutilizado: true,
+              numero_reutilizado_de_documento_id: data.reutilizar_numero_de,
+              numero_reutilizado_em: new Date().toISOString(),
+              numero_reutilizado_confirmado_por: userId,
+            } as never,
+          }).eq("id", data.documento_id).eq("user_id", userId);
+          numero = n; ano = a;
+        } else {
+        // Colisão com documento ATIVO: bloqueio absoluto.
+        // Documento CANCELADO não bloqueia, mas exige confirmação explícita
+        // de reutilização (nunca assumida em silêncio pelo servidor).
         const { data: existente } = await supabase
           .from("nbi_documents")
-          .select("id")
+          .select("id,status")
           .eq("user_id", userId)
           .eq("numero_ano_local", a)
           .eq("numero_int", n)
           .neq("id", data.documento_id)
-          .limit(1)
-          .maybeSingle();
-        if (existente) {
-          return { ok: false as const, code: `Número ${String(n).padStart(3, "0")}/${a} já foi utilizado nesta unidade.` };
+          .order("status", { ascending: true })
+          .limit(5);
+        const ativo = (existente ?? []).find((d) => d.status !== "cancelado");
+        const cancelado = (existente ?? []).find((d) => d.status === "cancelado");
+        if (ativo) {
+          return { ok: false as const, code: `Número ${String(n).padStart(3, "0")}/${a} já está em uso por uma NBI ativa desta unidade.` };
+        }
+        if (cancelado) {
+          return {
+            ok: false as const,
+            code: `O número ${String(n).padStart(3, "0")}/${a} pertence a uma NBI cancelada. Confirme a reutilização ou use o próximo número disponível.`,
+          };
         }
         // Aplica número manual no documento
         const { supabaseAdmin: sa } = await import("@/integrations/supabase/client.server");
@@ -393,6 +474,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
           .eq("id", data.documento_id)
           .eq("user_id", userId);
         if (eMan) return { ok: false as const, code: "Falha ao aplicar número manual." };
+
 
         // Atualiza nbi_numeracao se avançou a sequência (mesmo ano_vigente) ou novo ano
         const { data: numRow } = await sa
@@ -418,6 +500,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
         });
         numero = n; ano = a;
         await auditar(data.documento_id, userId, "reservou", { numero, ano, modo: "manual" });
+        }
+
       } else {
         const { data: rpc, error: eR } = await supabase.rpc("nbi_reservar_numero", {
           _documento_id: data.documento_id,
@@ -710,7 +794,7 @@ export const duplicarNbi = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { data: orig } = await supabase
       .from("nbi_documents")
-      .select("snapshot,responsaveis,assuntos,titulo,data_documento")
+      .select("snapshot,responsaveis,assuntos,titulo,data_documento,status,numero_int,numero_ano_local")
       .eq("id", data.documento_id)
       .maybeSingle();
     if (!orig) throw new Error("Documento original não encontrado");
@@ -719,16 +803,33 @@ export const duplicarNbi = createServerFn({ method: "POST" })
     // Bloco 12G — rastreabilidade da origem dentro do próprio snapshot (sem
     // alteração estrutural de tabela). O documento original NÃO é tocado.
     const snap = (orig.snapshot ?? {}) as {
-      rascunho?: { numero?: string; data_documento?: string };
+      rascunho?: { numero?: string; data_documento?: string; modo_numeracao?: string };
       origem_documento_id?: string;
       duplicado_em?: string;
+      numero_candidato_reutilizacao?: string;
+      numero_candidato_origem_id?: string;
     };
     if (snap.rascunho) {
       snap.rascunho.numero = "";
       snap.rascunho.data_documento = hoje;
+      // Bloco 12I — a cópia NUNCA herda o modo manual da origem: reutilizar
+      // um número é decisão explícita, tomada na Conferência.
+      snap.rascunho.modo_numeracao = "automatico";
     }
     snap.origem_documento_id = data.documento_id;
     snap.duplicado_em = new Date().toISOString();
+    // Bloco 12I — número CANDIDATO à reutilização (nunca aplicado sozinho).
+    delete snap.numero_candidato_reutilizacao;
+    delete snap.numero_candidato_origem_id;
+    if (
+      orig.status === "cancelado" &&
+      orig.numero_int != null &&
+      orig.numero_ano_local === parseInt(hoje.slice(0, 4), 10)
+    ) {
+      snap.numero_candidato_reutilizacao = `${orig.numero_int}/${orig.numero_ano_local}`;
+      snap.numero_candidato_origem_id = data.documento_id;
+    }
+
 
     const { data: novo, error } = await supabase
       .from("nbi_documents")
