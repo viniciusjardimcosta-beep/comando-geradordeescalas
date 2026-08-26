@@ -1704,6 +1704,41 @@ function Etapa3({
   const anoDoc = parseInt(rascunho.data_documento.slice(0, 4), 10);
   const transicaoAno = previsto ? anoDoc !== previsto.ano_vigente : false;
 
+  // ---- Bloco 12I — estado do número pretendido -------------------------
+  const numeroManualDigitado = modoManualEtapa3(rascunho);
+  // Alvo: número digitado (modo manual) ou candidato herdado da duplicação
+  // de uma NBI cancelada. Candidato só vale para o mesmo ano do documento.
+  const numeroAlvo =
+    numeroManualDigitado ??
+    (candidatoNumero && candidatoNumero.ano === anoDoc ? candidatoNumero.numero : null);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!numeroAlvo || !Number.isFinite(anoDoc)) {
+      setEstadoNumero(null);
+      setEscolhaNumero(null);
+      return;
+    }
+    void consultarNumero({ data: { numero: numeroAlvo, ano: anoDoc } }).then((r) => {
+      if (!vivo) return;
+      setEstadoNumero({ estado: r.estado, documento_id: r.documento_id });
+      setEscolhaNumero(null);
+    });
+    return () => { vivo = false; };
+  }, [numeroAlvo, anoDoc]);
+
+  // Colisão com NBI ATIVA: bloqueio absoluto, sem contorno pela interface.
+  const numeroAtivoBloqueado = estadoNumero?.estado === "ativo";
+  // Número de NBI CANCELADA: exige escolha explícita do operador.
+  const decisaoReutilizacaoPendente =
+    estadoNumero?.estado === "cancelado" && escolhaNumero === null;
+  const reutilizando =
+    estadoNumero?.estado === "cancelado" &&
+    escolhaNumero === "reutilizar" &&
+    Boolean(estadoNumero.documento_id) &&
+    Boolean(numeroAlvo);
+
+
   // RF-07 — datas informadas nos assuntos cujo ano diverge do ano do documento.
   const divergenciasAno = rascunho.assuntos.flatMap((a) => {
     const t = templates.find((x) => x.codigo === a.tipo);
