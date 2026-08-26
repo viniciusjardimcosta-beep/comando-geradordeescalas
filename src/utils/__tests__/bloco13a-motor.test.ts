@@ -532,8 +532,10 @@ describe("modo ordinario_puro", () => {
     expect(temHe).toBe(true);
   });
 
-
+  it("no modo auto o motor lança HE para cobrir os dias", () => {
+    const ms = guarnicao().slice(0, 3);
     const r = rodar({ militares: ms, mes: MES, ano: ANO, par: { modo: "auto", militaresPorDia: 4 } });
+
     const algumaHe = ms.some((m) => linha(r.he, m, DIAS).some((s) => !!s));
     expect(algumaHe).toBe(true);
   });
