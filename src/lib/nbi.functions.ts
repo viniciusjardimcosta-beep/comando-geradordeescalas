@@ -170,13 +170,17 @@ export const gerarNbi = createServerFn({ method: "POST" })
     modo_numeracao?: "manual" | "automatico";
     numero_manual?: number | null;
     ano_manual?: number | null;
+    /** Bloco 12I — UUID da NBI cancelada cujo número será reutilizado. */
+    reutilizar_numero_de?: string | null;
   }) => ({
     documento_id: asUuid(input.documento_id),
     confirmar_novo_ano: Boolean(input.confirmar_novo_ano),
     modo_numeracao: input.modo_numeracao === "manual" ? "manual" as const : "automatico" as const,
     numero_manual: input.numero_manual != null ? Number(input.numero_manual) : null,
     ano_manual: input.ano_manual != null ? Number(input.ano_manual) : null,
+    reutilizar_numero_de: input.reutilizar_numero_de ? asUuid(input.reutilizar_numero_de) : null,
   }))
+
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
