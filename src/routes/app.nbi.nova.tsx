@@ -1611,7 +1611,15 @@ function AssuntoCard({
 
 // ============ ETAPA 3 ============
 
+/** Número digitado no modo manual (ou null quando o modo é automático). */
+function modoManualEtapa3(r: Rascunho): number | null {
+  if (r.modo_numeracao !== "manual") return null;
+  const n = parseInt(String(r.numero ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function Etapa3({
+
   rascunho, templates, militares, textoFinal, pendencias, atualizarCampo, onBack, onSalvar, onPersistir, salvando,
   documentoId, onRecarregarSubstituicoes, baseConsistencia, candidatoNumero,
 }: {
