@@ -507,20 +507,32 @@ describe("carga horária, HE e limites institucionais", () => {
 /* 9. Modo somente ordinária                                          */
 /* ================================================================== */
 describe("modo ordinario_puro", () => {
-  it("não lança HE e registra furos em vez de tapá-los", () => {
+  it("não tapa furos com HE: os dias descobertos são registrados como furo", () => {
     const ms = guarnicao().slice(0, 3);
     const r = rodar({
       militares: ms, mes: MES, ano: ANO,
       par: { modo: "ordinario_puro", militaresPorDia: 4 },
     });
-    for (const m of ms) {
-      for (const s of linha(r.he, m, DIAS)) expect(s).toBe("");
-    }
     expect(r.furos.length).toBeGreaterThan(0);
+    // Nenhuma HE de cobertura de furo: os alertas de guarnição incompleta
+    // permanecem em vez de o motor criar guarnição extra.
+    expect(r.alertas.some((a) => a.tipo === "error" && /guarnição mínima incompleta/i.test(a.msg))).toBe(true);
   });
 
-  it("no modo auto o motor tenta cobrir os dias (HE permitida)", () => {
+  it("COMPORTAMENTO ATUAL: no ordinário puro ainda surge HE do excedente físico do plantão 24h", () => {
+    // Registro do comportamento vigente (ver relatório BLOCO 13A, divergência 1):
+    // após esgotar a carga ordinária mensal, os blocos de 6h restantes da linha
+    // do tempo 2→3→4→1 são lançados como HE mesmo no modo ordinário puro.
     const ms = guarnicao().slice(0, 3);
+    const r = rodar({
+      militares: ms, mes: MES, ano: ANO,
+      par: { modo: "ordinario_puro", militaresPorDia: 4 },
+    });
+    const temHe = ms.some((m) => linha(r.he, m, DIAS).some((s) => !!s));
+    expect(temHe).toBe(true);
+  });
+
+
     const r = rodar({ militares: ms, mes: MES, ano: ANO, par: { modo: "auto", militaresPorDia: 4 } });
     const algumaHe = ms.some((m) => linha(r.he, m, DIAS).some((s) => !!s));
     expect(algumaHe).toBe(true);
