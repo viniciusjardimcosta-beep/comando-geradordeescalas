@@ -365,18 +365,54 @@ export const gerarNbi = createServerFn({ method: "POST" })
         if (a !== anoLocal) {
           return { ok: false as const, code: `Ano informado (${a}) diverge do ano da data do documento (${anoLocal}).` };
         }
-        // Colisão: mesmo user_id + ano + numero já emitido (mesmo cancelado — número não reutilizado)
+        // Bloco 12I — REUTILIZAÇÃO CONTROLADA de número de NBI CANCELADA.
+        // Só ocorre com confirmação explícita, via RPC dedicada.
+        if (data.reutilizar_numero_de) {
+          const { error: eRe } = await supabase.rpc("nbi_reutilizar_numero", {
+            _documento_id: data.documento_id,
+            _origem_documento_id: data.reutilizar_numero_de,
+            _numero: n,
+            _ano: a,
+          });
+          if (eRe) return { ok: false as const, code: eRe.message };
+          // Rastreabilidade no snapshot (allowlist de snapshotMeta).
+          const { supabaseAdmin: saR } = await import("@/integrations/supabase/client.server");
+          const { data: snapAtual } = await supabase
+            .from("nbi_documents").select("snapshot").eq("id", data.documento_id).maybeSingle();
+          const base = (snapAtual?.snapshot ?? {}) as Record<string, unknown>;
+          await saR.from("nbi_documents").update({
+            snapshot: {
+              ...base,
+              numero_reutilizado: true,
+              numero_reutilizado_de_documento_id: data.reutilizar_numero_de,
+              numero_reutilizado_em: new Date().toISOString(),
+              numero_reutilizado_confirmado_por: userId,
+            } as never,
+          }).eq("id", data.documento_id).eq("user_id", userId);
+          numero = n; ano = a;
+        } else {
+        // Colisão com documento ATIVO: bloqueio absoluto.
+        // Documento CANCELADO não bloqueia, mas exige confirmação explícita
+        // de reutilização (nunca assumida em silêncio pelo servidor).
         const { data: existente } = await supabase
           .from("nbi_documents")
-          .select("id")
+          .select("id,status")
           .eq("user_id", userId)
           .eq("numero_ano_local", a)
           .eq("numero_int", n)
           .neq("id", data.documento_id)
-          .limit(1)
-          .maybeSingle();
-        if (existente) {
-          return { ok: false as const, code: `Número ${String(n).padStart(3, "0")}/${a} já foi utilizado nesta unidade.` };
+          .order("status", { ascending: true })
+          .limit(5);
+        const ativo = (existente ?? []).find((d) => d.status !== "cancelado");
+        const cancelado = (existente ?? []).find((d) => d.status === "cancelado");
+        if (ativo) {
+          return { ok: false as const, code: `Número ${String(n).padStart(3, "0")}/${a} já está em uso por uma NBI ativa desta unidade.` };
+        }
+        if (cancelado) {
+          return {
+            ok: false as const,
+            code: `O número ${String(n).padStart(3, "0")}/${a} pertence a uma NBI cancelada. Confirme a reutilização ou use o próximo número disponível.`,
+          };
         }
         // Aplica número manual no documento
         const { supabaseAdmin: sa } = await import("@/integrations/supabase/client.server");
@@ -393,6 +429,7 @@ export const gerarNbi = createServerFn({ method: "POST" })
           .eq("id", data.documento_id)
           .eq("user_id", userId);
         if (eMan) return { ok: false as const, code: "Falha ao aplicar número manual." };
+
 
         // Atualiza nbi_numeracao se avançou a sequência (mesmo ano_vigente) ou novo ano
         const { data: numRow } = await sa
