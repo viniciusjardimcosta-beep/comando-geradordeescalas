@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { gerarNbi, baixarNbi, proximoNumeroPrevisto } from "@/lib/nbi.functions";
+import { gerarNbi, baixarNbi, proximoNumeroPrevisto, consultarNumeroNbi } from "@/lib/nbi.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
