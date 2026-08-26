@@ -1849,7 +1849,7 @@ function Etapa3({
       toast.error(msg);
       return;
     }
-    if (rascunho.modo_numeracao === "manual") {
+    if (rascunho.modo_numeracao === "manual" && !reutilizando && escolhaNumero !== "proximo") {
       const n = parseInt(rascunho.numero.replace(/\D/g, ""), 10);
       if (!Number.isFinite(n) || n < 1) {
         const msg = "Informe o número manual da NBI na Etapa 1.";
@@ -1858,7 +1858,26 @@ function Etapa3({
         return;
       }
     }
-    if (transicaoAno && !confirmarAno && rascunho.modo_numeracao === "automatico") {
+    // Bloco 12I — número em uso por NBI ATIVA: bloqueio absoluto.
+    if (numeroAtivoBloqueado) {
+      const msg = `O número ${String(numeroAlvo).padStart(3, "0")}/${anoDoc} já está em uso por uma NBI ativa. Utilize outro número.`;
+      setErroGeracao(msg);
+      toast.error(msg);
+      return;
+    }
+    if (decisaoReutilizacaoPendente) {
+      const msg = `Escolha explicitamente entre reutilizar ${String(numeroAlvo).padStart(3, "0")}/${anoDoc} ou usar o próximo número disponível.`;
+      setErroGeracao(msg);
+      toast.error(msg);
+      return;
+    }
+    // Modo efetivo: reutilização é sempre manual; "usar próximo" é automático.
+    const modoEfetivo: "manual" | "automatico" = reutilizando
+      ? "manual"
+      : escolhaNumero === "proximo"
+        ? "automatico"
+        : rascunho.modo_numeracao;
+    if (transicaoAno && !confirmarAno && modoEfetivo === "automatico") {
       const msg = `Ano do documento (${anoDoc}) difere do ano vigente (${previsto?.ano_vigente}). Confirme visualmente antes de emitir.`;
       setErroGeracao(msg);
       toast.error(msg);
@@ -1885,14 +1904,16 @@ function Etapa3({
           data: {
             documento_id: alvo,
             confirmar_novo_ano: confirmarAno,
-            modo_numeracao: rascunho.modo_numeracao,
-            numero_manual: rascunho.modo_numeracao === "manual"
-              ? parseInt(rascunho.numero.replace(/\D/g, ""), 10)
+            modo_numeracao: modoEfetivo,
+            numero_manual: modoEfetivo === "manual"
+              ? (reutilizando ? numeroAlvo : parseInt(rascunho.numero.replace(/\D/g, ""), 10))
               : null,
-            ano_manual: rascunho.modo_numeracao === "manual" ? anoDoc : null,
+            ano_manual: modoEfetivo === "manual" ? anoDoc : null,
+            reutilizar_numero_de: reutilizando ? estadoNumero?.documento_id ?? null : null,
           },
         }),
     });
+
     setGerando(false);
     if (saida.estado === "ignorado") return;
     if (saida.estado === "erro") {
