@@ -54,8 +54,14 @@ export function comporSnapshot<T>(
   snapshotExistente: unknown,
   rascunho: T,
 ): SnapshotNbi {
+  const flag =
+    snapshotExistente &&
+    typeof snapshotExistente === "object" &&
+    (snapshotExistente as Record<string, unknown>)["numero_reutilizado"] === true;
   return {
     ...extrairMetadadosSnapshot(snapshotExistente),
+    ...(flag ? { numero_reutilizado: true as const } : {}),
     rascunho,
   };
+
 }
