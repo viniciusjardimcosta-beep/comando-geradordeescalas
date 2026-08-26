@@ -41,23 +41,46 @@ function ResetPasswordPage() {
       }
     }
     setBusy(true);
-    const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.auth.updateUser({ password: pass });
-    if (!error && userData.user) {
-      await supabase
-        .from("profiles")
-        .update({ password_temporary: false })
-        .eq("id", userData.user.id);
-    }
-    setBusy(false);
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       return;
     }
+
+    // Senha alterada com sucesso: só agora concluímos a senha temporária,
+    // e somente com confirmação real do banco (sem falso sucesso).
+    const res = await finalizarSenhaTemporaria(supabase);
+    if (!res.ok) {
+      setBusy(false);
+      setPendente(true);
+      toast.error(
+        "Senha alterada, mas a conclusão do acesso não foi confirmada. Clique em \"Concluir acesso\" para tentar novamente.",
+      );
+      return;
+    }
+
+    await refresh();
+    setBusy(false);
     toast.success("Senha atualizada!");
     navigate({ to: "/" });
-
   };
+
+  const handleConcluir = async () => {
+    setBusy(true);
+    const res = await finalizarSenhaTemporaria(supabase);
+    if (!res.ok) {
+      setBusy(false);
+      toast.error("Ainda não foi possível concluir o acesso. Tente novamente em instantes.");
+      return;
+    }
+    await refresh();
+    setBusy(false);
+    setPendente(false);
+    toast.success("Acesso liberado!");
+    navigate({ to: "/" });
+  };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
