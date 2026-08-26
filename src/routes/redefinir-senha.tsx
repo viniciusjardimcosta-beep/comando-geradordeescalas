@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Loader2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { finalizarSenhaTemporaria } from "@/lib/auth/finalizarSenhaTemporaria";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/redefinir-senha")({
   component: ResetPasswordPage,
@@ -14,9 +16,12 @@ export const Route = createFileRoute("/redefinir-senha")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [pass, setPass] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendente, setPendente] = useState(false);
   const [ready, setReady] = useState(false);
+
 
   useEffect(() => {
     // Supabase processa o token automaticamente do hash da URL
@@ -41,23 +46,46 @@ function ResetPasswordPage() {
       }
     }
     setBusy(true);
-    const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.auth.updateUser({ password: pass });
-    if (!error && userData.user) {
-      await supabase
-        .from("profiles")
-        .update({ password_temporary: false })
-        .eq("id", userData.user.id);
-    }
-    setBusy(false);
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       return;
     }
+
+    // Senha alterada com sucesso: só agora concluímos a senha temporária,
+    // e somente com confirmação real do banco (sem falso sucesso).
+    const res = await finalizarSenhaTemporaria(supabase);
+    if (!res.ok) {
+      setBusy(false);
+      setPendente(true);
+      toast.error(
+        "Senha alterada, mas a conclusão do acesso não foi confirmada. Clique em \"Concluir acesso\" para tentar novamente.",
+      );
+      return;
+    }
+
+    await refresh();
+    setBusy(false);
     toast.success("Senha atualizada!");
     navigate({ to: "/" });
-
   };
+
+  const handleConcluir = async () => {
+    setBusy(true);
+    const res = await finalizarSenhaTemporaria(supabase);
+    if (!res.ok) {
+      setBusy(false);
+      toast.error("Ainda não foi possível concluir o acesso. Tente novamente em instantes.");
+      return;
+    }
+    await refresh();
+    setBusy(false);
+    setPendente(false);
+    toast.success("Acesso liberado!");
+    navigate({ to: "/" });
+  };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
@@ -72,7 +100,19 @@ function ResetPasswordPage() {
           <p className="text-center text-sm text-muted-foreground">
             Abrindo link de recuperação...
           </p>
+        ) : pendente ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Sua nova senha já foi salva, mas a liberação do acesso não foi confirmada.
+              Clique abaixo para concluir.
+            </p>
+            <Button className="w-full" disabled={busy} onClick={handleConcluir}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Concluir acesso
+            </Button>
+          </div>
         ) : (
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="new-pass">Nova senha</Label>
