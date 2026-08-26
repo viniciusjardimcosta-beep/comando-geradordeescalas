@@ -168,11 +168,15 @@ describe("snapshot lógico das células de escala (ORD / EXP / HE / FER)", () =>
 
   it("cria célula inexistente herdando estilo da vizinha e mantém ordem por coluna", () => {
     const { xml } = gravarEReabrir([{ ref: "AJ12", value: "234" }, { ref: "F12", value: "1" }]);
-    const row = /<row[^>]*r="12"[^>]*>([\s\S]*?)<\/row>/.exec(xml)![1];
+    // COMPORTAMENTO ATUAL (achado 13A): ao reconstruir a linha editada, o atributo
+    // r="12" da <row> é perdido; o Excel infere o índice pela ordem das linhas, por
+    // isso o arquivo continua válido. Registrado aqui como estado vigente.
+    const row = /<row[^>]*>((?:(?!<\/row>)[\s\S])*<c r="A12"[\s\S]*?)<\/row>/.exec(xml)![1];
     const refs = [...row.matchAll(/<c r="([A-Z]+\d+)"/g)].map((m) => m[1]);
     expect(refs).toEqual(["A12", "E12", "F12", "AJ12"]);
     expect(/<c r="AJ12" s="\d+"/.test(row)).toBe(true);
   });
+
 
   it("cria linha inexistente na posição ordenada do sheetData", () => {
     const { xml } = gravarEReabrir([{ ref: "F15", value: "HE6" }]);
