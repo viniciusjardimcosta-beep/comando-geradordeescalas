@@ -295,15 +295,29 @@ function NovaNbiPage() {
           .from("nbi_documents")
           .select("id,snapshot,status")
           .eq("id", rascId).eq("user_id", uid).maybeSingle();
-        const snap = (doc?.snapshot as { rascunho?: Rascunho } | null)?.rascunho;
+        const snapTop = (doc?.snapshot ?? null) as {
+          rascunho?: Rascunho;
+          numero_candidato_reutilizacao?: string;
+          numero_candidato_origem_id?: string;
+        } | null;
+        const snap = snapTop?.rascunho;
         if (snap && Array.isArray(snap.assuntos)) {
           setRascunho(snap);
           setDocumentoId(doc!.id);
+          const cand = snapTop?.numero_candidato_reutilizacao;
+          const candOrigem = snapTop?.numero_candidato_origem_id;
+          if (cand && candOrigem) {
+            const [n, a] = cand.split("/").map((v) => parseInt(v, 10));
+            if (Number.isFinite(n) && Number.isFinite(a)) {
+              setCandidatoNumero({ numero: n, ano: a, origem_id: candOrigem });
+            }
+          }
           toast.success("Rascunho restaurado");
         } else if (doc) {
           toast.error("Rascunho sem dados estruturados");
         }
       }
+
     } catch (e) {
       console.error("Erro ao carregar dados NBI", e);
       toast.error("Falha ao carregar dados do módulo NBI");
