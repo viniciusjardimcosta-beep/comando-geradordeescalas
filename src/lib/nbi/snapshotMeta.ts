@@ -12,13 +12,24 @@
 export const METADADOS_SNAPSHOT_PRESERVADOS = [
   "origem_documento_id",
   "duplicado_em",
+  // Bloco 12I — reutilização de número de NBI cancelada.
+  // Conceito DIFERENTE de duplicação: origem_documento_id continua
+  // representando apenas a origem da cópia.
+  "numero_candidato_reutilizacao",
+  "numero_candidato_origem_id",
+  "numero_reutilizado_de_documento_id",
+  "numero_reutilizado_em",
+  "numero_reutilizado_confirmado_por",
 ] as const;
 
 export type MetadadoSnapshot = (typeof METADADOS_SNAPSHOT_PRESERVADOS)[number];
 
 export type SnapshotNbi = {
   rascunho?: unknown;
+  /** true somente quando a reutilização foi efetivada pela RPC dedicada. */
+  numero_reutilizado?: boolean;
 } & Partial<Record<MetadadoSnapshot, string>>;
+
 
 /** Extrai apenas os metadados preserváveis (strings não vazias). */
 export function extrairMetadadosSnapshot(
