@@ -12,7 +12,6 @@ type RpcRow = { id: string; password_temporary: boolean };
 export interface RpcClientMinimo {
   rpc: (
     fn: "finalizar_senha_temporaria",
-    args?: Record<string, never>,
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
 }
 

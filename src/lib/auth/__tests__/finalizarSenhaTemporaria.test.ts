@@ -13,9 +13,9 @@ function fakeBanco(opts: {
   perfis: Record<string, Record<string, unknown>>;
 }) {
   const chamadas: unknown[][] = [];
-  const client: RpcClientMinimo = {
-    rpc: async (fn, args) => {
-      chamadas.push([fn, args]);
+  const client = {
+    rpc: async (...args: unknown[]) => {
+      chamadas.push(args);
       if (opts.uid === null) {
         return { data: null, error: { message: "Não autenticado" } };
       }
@@ -29,7 +29,7 @@ function fakeBanco(opts: {
       };
     },
   };
-  return { client, chamadas };
+  return { client: client as unknown as RpcClientMinimo, chamadas };
 }
 
 function perfilPadrao(extra: Record<string, unknown> = {}) {
@@ -83,7 +83,7 @@ describe("BLOCO 13B.1 — finalizarSenhaTemporaria", () => {
     const { client, chamadas } = fakeBanco({ uid: UID_A, perfis: { [UID_A]: perfilPadrao() } });
     await finalizarSenhaTemporaria(client);
     expect(chamadas[0][0]).toBe("finalizar_senha_temporaria");
-    expect(chamadas[0][1]).toBeUndefined();
+    expect(chamadas[0].length).toBe(1);
   });
 
   it("F. nenhuma coluna administrativa é alterada", async () => {
