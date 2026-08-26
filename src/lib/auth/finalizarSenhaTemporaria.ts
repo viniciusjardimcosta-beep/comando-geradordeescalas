@@ -12,7 +12,7 @@ type RpcRow = { id: string; password_temporary: boolean };
 export interface RpcClientMinimo {
   rpc: (
     fn: "finalizar_senha_temporaria",
-  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 }
 
 /**

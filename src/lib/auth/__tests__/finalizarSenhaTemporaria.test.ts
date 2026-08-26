@@ -32,7 +32,7 @@ function fakeBanco(opts: {
   return { client: client as unknown as RpcClientMinimo, chamadas };
 }
 
-function perfilPadrao(extra: Record<string, unknown> = {}) {
+function perfilPadrao(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     password_temporary: true,
     status: "aprovado",
@@ -91,7 +91,7 @@ describe("BLOCO 13B.1 — finalizarSenhaTemporaria", () => {
     const perfis = { [UID_A]: { ...antes } };
     const { client } = fakeBanco({ uid: UID_A, perfis });
     await finalizarSenhaTemporaria(client);
-    const depois = perfis[UID_A];
+    const depois = perfis[UID_A] as Record<string, unknown>;
     for (const chave of Object.keys(antes)) {
       if (chave === "password_temporary") continue;
       expect(depois[chave]).toEqual(antes[chave]);
