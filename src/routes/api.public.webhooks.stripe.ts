@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe.server";
+import { chavesStripe, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // POST /api/public/webhooks/stripe
 // Stripe envia o evento com header stripe-signature.
