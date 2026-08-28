@@ -283,8 +283,20 @@ async function handleActivation(a: ActivationArgs) {
       email_confirm: true,
       user_metadata: { nome: a.customerName ?? email },
     });
-    if (createErr || !created.user) throw new Error(`createUser falhou: ${createErr?.message}`);
-    userId = created.user.id;
+    if (createErr || !created?.user) {
+      // Corrida/retry: outro processamento pode ter criado a conta no intervalo.
+      // Nunca cria segunda conta — reaproveita a existente.
+      const { data: recheck } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (!recheck?.id) throw new Error(`createUser falhou: ${createErr?.message}`);
+      userId = recheck.id;
+    } else {
+      userId = created.user.id;
+    }
+
   }
 
   // 3) Verificar que NÃO é admin antes de sobrescrever assinatura
