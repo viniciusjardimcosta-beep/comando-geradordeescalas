@@ -262,10 +262,23 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Stripe] Erro processando evento", event.type, msg);
+          // Libera a identidade do evento para que o retry legítimo do Stripe
+          // possa reprocessar (o fence de ordem aceita timestamp igual).
+          if (claim.eventRowId) {
+            await supabaseAdmin.from("billing_events").delete().eq("id", claim.eventRowId);
+          }
           return Response.json({ error: "Erro interno." }, { status: 500 });
         }
 
+        if (claim.eventRowId) {
+          await supabaseAdmin
+            .from("billing_events")
+            .update({ status: "processed", processed_at: new Date().toISOString() })
+            .eq("id", claim.eventRowId);
+        }
+
         return Response.json({ received: true });
+
       },
     },
   },
