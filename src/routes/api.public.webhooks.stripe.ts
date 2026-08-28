@@ -265,7 +265,10 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
           // Libera a identidade do evento para que o retry legítimo do Stripe
           // possa reprocessar (o fence de ordem aceita timestamp igual).
           if (claim.eventRowId) {
-            await supabaseAdmin.from("billing_events").delete().eq("id", claim.eventRowId);
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "error", error_message: "falha no processamento", dedupe_key: null } as never)
+              .eq("id", claim.eventRowId);
           }
           return Response.json({ error: "Erro interno." }, { status: 500 });
         }

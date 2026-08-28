@@ -215,7 +215,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
           console.error("[Nexano] Erro ao processar evento:", msg);
           await supabaseAdmin
             .from("billing_events")
-            .update({ status: "error", error_message: msg })
+            .update({ status: "error", error_message: msg, dedupe_key: null } as never)
             .eq("id", billingEventId);
           // Retorna 200 mesmo assim — evento foi recebido e auditado
         }

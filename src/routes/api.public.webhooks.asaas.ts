@@ -260,7 +260,7 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
           if (billingEventId) {
             await supabaseAdmin
               .from("billing_events")
-              .update({ status: "error", error_message: msg })
+              .update({ status: "error", error_message: msg, dedupe_key: null } as never)
               .eq("id", billingEventId);
           }
         }
