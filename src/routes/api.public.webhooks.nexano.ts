@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { chavesNexano, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // =====================================================================
 // Webhook Nexano — automação completa de assinaturas
