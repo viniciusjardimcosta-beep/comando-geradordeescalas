@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { chavesAsaas, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // =====================================================================
 // Webhook Asaas — automação de assinaturas
