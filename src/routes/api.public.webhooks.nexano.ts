@@ -157,29 +157,37 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         const productExternalId = pickString(product, "externalId");
         const productName = pickString(product, "name");
 
-        // ----- Registro de auditoria (billing_events) -----
-        const { data: billingRow, error: billingErr } = await supabaseAdmin
-          .from("billing_events")
-          .insert([{
+        // ----- Claim atômico: auditoria + idempotência + ordenação -----
+        const chaves = chavesNexano(payload);
+        let claim;
+        try {
+          claim = await claimBillingEvent(supabaseAdmin as never, {
+            ...chaves,
             provider: "nexano",
-            event_id: pickString(payload, "event_id") ?? txId ?? subIdentifier,
-            event_type: eventType,
-            status: "received",
-            external_id: subIdentifier,
-            customer_email: customerEmail,
-            source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
+            externalId: subIdentifier,
+            customerEmail,
+            sourceIp:
+              request.headers.get("cf-connecting-ip") ??
+              request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
             payload: persistedPayload,
-          }])
-          .select("id")
-          .single();
-
-        if (billingErr) {
-          console.error("[Nexano] Falha ao gravar billing_event:", billingErr);
+          });
+        } catch (err) {
+          console.error("[Nexano] Falha ao registrar evento:", err instanceof Error ? err.message : String(err));
           return Response.json({ ok: false, error: "Persist failed" }, { status: 500 });
         }
 
-        const billingEventId = billingRow?.id ?? null;
+        const billingEventId = claim.eventRowId;
+
+        if (claim.decision === "duplicate") {
+          console.log("[Nexano] Evento duplicado ignorado", { eventType, dedupe: chaves.dedupeKey });
+          return Response.json({ ok: true, received: true, ignored: "duplicate" });
+        }
+        if (claim.decision === "stale") {
+          console.log("[Nexano] Evento fora de ordem ignorado", { eventType, dedupe: chaves.dedupeKey });
+          return Response.json({ ok: true, received: true, ignored: "stale" });
+        }
+
 
         // ----- Processamento por tipo de evento -----
         try {
