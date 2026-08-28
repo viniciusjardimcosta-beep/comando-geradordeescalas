@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe.server";
+import { chavesStripe, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // POST /api/public/webhooks/stripe
 // Stripe envia o evento com header stripe-signature.
@@ -35,6 +37,32 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         console.log("[Stripe] Webhook recebido", { type: event.type, id: event.id });
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        // Claim atômico: auditoria + idempotência + ordenação (event.id / event.created)
+        const chaves = chavesStripe(event as unknown as { id: string; type: string; created: number; data: { object: unknown } });
+        let claim;
+        try {
+          claim = await claimBillingEvent(supabaseAdmin as never, {
+            ...chaves,
+            provider: "stripe",
+            externalId: chaves.subjectKey,
+            headers: {},
+            payload: { id: event.id, type: event.type, created: event.created },
+          });
+        } catch (err) {
+          console.error("[Stripe] Falha ao registrar evento:", err instanceof Error ? err.message : String(err));
+          return Response.json({ error: "Erro interno." }, { status: 500 });
+        }
+
+        if (claim.decision === "duplicate") {
+          console.log("[Stripe] Evento duplicado ignorado", { id: event.id, type: event.type });
+          return Response.json({ received: true, ignored: "duplicate" });
+        }
+        if (claim.decision === "stale") {
+          console.log("[Stripe] Evento fora de ordem ignorado", { id: event.id, type: event.type });
+          return Response.json({ received: true, ignored: "stale" });
+        }
+
 
         try {
           switch (event.type) {
@@ -234,10 +262,26 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Stripe] Erro processando evento", event.type, msg);
+          // Libera a identidade do evento para que o retry legítimo do Stripe
+          // possa reprocessar (o fence de ordem aceita timestamp igual).
+          if (claim.eventRowId) {
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "error", error_message: "falha no processamento", dedupe_key: null } as never)
+              .eq("id", claim.eventRowId);
+          }
           return Response.json({ error: "Erro interno." }, { status: 500 });
         }
 
+        if (claim.eventRowId) {
+          await supabaseAdmin
+            .from("billing_events")
+            .update({ status: "processed", processed_at: new Date().toISOString() })
+            .eq("id", claim.eventRowId);
+        }
+
         return Response.json({ received: true });
+
       },
     },
   },

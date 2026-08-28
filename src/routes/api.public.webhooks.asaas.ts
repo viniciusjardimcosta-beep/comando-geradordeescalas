@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { chavesAsaas, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // =====================================================================
 // Webhook Asaas — automação de assinaturas
@@ -105,27 +107,35 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
         const cycle = pickString(subscriptionRaw, "cycle");
         const status = pickString(subscriptionRaw, "status") ?? pickString(payment, "status");
 
-        // Registro de auditoria
-        const { data: billingRow, error: billingErr } = await supabaseAdmin
-          .from("billing_events")
-          .insert([{
+        // Claim atômico: auditoria + idempotência + ordenação
+        const chaves = chavesAsaas(payload);
+        let claim;
+        try {
+          claim = await claimBillingEvent(supabaseAdmin as never, {
+            ...chaves,
             provider: "asaas",
-            event_id: pickString(payload, "id") ?? paymentId ?? subscriptionId,
-            event_type: eventType,
-            status: "received",
-            external_id: subscriptionId ?? paymentId,
-            source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
+            externalId: subscriptionId ?? paymentId,
+            sourceIp:
+              request.headers.get("cf-connecting-ip") ??
+              request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
             payload,
-          }])
-          .select("id")
-          .single();
-
-        if (billingErr) {
-          console.error("[Asaas] billing_event:", billingErr);
+          });
+        } catch (err) {
+          console.error("[Asaas] billing_event:", err instanceof Error ? err.message : String(err));
           return Response.json({ ok: false }, { status: 500 });
         }
-        const billingEventId = billingRow?.id ?? null;
+        const billingEventId = claim.eventRowId;
+
+        if (claim.decision === "duplicate") {
+          console.log("[Asaas] Evento duplicado ignorado", { eventType, event_id: chaves.eventId });
+          return Response.json({ ok: true, received: true, ignored: "duplicate" });
+        }
+        if (claim.decision === "stale") {
+          console.log("[Asaas] Evento fora de ordem ignorado", { eventType, event_id: chaves.eventId });
+          return Response.json({ ok: true, received: true, ignored: "stale" });
+        }
+
 
         try {
           // Resolver user_id por externalReference, depois por asaas_subscriptions
@@ -250,7 +260,7 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
           if (billingEventId) {
             await supabaseAdmin
               .from("billing_events")
-              .update({ status: "error", error_message: msg })
+              .update({ status: "error", error_message: msg, dedupe_key: null } as never)
               .eq("id", billingEventId);
           }
         }

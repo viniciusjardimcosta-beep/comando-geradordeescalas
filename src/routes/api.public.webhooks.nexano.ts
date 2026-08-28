@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { chavesNexano, claimBillingEvent } from "@/lib/billing/eventos";
+
 
 // =====================================================================
 // Webhook Nexano — automação completa de assinaturas
@@ -157,29 +159,37 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         const productExternalId = pickString(product, "externalId");
         const productName = pickString(product, "name");
 
-        // ----- Registro de auditoria (billing_events) -----
-        const { data: billingRow, error: billingErr } = await supabaseAdmin
-          .from("billing_events")
-          .insert([{
+        // ----- Claim atômico: auditoria + idempotência + ordenação -----
+        const chaves = chavesNexano(payload);
+        let claim;
+        try {
+          claim = await claimBillingEvent(supabaseAdmin as never, {
+            ...chaves,
             provider: "nexano",
-            event_id: pickString(payload, "event_id") ?? txId ?? subIdentifier,
-            event_type: eventType,
-            status: "received",
-            external_id: subIdentifier,
-            customer_email: customerEmail,
-            source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
+            externalId: subIdentifier,
+            customerEmail,
+            sourceIp:
+              request.headers.get("cf-connecting-ip") ??
+              request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
             payload: persistedPayload,
-          }])
-          .select("id")
-          .single();
-
-        if (billingErr) {
-          console.error("[Nexano] Falha ao gravar billing_event:", billingErr);
+          });
+        } catch (err) {
+          console.error("[Nexano] Falha ao registrar evento:", err instanceof Error ? err.message : String(err));
           return Response.json({ ok: false, error: "Persist failed" }, { status: 500 });
         }
 
-        const billingEventId = billingRow?.id ?? null;
+        const billingEventId = claim.eventRowId;
+
+        if (claim.decision === "duplicate") {
+          console.log("[Nexano] Evento duplicado ignorado", { eventType, dedupe: chaves.dedupeKey });
+          return Response.json({ ok: true, received: true, ignored: "duplicate" });
+        }
+        if (claim.decision === "stale") {
+          console.log("[Nexano] Evento fora de ordem ignorado", { eventType, dedupe: chaves.dedupeKey });
+          return Response.json({ ok: true, received: true, ignored: "stale" });
+        }
+
 
         // ----- Processamento por tipo de evento -----
         try {
@@ -196,17 +206,22 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
             await handleStatusChange(subIdentifier, customerEmail, "refunded", eventType, billingEventId);
           }
 
-          await supabaseAdmin
-            .from("billing_events")
-            .update({ status: "processed", processed_at: new Date().toISOString() })
-            .eq("id", billingEventId);
+          if (billingEventId) {
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "processed", processed_at: new Date().toISOString() })
+              .eq("id", billingEventId);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Nexano] Erro ao processar evento:", msg);
-          await supabaseAdmin
-            .from("billing_events")
-            .update({ status: "error", error_message: msg })
-            .eq("id", billingEventId);
+          if (billingEventId) {
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "error", error_message: msg, dedupe_key: null } as never)
+              .eq("id", billingEventId);
+          }
+
           // Retorna 200 mesmo assim — evento foi recebido e auditado
         }
 
@@ -273,8 +288,20 @@ async function handleActivation(a: ActivationArgs) {
       email_confirm: true,
       user_metadata: { nome: a.customerName ?? email },
     });
-    if (createErr || !created.user) throw new Error(`createUser falhou: ${createErr?.message}`);
-    userId = created.user.id;
+    if (createErr || !created?.user) {
+      // Corrida/retry: outro processamento pode ter criado a conta no intervalo.
+      // Nunca cria segunda conta — reaproveita a existente.
+      const { data: recheck } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (!recheck?.id) throw new Error(`createUser falhou: ${createErr?.message}`);
+      userId = recheck.id;
+    } else {
+      userId = created.user.id;
+    }
+
   }
 
   // 3) Verificar que NÃO é admin antes de sobrescrever assinatura

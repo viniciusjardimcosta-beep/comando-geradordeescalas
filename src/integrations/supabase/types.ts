@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -69,8 +69,10 @@ export type Database = {
         Row: {
           created_at: string
           customer_email: string | null
+          dedupe_key: string | null
           error_message: string | null
           event_id: string | null
+          event_timestamp: string | null
           event_type: string | null
           external_id: string | null
           headers: Json
@@ -81,13 +83,16 @@ export type Database = {
           signature: string | null
           source_ip: string | null
           status: string
+          subject_key: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string
           customer_email?: string | null
+          dedupe_key?: string | null
           error_message?: string | null
           event_id?: string | null
+          event_timestamp?: string | null
           event_type?: string | null
           external_id?: string | null
           headers?: Json
@@ -98,13 +103,16 @@ export type Database = {
           signature?: string | null
           source_ip?: string | null
           status?: string
+          subject_key?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string
           customer_email?: string | null
+          dedupe_key?: string | null
           error_message?: string | null
           event_id?: string | null
+          event_timestamp?: string | null
           event_type?: string | null
           external_id?: string | null
           headers?: Json
@@ -115,7 +123,41 @@ export type Database = {
           signature?: string | null
           source_ip?: string | null
           status?: string
+          subject_key?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      billing_subject_state: {
+        Row: {
+          created_at: string
+          id: string
+          last_event_at: string | null
+          last_event_id: string | null
+          last_event_type: string | null
+          provider: string
+          subject_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_event_at?: string | null
+          last_event_id?: string | null
+          last_event_type?: string | null
+          provider: string
+          subject_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_event_at?: string | null
+          last_event_id?: string | null
+          last_event_type?: string | null
+          provider?: string
+          subject_key?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1138,6 +1180,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      billing_claim_event: {
+        Args: {
+          _customer_email: string
+          _dedupe_key: string
+          _event_id: string
+          _event_timestamp: string
+          _event_type: string
+          _external_id: string
+          _headers: Json
+          _payload: Json
+          _provider: string
+          _source_ip: string
+          _subject_key: string
+        }
+        Returns: {
+          decision: string
+          event_row_id: string
+        }[]
+      }
       finalizar_senha_temporaria: {
         Args: never
         Returns: {
