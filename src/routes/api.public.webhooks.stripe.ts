@@ -36,6 +36,32 @@ export const Route = createFileRoute("/api/public/webhooks/stripe")({
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+        // Claim atômico: auditoria + idempotência + ordenação (event.id / event.created)
+        const chaves = chavesStripe(event as unknown as { id: string; type: string; created: number; data: { object: unknown } });
+        let claim;
+        try {
+          claim = await claimBillingEvent(supabaseAdmin as never, {
+            ...chaves,
+            provider: "stripe",
+            externalId: chaves.subjectKey,
+            headers: {},
+            payload: { id: event.id, type: event.type, created: event.created },
+          });
+        } catch (err) {
+          console.error("[Stripe] Falha ao registrar evento:", err instanceof Error ? err.message : String(err));
+          return Response.json({ error: "Erro interno." }, { status: 500 });
+        }
+
+        if (claim.decision === "duplicate") {
+          console.log("[Stripe] Evento duplicado ignorado", { id: event.id, type: event.type });
+          return Response.json({ received: true, ignored: "duplicate" });
+        }
+        if (claim.decision === "stale") {
+          console.log("[Stripe] Evento fora de ordem ignorado", { id: event.id, type: event.type });
+          return Response.json({ received: true, ignored: "stale" });
+        }
+
+
         try {
           switch (event.type) {
             case "checkout.session.completed": {
