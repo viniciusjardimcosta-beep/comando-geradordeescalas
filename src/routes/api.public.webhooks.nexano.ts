@@ -206,17 +206,22 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
             await handleStatusChange(subIdentifier, customerEmail, "refunded", eventType, billingEventId);
           }
 
-          await supabaseAdmin
-            .from("billing_events")
-            .update({ status: "processed", processed_at: new Date().toISOString() })
-            .eq("id", billingEventId);
+          if (billingEventId) {
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "processed", processed_at: new Date().toISOString() })
+              .eq("id", billingEventId);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[Nexano] Erro ao processar evento:", msg);
-          await supabaseAdmin
-            .from("billing_events")
-            .update({ status: "error", error_message: msg, dedupe_key: null } as never)
-            .eq("id", billingEventId);
+          if (billingEventId) {
+            await supabaseAdmin
+              .from("billing_events")
+              .update({ status: "error", error_message: msg, dedupe_key: null } as never)
+              .eq("id", billingEventId);
+          }
+
           // Retorna 200 mesmo assim — evento foi recebido e auditado
         }
 
