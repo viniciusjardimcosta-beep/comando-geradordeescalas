@@ -275,3 +275,95 @@ describe("13B.2 — Nexano: criação de conta", () => {
     expect(efeitos).toEqual(["s1", "s2"]);
   });
 });
+
+// =====================================================================
+// 13B.2 — Regressão da concorrência real (billing_events_provider_event_id_key)
+// ---------------------------------------------------------------------
+// Simulador fiel às DUAS unique existentes na tabela:
+//   - (provider, dedupe_key) WHERE dedupe_key IS NOT NULL
+//   - (provider, event_id)   WHERE event_id   IS NOT NULL
+// Semântica escolhida (igual à RPC corrigida): colisão em QUALQUER uma
+// das duas travas de identidade é tratada como duplicate idempotente;
+// linha em status 'error' é retomada de forma exclusiva (retry legítimo).
+// =====================================================================
+function criarBancoDuasUniques() {
+  interface Linha { id: string; provider: string; eventId: string | null; dedupeKey: string | null; status: string }
+  const linhas: Linha[] = [];
+  let seq = 0;
+
+  const client = {
+    rpc: async (_fn: string, a: Record<string, unknown>) => {
+      const provider = a._provider as string;
+      const dedupe = (a._dedupe_key as string | null) ?? null;
+      const eventId = (a._event_id as string | null) ?? null;
+
+      const existente =
+        (dedupe ? linhas.find((l) => l.provider === provider && l.dedupeKey === dedupe) : undefined) ??
+        (eventId ? linhas.find((l) => l.provider === provider && l.eventId === eventId) : undefined);
+
+      if (existente) {
+        if (existente.status === "error") {
+          existente.status = "received"; // retomada exclusiva
+          return { data: [{ event_row_id: existente.id, decision: "process" }], error: null };
+        }
+        return { data: [{ event_row_id: existente.id, decision: "duplicate" }], error: null };
+      }
+
+      const nova: Linha = { id: `row-${++seq}`, provider, eventId, dedupeKey: dedupe, status: "received" };
+      linhas.push(nova);
+      return { data: [{ event_row_id: nova.id, decision: "process" }], error: null };
+    },
+  };
+
+  return { client, linhas, marcarErro: (id: string) => { const l = linhas.find((x) => x.id === id); if (l) l.status = "error"; } };
+}
+
+describe("13B.2 — concorrência com as duas unique constraints", () => {
+  const evento = (eid: string, dk = eid) => ({
+    provider: "stripe" as const,
+    eventType: "customer.subscription.updated",
+    eventId: eid,
+    dedupeKey: dk,
+    eventTimestamp: "2026-01-10T12:00:00.000Z",
+    subjectKey: "sub_ficticio",
+  });
+
+  for (const n of [2, 5, 10]) {
+    it(`${n} chamadas simultâneas do mesmo evento → 1 process, ${n - 1} duplicate, 1 linha`, async () => {
+      const b = criarBancoDuasUniques();
+      let efeitos = 0;
+      const decisoes = await Promise.all(
+        Array.from({ length: n }, async () => {
+          const r = await claimBillingEvent(b.client, evento("evt_conc"));
+          if (r.decision === "process") efeitos++;
+          return r.decision;
+        }),
+      );
+      expect(decisoes.filter((d) => d === "process")).toHaveLength(1);
+      expect(decisoes.filter((d) => d === "duplicate")).toHaveLength(n - 1);
+      expect(efeitos).toBe(1);
+      expect(b.linhas).toHaveLength(1);
+    });
+  }
+
+  it("mesmo event_id com dedupe_key diferente → duplicate, nunca 2 linhas", async () => {
+    const b = criarBancoDuasUniques();
+    const a1 = await claimBillingEvent(b.client, evento("evt_x", "dk-a"));
+    const a2 = await claimBillingEvent(b.client, evento("evt_x", "dk-b"));
+    expect(a1.decision).toBe("process");
+    expect(a2.decision).toBe("duplicate");
+    expect(b.linhas).toHaveLength(1);
+  });
+
+  it("falha + retry: evento em erro é reprocessado uma única vez e depois volta a duplicate", async () => {
+    const b = criarBancoDuasUniques();
+    const r1 = await claimBillingEvent(b.client, evento("evt_retry"));
+    expect(r1.decision).toBe("process");
+    b.marcarErro(r1.eventRowId!);
+    const r2 = await claimBillingEvent(b.client, evento("evt_retry"));
+    expect(r2.decision).toBe("process");
+    const r3 = await claimBillingEvent(b.client, evento("evt_retry"));
+    expect(r3.decision).toBe("duplicate");
+    expect(b.linhas).toHaveLength(1);
+  });
+});
