@@ -589,8 +589,22 @@ export const gerarNbi = createServerFn({ method: "POST" })
       });
     if (eU) throw new Error("Falha ao salvar documento gerado");
 
+    // Bloco 13B.3 — limpeza best-effort do objeto recém-criado.
+    const limparDocxOrfao = async () => {
+      const { removerObjetoOrfao } = await import("@/lib/storage/cleanup");
+      await removerObjetoOrfao({
+        bucket: "nbi-documentos",
+        path,
+        operacao: "gerarNbi",
+        remove: async (bucket, paths) =>
+          await supabaseAdmin.storage.from(bucket).remove(paths),
+      });
+    };
+
     // 7. Marca generated_at (apenas após upload OK)
-    const { error: eUp } = await supabaseAdmin
+    // Bloco 13B.3 — o documento pode ter sido CANCELADO durante a geração.
+    // O update final revalida canceled_at IS NULL e detecta zero linhas.
+    const { data: atualizados, error: eUp } = await supabaseAdmin
       .from("nbi_documents")
       .update({
         generated_at: new Date().toISOString(),
@@ -598,8 +612,23 @@ export const gerarNbi = createServerFn({ method: "POST" })
         status: "gerado",
       })
       .eq("id", data.documento_id)
-      .eq("user_id", userId);
-    if (eUp) throw new Error("Falha ao atualizar documento");
+      .eq("user_id", userId)
+      .is("canceled_at", null)
+      .select("id");
+    if (eUp) {
+      await limparDocxOrfao();
+      throw new Error("Falha ao atualizar documento");
+    }
+    if (!atualizados || atualizados.length === 0) {
+      // Cancelamento concorrente: não restauramos nada, apenas recusamos
+      // marcar como gerado e removemos o arquivo órfão.
+      await limparDocxOrfao();
+      return {
+        ok: false as const,
+        code: "Documento cancelado durante a geração.",
+      };
+    }
+
 
     await auditar(data.documento_id, userId, "gerou", {
       numero, ano, storage_path: path,
