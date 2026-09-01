@@ -2491,7 +2491,19 @@ export const gerarEscala = createServerFn({ method: "POST" })
       .insert(insertPayload)
       .select("id")
       .single();
-    if (insErr) { console.error("[gerarEscala] insert histórico:", insErr); throw new Error("Falha ao registrar histórico."); }
+    if (insErr) {
+      console.error("[gerarEscala] insert histórico:", insErr);
+      // Bloco 13B.3 — remove o XLSX recém-enviado (path exato desta execução).
+      const { removerObjetoOrfao } = await import("@/lib/storage/cleanup");
+      await removerObjetoOrfao({
+        bucket: "escalas",
+        path,
+        operacao: "gerarEscala",
+        remove: async (bucket, paths) => await supabase.storage.from(bucket).remove(paths),
+      });
+      throw new Error("Falha ao registrar histórico.");
+    }
+
 
     const { data: signed } = await supabase.storage
       .from("escalas")
