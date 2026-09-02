@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { chavesNexano, claimBillingEvent } from "@/lib/billing/eventos";
+import { sanitizarPayload } from "@/lib/billing/sanitizePayload";
 
 
 // =====================================================================
@@ -32,28 +33,6 @@ const CANCEL_EVENTS = new Set(["SUBSCRIPTION_CANCELED", "SUBSCRIPTION_EXPIRED"])
 const REFUND_EVENTS = new Set(["TRANSACTION_REFUNDED", "CHARGEBACK"]);
 
 type Json = Record<string, unknown>;
-
-const SENSITIVE_PAYLOAD_KEYS = new Set([
-  "token",
-  "secret",
-  "validation_token",
-  "webhook_token",
-  "webhookSecret",
-  "webhook_secret",
-  "authentication_token",
-]);
-
-function sanitizePayload(input: unknown): unknown {
-  if (Array.isArray(input)) return input.map(sanitizePayload);
-  if (input && typeof input === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
-      out[k] = SENSITIVE_PAYLOAD_KEYS.has(k) ? "[REDACTED]" : sanitizePayload(v);
-    }
-    return out;
-  }
-  return input;
-}
 
 function pickString(obj: unknown, key: string): string | null {
   if (!obj || typeof obj !== "object") return null;
@@ -113,7 +92,7 @@ export const Route = createFileRoute("/api/public/webhooks/nexano")({
         const authorized =
           !!secret && (headerToken === secret || bodyToken === secret);
 
-        const persistedPayload = sanitizePayload(payload) as Json;
+        const persistedPayload = sanitizarPayload(payload) as Json;
 
         if (!authorized) {
           await supabaseAdmin.from("billing_events").insert([{
