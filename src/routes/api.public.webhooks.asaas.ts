@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { chavesAsaas, claimBillingEvent } from "@/lib/billing/eventos";
+import { sanitizarPayload } from "@/lib/billing/sanitizePayload";
 
 
 // =====================================================================
@@ -74,6 +75,10 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
         try { payload = bodyText ? (JSON.parse(bodyText) as Json) : {}; }
         catch { payload = { _raw: bodyText }; }
 
+        // Bloco 13B.4 — nada de credencial é persistido; os campos de
+        // negócio (ids, status, valores, datas) permanecem intactos.
+        const persistedPayload = sanitizarPayload(payload) as Json;
+
         const authorized = !!expected && received === expected;
         if (!authorized) {
           await supabaseAdmin.from("billing_events").insert([{
@@ -83,7 +88,7 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
             error_message: "Token inválido",
             source_ip: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
-            payload,
+            payload: persistedPayload,
           }]);
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
@@ -119,7 +124,7 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
               request.headers.get("cf-connecting-ip") ??
               request.headers.get("x-forwarded-for"),
             headers: safeHeaders,
-            payload,
+            payload: persistedPayload,
           });
         } catch (err) {
           console.error("[Asaas] billing_event:", err instanceof Error ? err.message : String(err));
@@ -177,7 +182,7 @@ export const Route = createFileRoute("/api/public/webhooks/asaas")({
               billing_type: billingType ?? undefined,
               next_due_date: nextDueDate ?? undefined,
               cycle: cycle ?? undefined,
-              raw_payload: payload as unknown as Record<string, unknown>,
+              raw_payload: persistedPayload as unknown as Record<string, unknown>,
             };
             await supabaseAdmin
               .from("asaas_subscriptions")
