@@ -15,6 +15,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CreditCard, Search, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
+import {
+  BILLING_EVENT_LIST_COLUMNS,
+  buscarDetalheBillingEvent,
+  type BillingEventDetalhe,
+} from "@/lib/billing/listagem";
 
 export const Route = createFileRoute("/app/assinaturas")({
   component: AssinaturasAdminPage,
@@ -59,17 +64,14 @@ type NexanoRow = {
   created_at: string;
 };
 
+/** Listagem: somente as colunas exibidas na tabela administrativa. */
 type BillingEvent = {
   id: string;
   provider: string;
-  event_id: string | null;
   event_type: string | null;
   status: string;
   customer_email: string | null;
   external_id: string | null;
-  source_ip: string | null;
-  headers: Record<string, unknown>;
-  payload: Record<string, unknown>;
   error_message: string | null;
   created_at: string;
   processed_at: string | null;
@@ -487,12 +489,30 @@ function LogsNexano() {
   const [page, setPage] = useState(0);
   const [busca, setBusca] = useState("");
   const [detalhe, setDetalhe] = useState<BillingEvent | null>(null);
+  const [detalheDados, setDetalheDados] = useState<Record<string, BillingEventDetalhe>>({});
+  const [detalheLoading, setDetalheLoading] = useState(false);
+  const [detalheErro, setDetalheErro] = useState<string | null>(null);
+
+  const abrirDetalhe = async (e: BillingEvent) => {
+    setDetalhe(e);
+    setDetalheErro(null);
+    if (detalheDados[e.id]) return; // cache local da tela
+    setDetalheLoading(true);
+    try {
+      const d = await buscarDetalheBillingEvent(supabase as never, e.id);
+      setDetalheDados((prev) => ({ ...prev, [e.id]: d }));
+    } catch (err) {
+      setDetalheErro(err instanceof Error ? err.message : "Falha ao carregar o evento.");
+    } finally {
+      setDetalheLoading(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
     let q = supabase
       .from("billing_events")
-      .select("*", { count: "exact" })
+      .select(BILLING_EVENT_LIST_COLUMNS, { count: "exact" })
       .order("created_at", { ascending: false });
 
     const term = busca.trim();
@@ -510,7 +530,7 @@ function LogsNexano() {
       setLoading(false);
       return;
     }
-    setRows((data ?? []) as BillingEvent[]);
+    setRows((data ?? []) as unknown as BillingEvent[]);
     setTotal(count ?? 0);
     setLoading(false);
   };
@@ -565,7 +585,7 @@ function LogsNexano() {
                   <TableCell className="font-mono text-xs">{e.customer_email ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{e.external_id ?? "—"}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setDetalhe(e)}>
+                    <Button size="sm" variant="outline" onClick={() => abrirDetalhe(e)}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   </TableCell>
