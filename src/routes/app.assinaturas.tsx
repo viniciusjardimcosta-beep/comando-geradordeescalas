@@ -628,7 +628,7 @@ function LogsNexano() {
                   <dt className="text-muted-foreground">Provider</dt><dd>{detalhe.provider}</dd>
                   <dt className="text-muted-foreground">Email</dt><dd className="font-mono text-xs">{detalhe.customer_email ?? "—"}</dd>
                   <dt className="text-muted-foreground">Identifier</dt><dd className="font-mono text-xs">{detalhe.external_id ?? "—"}</dd>
-                  <dt className="text-muted-foreground">IP origem</dt><dd className="font-mono text-xs">{detalhe.source_ip ?? "—"}</dd>
+                  <dt className="text-muted-foreground">IP origem</dt><dd className="font-mono text-xs">{detalheDados[detalhe.id]?.source_ip ?? "—"}</dd>
                   <dt className="text-muted-foreground">Processado em</dt><dd>{fmtDate(detalhe.processed_at)}</dd>
                 </dl>
                 {detalhe.error_message && (
@@ -636,14 +636,29 @@ function LogsNexano() {
                     <strong>Erro:</strong> {detalhe.error_message}
                   </div>
                 )}
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold">Headers</h4>
-                  <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(detalhe.headers, null, 2)}</pre>
-                </div>
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold">Payload</h4>
-                  <pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(detalhe.payload, null, 2)}</pre>
-                </div>
+                {detalheLoading ? (
+                  <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" /> Carregando dados do evento…
+                  </div>
+                ) : detalheErro ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                    <span>Não foi possível carregar o conteúdo do evento.</span>
+                    <Button size="sm" variant="outline" onClick={() => abrirDetalhe(detalhe)}>
+                      Tentar novamente
+                    </Button>
+                  </div>
+                ) : detalheDados[detalhe.id] ? (
+                  <>
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold">Headers</h4>
+                      <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(detalheDados[detalhe.id].headers, null, 2)}</pre>
+                    </div>
+                    <div>
+                      <h4 className="mb-2 text-sm font-semibold">Payload</h4>
+                      <pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(detalheDados[detalhe.id].payload, null, 2)}</pre>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </>
           )}
