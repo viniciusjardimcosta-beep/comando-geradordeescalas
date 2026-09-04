@@ -271,12 +271,13 @@ function ImportarPage() {
     window.open(data.signedUrl, "_blank");
   };
 
-  const baixarRelatorioFuros = async (h: HistoricoRow) => {
-    const lista = Array.isArray(h.furos) ? (h.furos as Furo[]) : [];
+  const baixarRelatorioFuros = async (h: HistoricoRow, furos: Furo[]) => {
+    const lista = Array.isArray(furos) ? furos : [];
     if (!lista.length) {
       toast.info("Esta escala não possui furos.");
       return;
     }
+
     const { jsPDF } = await import("jspdf");
     const autoTableMod = await import("jspdf-autotable");
     const autoTable = autoTableMod.default;
