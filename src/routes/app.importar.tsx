@@ -21,6 +21,12 @@ import {
   FileSpreadsheet, Upload, AlertTriangle, CheckCircle2, History, Loader2, Download, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ESCALAS_LIST_COLUMNS,
+  buscarDetalheEscala,
+  type EscalaDetalhe,
+} from "@/lib/escalas/listagem";
+
 
 export const Route = createFileRoute("/app/importar")({
   component: ImportarPage,
@@ -34,18 +40,17 @@ interface Furo {
   cov: number;
 }
 
+/** Lista: somente as colunas realmente usadas para renderizar cada item. */
 interface HistoricoRow {
   id: string;
   mes: number;
   ano: number;
   arquivo_nome: string | null;
-  observacoes_texto: string | null;
-  alertas: unknown;
-  furos: unknown;
   arquivo_saida_path: string | null;
   status: string;
   created_at: string;
 }
+
 
 type FalhaItem = { dia: number; etapa: string; motivo: string };
 type FalhaCtrl = { motivo: string; itens: FalhaItem[]; alertas: { tipo: string; msg: string }[] };
@@ -128,18 +133,56 @@ function ImportarPage() {
   const [loadingHist, setLoadingHist] = useState(true);
   const [falhaCtrl, setFalhaCtrl] = useState<FalhaCtrl | null>(null);
 
+  // Detalhe sob demanda (alertas/furos/observações) + cache local da tela
+  const [detalheAberto, setDetalheAberto] = useState<string | null>(null);
+  const [detalhes, setDetalhes] = useState<Record<string, EscalaDetalhe>>({});
+  const [detalheLoading, setDetalheLoading] = useState<string | null>(null);
+  const [detalheErro, setDetalheErro] = useState<Record<string, string>>({});
+
   const loadHistorico = async () => {
     setLoadingHist(true);
+    setDetalheAberto(null);
+    setDetalhes({});
+    setDetalheErro({});
     const { data, error } = await supabase
       .from("escalas_geradas")
-      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, furos, arquivo_saida_path, status, created_at")
+      .select(ESCALAS_LIST_COLUMNS)
       .order("created_at", { ascending: false })
       .limit(20);
-    if (!error) setHistorico((data ?? []) as HistoricoRow[]);
+    if (!error) setHistorico((data ?? []) as unknown as HistoricoRow[]);
     setLoadingHist(false);
   };
 
+  const carregarDetalhe = async (id: string) => {
+    setDetalheLoading(id);
+    setDetalheErro((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    try {
+      const det = await buscarDetalheEscala(supabase as never, id);
+      setDetalhes((prev) => ({ ...prev, [id]: det }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Falha ao carregar detalhes.";
+      setDetalheErro((prev) => ({ ...prev, [id]: msg }));
+    } finally {
+      setDetalheLoading((cur) => (cur === id ? null : cur));
+    }
+  };
+
+  const alternarDetalhe = (id: string) => {
+    if (detalheAberto === id) {
+      setDetalheAberto(null);
+      return;
+    }
+    setDetalheAberto(id);
+    // cache local: se já temos os dados válidos da tela, não refaz a consulta
+    if (!detalhes[id] && detalheLoading !== id) void carregarDetalhe(id);
+  };
+
   useEffect(() => { loadHistorico(); }, []);
+
 
   // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
   useEffect(() => {
@@ -231,12 +274,13 @@ function ImportarPage() {
     window.open(data.signedUrl, "_blank");
   };
 
-  const baixarRelatorioFuros = async (h: HistoricoRow) => {
-    const lista = Array.isArray(h.furos) ? (h.furos as Furo[]) : [];
+  const baixarRelatorioFuros = async (h: HistoricoRow, furos: Furo[]) => {
+    const lista = Array.isArray(furos) ? furos : [];
     if (!lista.length) {
       toast.info("Esta escala não possui furos.");
       return;
     }
+
     const { jsPDF } = await import("jspdf");
     const autoTableMod = await import("jspdf-autotable");
     const autoTable = autoTableMod.default;
@@ -569,7 +613,10 @@ function ImportarPage() {
           ) : (
             <ul className="space-y-3">
               {historico.map((h) => {
-                const alertas = Array.isArray(h.alertas) ? h.alertas.length : 0;
+                const aberto = detalheAberto === h.id;
+                const det = detalhes[h.id];
+                const carregando = detalheLoading === h.id;
+                const erro = detalheErro[h.id];
                 return (
                   <li key={h.id} className="rounded-md border border-border bg-background/40 p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -581,47 +628,81 @@ function ImportarPage() {
                     {h.arquivo_nome && (
                       <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{h.arquivo_nome}</div>
                     )}
-                    {h.observacoes_texto && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-xs text-primary">Ver observações</summary>
-                        <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-2 font-mono text-xs">{h.observacoes_texto}</pre>
-                      </details>
+
+                    <button
+                      type="button"
+                      className="mt-2 cursor-pointer text-xs text-primary underline-offset-2 hover:underline"
+                      aria-expanded={aberto}
+                      onClick={() => alternarDetalhe(h.id)}
+                    >
+                      {aberto ? "Ocultar detalhes" : "Ver detalhes"}
+                    </button>
+
+                    {aberto && (
+                      <div className="mt-2 rounded border border-border/60 bg-muted/30 p-2">
+                        {carregando ? (
+                          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" /> Carregando detalhes…
+                          </div>
+                        ) : erro ? (
+                          <div className="flex items-center justify-between gap-2 text-xs text-destructive">
+                            <span>Não foi possível carregar os detalhes.</span>
+                            <Button size="sm" variant="outline" onClick={() => carregarDetalhe(h.id)}>
+                              Tentar novamente
+                            </Button>
+                          </div>
+                        ) : det ? (
+                          <div className="space-y-2">
+                            {det.observacoes_texto && (
+                              <details>
+                                <summary className="cursor-pointer text-xs text-primary">Ver observações</summary>
+                                <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-2 font-mono text-xs">{det.observacoes_texto}</pre>
+                              </details>
+                            )}
+                            {det.alertas.length > 0 && (
+                              <details>
+                                <summary className="cursor-pointer text-xs">
+                                  <Badge variant="outline" className="border-warning text-warning">
+                                    {det.alertas.length} alerta{det.alertas.length > 1 ? "s" : ""}
+                                  </Badge>
+                                </summary>
+                                <ul className="mt-2 space-y-1 text-xs">
+                                  {det.alertas.map((a, i) => (
+                                    <li key={i} className={a.tipo === "error" ? "text-destructive" : a.tipo === "warn" ? "text-warning" : "text-muted-foreground"}>
+                                      • {a.msg}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                            {det.furos.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-warning text-warning hover:bg-warning/10"
+                                onClick={() => baixarRelatorioFuros(h, det.furos as Furo[])}
+                              >
+                                <Download className="mr-1 h-3 w-3" /> Baixar Relatório de Furos
+                              </Button>
+                            )}
+                            {!det.observacoes_texto && det.alertas.length === 0 && det.furos.length === 0 && (
+                              <p className="text-xs text-muted-foreground">Sem observações, alertas ou furos.</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     )}
-                    {alertas > 0 && Array.isArray(h.alertas) && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-xs">
-                          <Badge variant="outline" className="border-warning text-warning">
-                            {alertas} alerta{alertas > 1 ? "s" : ""}
-                          </Badge>
-                        </summary>
-                        <ul className="mt-2 space-y-1 text-xs">
-                          {(h.alertas as { tipo: string; msg: string }[]).map((a, i) => (
-                            <li key={i} className={a.tipo === "error" ? "text-destructive" : a.tipo === "warn" ? "text-warning" : "text-muted-foreground"}>
-                              • {a.msg}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
+
                     <div className="mt-2 flex flex-wrap gap-2">
                       {h.arquivo_saida_path && (
                         <Button size="sm" variant="outline" onClick={() => baixar(h.arquivo_saida_path)}>
                           <Download className="mr-1 h-3 w-3" /> Baixar Escala
                         </Button>
                       )}
-                      {Array.isArray(h.furos) && (h.furos as Furo[]).length > 0 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-warning text-warning hover:bg-warning/10"
-                          onClick={() => baixarRelatorioFuros(h)}
-                        >
-                          <Download className="mr-1 h-3 w-3" /> Baixar Relatório de Furos
-                        </Button>
-                      )}
                     </div>
                   </li>
                 );
+
               })}
             </ul>
           )}
