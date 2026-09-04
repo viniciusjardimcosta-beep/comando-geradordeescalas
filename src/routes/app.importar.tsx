@@ -141,6 +141,9 @@ function ImportarPage() {
 
   const loadHistorico = async () => {
     setLoadingHist(true);
+    setDetalheAberto(null);
+    setDetalhes({});
+    setDetalheErro({});
     const { data, error } = await supabase
       .from("escalas_geradas")
       .select(ESCALAS_LIST_COLUMNS)
