@@ -21,6 +21,12 @@ import {
   FileSpreadsheet, Upload, AlertTriangle, CheckCircle2, History, Loader2, Download, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ESCALAS_LIST_COLUMNS,
+  buscarDetalheEscala,
+  type EscalaDetalhe,
+} from "@/lib/escalas/listagem";
+
 
 export const Route = createFileRoute("/app/importar")({
   component: ImportarPage,
@@ -34,18 +40,17 @@ interface Furo {
   cov: number;
 }
 
+/** Lista: somente as colunas realmente usadas para renderizar cada item. */
 interface HistoricoRow {
   id: string;
   mes: number;
   ano: number;
   arquivo_nome: string | null;
-  observacoes_texto: string | null;
-  alertas: unknown;
-  furos: unknown;
   arquivo_saida_path: string | null;
   status: string;
   created_at: string;
 }
+
 
 type FalhaItem = { dia: number; etapa: string; motivo: string };
 type FalhaCtrl = { motivo: string; itens: FalhaItem[]; alertas: { tipo: string; msg: string }[] };
