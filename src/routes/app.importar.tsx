@@ -133,18 +133,53 @@ function ImportarPage() {
   const [loadingHist, setLoadingHist] = useState(true);
   const [falhaCtrl, setFalhaCtrl] = useState<FalhaCtrl | null>(null);
 
+  // Detalhe sob demanda (alertas/furos/observações) + cache local da tela
+  const [detalheAberto, setDetalheAberto] = useState<string | null>(null);
+  const [detalhes, setDetalhes] = useState<Record<string, EscalaDetalhe>>({});
+  const [detalheLoading, setDetalheLoading] = useState<string | null>(null);
+  const [detalheErro, setDetalheErro] = useState<Record<string, string>>({});
+
   const loadHistorico = async () => {
     setLoadingHist(true);
     const { data, error } = await supabase
       .from("escalas_geradas")
-      .select("id, mes, ano, arquivo_nome, observacoes_texto, alertas, furos, arquivo_saida_path, status, created_at")
+      .select(ESCALAS_LIST_COLUMNS)
       .order("created_at", { ascending: false })
       .limit(20);
-    if (!error) setHistorico((data ?? []) as HistoricoRow[]);
+    if (!error) setHistorico((data ?? []) as unknown as HistoricoRow[]);
     setLoadingHist(false);
   };
 
+  const carregarDetalhe = async (id: string) => {
+    setDetalheLoading(id);
+    setDetalheErro((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    try {
+      const det = await buscarDetalheEscala(supabase as never, id);
+      setDetalhes((prev) => ({ ...prev, [id]: det }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Falha ao carregar detalhes.";
+      setDetalheErro((prev) => ({ ...prev, [id]: msg }));
+    } finally {
+      setDetalheLoading((cur) => (cur === id ? null : cur));
+    }
+  };
+
+  const alternarDetalhe = (id: string) => {
+    if (detalheAberto === id) {
+      setDetalheAberto(null);
+      return;
+    }
+    setDetalheAberto(id);
+    // cache local: se já temos os dados válidos da tela, não refaz a consulta
+    if (!detalhes[id] && detalheLoading !== id) void carregarDetalhe(id);
+  };
+
   useEffect(() => { loadHistorico(); }, []);
+
 
   // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
   useEffect(() => {
