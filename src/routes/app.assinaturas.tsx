@@ -380,7 +380,7 @@ function Assinantes() {
 
 function DetalheCliente({ user, onClose }: { user: ProfileRow | null; onClose: () => void }) {
   const [historico, setHistorico] = useState<NexanoRow[]>([]);
-  const [ultTx, setUltTx] = useState<BillingEvent | null>(null);
+  const [ultTx, setUltTx] = useState<{ payload?: unknown } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -392,7 +392,7 @@ function DetalheCliente({ user, onClose }: { user: ProfileRow | null; onClose: (
         supabase.from("billing_events").select("*").eq("customer_email", user.email).eq("event_type", "TRANSACTION_PAID").order("created_at", { ascending: false }).limit(1),
       ]);
       setHistorico((hist ?? []) as NexanoRow[]);
-      setUltTx((tx?.[0] ?? null) as BillingEvent | null);
+      setUltTx((tx?.[0] ?? null) as { payload?: unknown } | null);
       setLoading(false);
     })();
   }, [user]);
