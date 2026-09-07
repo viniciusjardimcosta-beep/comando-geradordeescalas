@@ -123,14 +123,16 @@ function ImportarPage() {
   const [observacoesTexto, setObservacoesTexto] = useState("");
 
   // Virada do mês anterior
-  interface MilitarOp { id: string; nome: string; matricula: string | null; is_cg: boolean; is_cov: boolean; }
   const [militaresOp, setMilitaresOp] = useState<MilitarOp[]>([]);
+  const [loadingMilitares, setLoadingMilitares] = useState(true);
+  const [erroMilitares, setErroMilitares] = useState<string | null>(null);
   const [viradaSel, setViradaSel] = useState<Record<string, "ord" | "he">>({});
   const [filtroVirada, setFiltroVirada] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
+  const [erroHist, setErroHist] = useState<string | null>(null);
   const [falhaCtrl, setFalhaCtrl] = useState<FalhaCtrl | null>(null);
 
   // Detalhe sob demanda (alertas/furos/observações) + cache local da tela
@@ -141,16 +143,49 @@ function ImportarPage() {
 
   const loadHistorico = async () => {
     setLoadingHist(true);
+    setErroHist(null);
     setDetalheAberto(null);
     setDetalhes({});
     setDetalheErro({});
-    const { data, error } = await supabase
-      .from("escalas_geradas")
-      .select(ESCALAS_LIST_COLUMNS)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    if (!error) setHistorico((data ?? []) as unknown as HistoricoRow[]);
-    setLoadingHist(false);
+    try {
+      const { data, error } = await supabase
+        .from("escalas_geradas")
+        .select(ESCALAS_LIST_COLUMNS)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) {
+        setErroHist(error.message || "Falha ao carregar o histórico.");
+        return;
+      }
+      setHistorico((data ?? []) as unknown as HistoricoRow[]);
+    } catch (e) {
+      setErroHist(e instanceof Error ? e.message : "Falha ao carregar o histórico.");
+    } finally {
+      setLoadingHist(false);
+    }
+  };
+
+  // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
+  const loadMilitaresOp = async () => {
+    setLoadingMilitares(true);
+    setErroMilitares(null);
+    try {
+      const { data, error } = await supabase
+        .from("militares")
+        .select(MILITARES_OP_COLUMNS)
+        .eq("ativo", true);
+      if (error) {
+        setMilitaresOp([]);
+        setErroMilitares(error.message || "Falha ao carregar os militares.");
+        return;
+      }
+      setMilitaresOp(mapMilitaresOp(data as never));
+    } catch (e) {
+      setMilitaresOp([]);
+      setErroMilitares(e instanceof Error ? e.message : "Falha ao carregar os militares.");
+    } finally {
+      setLoadingMilitares(false);
+    }
   };
 
   const carregarDetalhe = async (id: string) => {
@@ -181,23 +216,13 @@ function ImportarPage() {
     if (!detalhes[id] && detalheLoading !== id) void carregarDetalhe(id);
   };
 
-  useEffect(() => { loadHistorico(); }, []);
-
-
-  // Carrega militares operacionais (24h, não-ADM) para a seleção da virada
+  // BLOCO 14B.2 — PERF-03: as duas consultas independentes são disparadas em
+  // paralelo (uma única rodada de rede), com falhas isoladas por consulta.
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("militares")
-        .select("id, nome, matricula, is_cg, is_cov, is_adm, tipo_escala, ativo")
-        .eq("ativo", true);
-      const list = (data ?? [])
-        .filter((m) => !m.is_adm && (m.tipo_escala ?? "24h") === "24h")
-        .map((m) => ({ id: m.id, nome: m.nome, matricula: m.matricula, is_cg: !!m.is_cg, is_cov: !!m.is_cov }))
-        .sort((a, b) => a.nome.localeCompare(b.nome));
-      setMilitaresOp(list);
-    })();
+    void Promise.allSettled([loadHistorico(), loadMilitaresOp()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   const militaresFiltrados = useMemo(() => {
     const f = filtroVirada.trim().toLowerCase();
