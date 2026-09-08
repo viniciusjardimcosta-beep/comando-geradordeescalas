@@ -26,6 +26,11 @@ import {
   buscarDetalheEscala,
   type EscalaDetalhe,
 } from "@/lib/escalas/listagem";
+import {
+  MILITARES_OP_COLUMNS,
+  mapMilitaresOp,
+  type MilitarOp,
+} from "@/lib/escalas/militaresOp";
 
 
 export const Route = createFileRoute("/app/importar")({
