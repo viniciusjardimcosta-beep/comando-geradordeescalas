@@ -21,13 +21,23 @@ import {
   type PeriodoFerias,
 } from "@/lib/ferias/consultaMensal";
 
-export function ConsultaMensal({ userId }: { userId: string | undefined }) {
+// BLOCO 14B.2 — PERF-06: os militares vêm por props da tela pai (/app/ferias).
+// Este componente NÃO consulta mais a tabela de militares; a consulta mensal
+// de férias (regra de interseção homologada) permanece inalterada.
+export function ConsultaMensal({
+  userId,
+  militares,
+  militaresLoading = false,
+}: {
+  userId: string | undefined;
+  militares: MilitarResumo[];
+  militaresLoading?: boolean;
+}) {
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
   const [ano, setAno] = useState(hoje.getFullYear());
   const [loading, setLoading] = useState(false);
   const [periodos, setPeriodos] = useState<PeriodoFerias[]>([]);
-  const [militares, setMilitares] = useState<MilitarResumo[]>([]);
 
   useEffect(() => {
     let cancelado = false;
@@ -35,22 +45,15 @@ export function ConsultaMensal({ userId }: { userId: string | undefined }) {
       if (!userId) return;
       setLoading(true);
       // Interseção pelas datas reais — o campo `ano` NÃO é usado como critério.
-      const [{ data: f, error: ef }, { data: m, error: em }] = await Promise.all([
-        supabase
-          .from("ferias_militares")
-          .select("id, militar_id, ano, periodo, data_inicio, data_fim")
-          .eq("user_id", userId)
-          .lte("data_inicio", ultimoDiaDoMes(mes, ano))
-          .gte("data_fim", primeiroDiaDoMes(mes, ano)),
-        supabase
-          .from("militares")
-          .select("id, nome, matricula, posto_graduacao")
-          .eq("user_id", userId),
-      ]);
+      const { data: f, error: ef } = await supabase
+        .from("ferias_militares")
+        .select("id, militar_id, ano, periodo, data_inicio, data_fim")
+        .eq("user_id", userId)
+        .lte("data_inicio", ultimoDiaDoMes(mes, ano))
+        .gte("data_fim", primeiroDiaDoMes(mes, ano));
       if (cancelado) return;
-      if (ef || em) toast.error((ef ?? em)!.message);
+      if (ef) toast.error(ef.message);
       setPeriodos((f ?? []) as PeriodoFerias[]);
-      setMilitares((m ?? []) as MilitarResumo[]);
       setLoading(false);
     };
     consultar();
@@ -104,7 +107,7 @@ export function ConsultaMensal({ userId }: { userId: string | undefined }) {
         </div>
       </div>
 
-      {loading ? (
+      {loading || militaresLoading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : resultado.linhas.length === 0 ? (
         <p className="panel p-6 text-sm text-muted-foreground">

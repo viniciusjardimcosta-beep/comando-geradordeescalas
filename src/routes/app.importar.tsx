@@ -26,6 +26,11 @@ import {
   buscarDetalheEscala,
   type EscalaDetalhe,
 } from "@/lib/escalas/listagem";
+import {
+  MILITARES_OP_COLUMNS,
+  mapMilitaresOp,
+  type MilitarOp,
+} from "@/lib/escalas/militaresOp";
 
 
 export const Route = createFileRoute("/app/importar")({
@@ -633,6 +638,11 @@ function ImportarPage() {
           </div>
           {loadingHist ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+          ) : erroHist ? (
+            <div className="space-y-2">
+              <p className="text-sm text-destructive">Não foi possível carregar o histórico. {erroHist}</p>
+              <Button size="sm" variant="outline" onClick={() => void loadHistorico()}>Tentar novamente</Button>
+            </div>
           ) : historico.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma escala gerada ainda.</p>
           ) : (
@@ -820,7 +830,14 @@ function ImportarPage() {
               className="h-8"
             />
             <div className="max-h-48 overflow-y-auto rounded border border-border bg-background/40">
-              {militaresFiltrados.length === 0 ? (
+              {loadingMilitares ? (
+                <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
+              ) : erroMilitares ? (
+                <div className="space-y-2 p-3">
+                  <p className="text-xs text-destructive">Não foi possível carregar os militares. {erroMilitares}</p>
+                  <Button size="sm" variant="outline" onClick={() => void loadMilitaresOp()}>Tentar novamente</Button>
+                </div>
+              ) : militaresFiltrados.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">Nenhum militar operacional cadastrado.</p>
               ) : (
                 <ul className="divide-y divide-border">
