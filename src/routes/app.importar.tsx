@@ -638,6 +638,11 @@ function ImportarPage() {
           </div>
           {loadingHist ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+          ) : erroHist ? (
+            <div className="space-y-2">
+              <p className="text-sm text-destructive">Não foi possível carregar o histórico. {erroHist}</p>
+              <Button size="sm" variant="outline" onClick={() => void loadHistorico()}>Tentar novamente</Button>
+            </div>
           ) : historico.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma escala gerada ainda.</p>
           ) : (
