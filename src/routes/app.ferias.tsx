@@ -21,6 +21,7 @@ interface Militar {
   matricula: string | null;
   posto_graduacao: string | null;
   is_adm: boolean;
+  ativo: boolean;
 }
 
 interface FeriasRow {
@@ -45,7 +46,7 @@ function FeriasPage() {
     if (!user) return;
     setLoading(true);
     const [{ data: m }, { data: f }] = await Promise.all([
-      supabase.from("militares").select("id, nome, matricula, posto_graduacao, is_adm").eq("user_id", user.id).eq("ativo", true).order("nome"),
+      supabase.from("militares").select("id, nome, matricula, posto_graduacao, is_adm, ativo").eq("user_id", user.id).order("nome"),
       supabase.from("ferias_militares").select("id, militar_id, ano, periodo, data_inicio, data_fim").eq("user_id", user.id).eq("ano", ano),
     ]);
     setMilitares((m ?? []) as Militar[]);
@@ -95,7 +96,12 @@ function FeriasPage() {
     carregar();
   };
 
-  const filtrados = militares.filter((m) =>
+  // BLOCO 14B.2 — PERF-06: fonte única de militares na tela de férias.
+  // A listagem por militar continua exibindo apenas os ativos; a Consulta
+  // Mensal reutiliza a lista completa (mesmo universo da consulta anterior).
+  const militaresAtivos = useMemo(() => militares.filter((m) => m.ativo !== false), [militares]);
+
+  const filtrados = militaresAtivos.filter((m) =>
     !filtro.trim() ||
     m.nome.toLowerCase().includes(filtro.toLowerCase()) ||
     (m.matricula ?? "").includes(filtro)
@@ -180,7 +186,7 @@ function FeriasPage() {
         </TabsList>
         <TabsContent value="militar" className="space-y-6">{conteudoPorMilitar}</TabsContent>
         <TabsContent value="mes">
-          <ConsultaMensal userId={user?.id} />
+          <ConsultaMensal userId={user?.id} militares={militares} militaresLoading={loading} />
         </TabsContent>
       </Tabs>
     </div>
