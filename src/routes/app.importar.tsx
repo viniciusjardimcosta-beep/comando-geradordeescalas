@@ -569,8 +569,11 @@ function ImportarPage() {
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-mono text-sm">{file.name}</div>
-                    <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()}>Trocar</Button>
+                    <div className="flex items-center gap-2 font-mono text-sm">
+                      {lendoPlanilha && <Loader2 className="h-4 w-4 animate-spin" aria-label="Lendo planilha" />}
+                      {file.name}
+                    </div>
+                    <Button size="sm" variant="ghost" disabled={lendoPlanilha} onClick={() => fileRef.current?.click()}>Trocar</Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-muted-foreground">Abas:</span>
@@ -597,7 +600,7 @@ function ImportarPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName}>
+            <Button onClick={abrirObservacoes} disabled={!file || !anexoBName || lendoPlanilha}>
               <Sparkles className="mr-2 h-4 w-4" /> {isDemo ? "Gerar prévia (demo)" : "Continuar para observações"}
             </Button>
           </div>
