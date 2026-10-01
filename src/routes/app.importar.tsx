@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import { lerPlanilhaMeta } from "@/lib/escalas/planilhaMeta";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -65,38 +65,6 @@ const meses = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-function detectAnexoB(names: string[]) {
-  return names.find((n) => n.trim().toLowerCase().includes("anexo b"));
-}
-
-/** Tenta achar mês/ano escrito na aba Anexo B (procura "MES" e "ANO" ou string tipo "Janeiro/2026"). */
-function detectMesAnoAnexoB(wb: XLSX.WorkBook, anexoBName: string): { mes?: number; ano?: number } {
-  const ws = wb.Sheets[anexoBName];
-  if (!ws) return {};
-  const mesesNomes = ["janeiro","fevereiro","março","marco","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
-  const range = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
-  if (!range) return {};
-  const maxRow = Math.min(range.e.r, 12);
-  for (let r = 0; r <= maxRow; r++) {
-    for (let c = range.s.c; c <= Math.min(range.e.c, 30); c++) {
-      const cell = ws[XLSX.utils.encode_cell({ r, c })];
-      const v = cell?.v;
-      if (typeof v !== "string") continue;
-      const lower = v.toLowerCase();
-      for (let i = 0; i < mesesNomes.length; i++) {
-        if (lower.includes(mesesNomes[i])) {
-          const anoMatch = lower.match(/(20\d{2})/);
-          const mesIdx = i >= 3 ? i - (mesesNomes[2] === "março" && i > 2 ? 0 : 0) : i;
-          // mapear índices: 0=jan,1=fev,2=mar,3=mar(marco alt),4=abr...
-          const mapMes = i <= 2 ? i + 1 : i === 3 ? 3 : i; // marco também = 3
-          return { mes: mapMes, ano: anoMatch ? Number(anoMatch[1]) : undefined };
-        }
-      }
-    }
-  }
-  return {};
-}
-
 async function fileToBase64(f: File): Promise<string> {
   const buf = new Uint8Array(await f.arrayBuffer());
   let bin = "";
@@ -135,6 +103,7 @@ function ImportarPage() {
   const [filtroVirada, setFiltroVirada] = useState("");
 
   const [busy, setBusy] = useState(false);
+  const [lendoPlanilha, setLendoPlanilha] = useState(false);
   const [historico, setHistorico] = useState<HistoricoRow[]>([]);
   const [loadingHist, setLoadingHist] = useState(true);
   const [erroHist, setErroHist] = useState<string | null>(null);
@@ -249,28 +218,32 @@ function ImportarPage() {
   };
 
   const handleFile = async (f: File) => {
+    if (lendoPlanilha) return;
+    setLendoPlanilha(true);
     setFile(f);
     setSheetNames([]);
     setAnexoBName(null);
     setPlanilhaMes(undefined);
     setPlanilhaAno(undefined);
     try {
-      const buf = await f.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      setSheetNames(wb.SheetNames);
-      const found = detectAnexoB(wb.SheetNames);
-      setAnexoBName(found ?? null);
+      // BLOCO 14B.3 — PERF-04: xlsx é carregado dinamicamente aqui.
+      const meta = await lerPlanilhaMeta(f);
+      setSheetNames(meta.sheetNames);
+      const found = meta.anexoBName;
+      setAnexoBName(found);
       if (found) {
         toast.success(`Aba "${found}" detectada.`);
-        const det = detectMesAnoAnexoB(wb, found);
-        setPlanilhaMes(det.mes);
-        setPlanilhaAno(det.ano);
+        setPlanilhaMes(meta.mes);
+        setPlanilhaAno(meta.ano);
       } else {
         toast.error('Arquivo não contém aba "Anexo B".');
       }
     } catch (err) {
       toast.error("Falha ao ler o arquivo.");
       console.error(err);
+    } finally {
+      setLendoPlanilha(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -588,7 +561,7 @@ function ImportarPage() {
           <div className="space-y-2">
             <Label>Planilha-modelo (.xlsx)</Label>
             <div className="flex flex-col gap-3 rounded-md border border-dashed border-border bg-input/40 p-6">
-              <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onPickFile} className="hidden" />
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onPickFile} disabled={lendoPlanilha} className="hidden" />
               {!file ? (
                 <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} className="self-start">
                   <Upload className="h-4 w-4" /> Selecionar arquivo
