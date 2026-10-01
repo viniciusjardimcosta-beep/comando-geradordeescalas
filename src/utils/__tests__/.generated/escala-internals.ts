@@ -489,6 +489,7 @@ function escalar(
   alertas: Alerta[],
   falhasCriticas: FalhaCritica[] = [],
   furos: Furo[] = [],
+  temComposicaoOrdManual = false,
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
   let iterTotal = 0;
   const tick = (dia: number, etapa: string) => {
@@ -502,6 +503,13 @@ function escalar(
     expm.set(d, new Map());
     he.set(d, new Map());
   }
+
+  const foraDaComposicaoOrdManual = (m: MilitarRT): boolean =>
+    temComposicaoOrdManual &&
+    m.ativo &&
+    !m.isAdm &&
+    m.tipoEscala === "24h" &&
+    m.grupoOrdem === undefined;
 
   const findMilitar = (matricula?: string, nome?: string): MilitarRT | undefined => {
     const mn = normMatricula(matricula);
@@ -895,7 +903,9 @@ function escalar(
     };
 
     // Decisão ORD/CM/HE pela carga mensal, aplicada dentro da linha do tempo real.
-    const espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    const espacoOrd = foraDaComposicaoOrdManual(m)
+      ? 0
+      : Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
     let restanteHe = limiteRestanteHe(m);
     lancaPorLinhaDoTempo(espacoOrd, restanteHe);
 
@@ -972,6 +982,7 @@ function escalar(
         .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
         .sort(ordenar);
       if (noGrupo[0]) return noGrupo[0];
+      if (temComposicaoOrdManual) return null;
       // Militares sem grupo definido (config legada): entram por menor carga
       const semGrupo = militares
         .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
@@ -1019,6 +1030,20 @@ function escalar(
       if (!m) break;
       lancaServico24(m, dia);
     }
+  }
+
+  const militaresForaDaComposicao = militares.filter(foraDaComposicaoOrdManual);
+  if (militaresForaDaComposicao.length > 0) {
+    alertas.push({
+      tipo: "info",
+      msg:
+        `Militar disponível fora da composição ordinária manual: ${militaresForaDaComposicao.map((m) => m.nome).join(", ")} ` +
+        `${militaresForaDaComposicao.length === 1 ? "estava disponível" : "estavam disponíveis"} para o mês, mas ` +
+        `${militaresForaDaComposicao.length === 1 ? "não foi incluído" : "não foram incluídos"} em nenhuma guarnição ordinária definida pelo operador. ` +
+        `Por isso, não ${militaresForaDaComposicao.length === 1 ? "foi inserido" : "foram inseridos"} automaticamente em ORD nem ` +
+        `${militaresForaDaComposicao.length === 1 ? "recebeu" : "receberam"} CM automático para completar carga. ` +
+        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} para HE conforme as regras existentes.`,
+    });
   }
 
   /* 4ª ETAPA — Tapar furos com HE: dias em que a ordinária ficou abaixo do alvo
@@ -1472,6 +1497,7 @@ function escalar(
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
     const cargaMin = cargaMensalProporcional(diasAf);
     if (cargaMin <= 0) continue;
+    if (foraDaComposicaoOrdManual(m)) continue;
     const cargaOrd = horasOrdMes(m);
 
     if (cargaOrd === cargaMin) continue;
