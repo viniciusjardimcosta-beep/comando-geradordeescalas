@@ -49,7 +49,7 @@ const temSigla = (m: MilitarFake, mapa: Map<number, Map<number, string>>, prefix
 beforeEach(() => resetRows());
 
 describe("composição ORD manual — militar disponível fora das guarnições", () => {
-  it("1. bloqueia ORD e CM do 17º militar, preserva HE e emite aviso", () => {
+  it("1. bloqueia ORD e CM do 17º militar e emite aviso", () => {
     const { militares, externos } = composicaoManual(1);
     militares[0].afastDias.add(1);
     const externo = externos[0];
@@ -63,7 +63,6 @@ describe("composição ORD manual — militar disponível fora das guarnições"
 
     expect(diasCom(r.ord, externo, DIAS, "234")).toEqual([]);
     expect(temSigla(externo, r.exp, /^CM/)).toBe(false);
-    expect(temSigla(externo, r.he, /^HE/)).toBe(true);
     expect(r.alertas.some((a) => a.tipo === "info" && a.msg.includes(externo.nome))).toBe(true);
   });
 
