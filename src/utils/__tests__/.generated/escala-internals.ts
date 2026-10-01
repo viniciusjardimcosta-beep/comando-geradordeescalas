@@ -511,20 +511,6 @@ function escalar(
     m.tipoEscala === "24h" &&
     m.grupoOrdem === undefined;
 
-  const militaresForaDaComposicao = militares.filter(foraDaComposicaoOrdManual);
-  if (militaresForaDaComposicao.length > 0) {
-    alertas.push({
-      tipo: "info",
-      msg:
-        `Militar disponível fora da composição ordinária manual: ${militaresForaDaComposicao.map((m) => m.nome).join(", ")} ` +
-        `${militaresForaDaComposicao.length === 1 ? "estava disponível" : "estavam disponíveis"} para o mês, mas ` +
-        `${militaresForaDaComposicao.length === 1 ? "não foi incluído" : "não foram incluídos"} em nenhuma guarnição ordinária definida pelo operador. ` +
-        `Por isso, não ${militaresForaDaComposicao.length === 1 ? "foi inserido" : "foram inseridos"} automaticamente em ORD nem ` +
-        `${militaresForaDaComposicao.length === 1 ? "recebeu" : "receberam"} CM automático para completar carga. ` +
-        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} para HE conforme as regras existentes.`,
-    });
-  }
-
   const findMilitar = (matricula?: string, nome?: string): MilitarRT | undefined => {
     const mn = normMatricula(matricula);
     if (mn) {
@@ -1044,6 +1030,20 @@ function escalar(
       if (!m) break;
       lancaServico24(m, dia);
     }
+  }
+
+  const militaresForaDaComposicao = militares.filter(foraDaComposicaoOrdManual);
+  if (militaresForaDaComposicao.length > 0) {
+    alertas.push({
+      tipo: "info",
+      msg:
+        `Militar disponível fora da composição ordinária manual: ${militaresForaDaComposicao.map((m) => m.nome).join(", ")} ` +
+        `${militaresForaDaComposicao.length === 1 ? "estava disponível" : "estavam disponíveis"} para o mês, mas ` +
+        `${militaresForaDaComposicao.length === 1 ? "não foi incluído" : "não foram incluídos"} em nenhuma guarnição ordinária definida pelo operador. ` +
+        `Por isso, não ${militaresForaDaComposicao.length === 1 ? "foi inserido" : "foram inseridos"} automaticamente em ORD nem ` +
+        `${militaresForaDaComposicao.length === 1 ? "recebeu" : "receberam"} CM automático para completar carga. ` +
+        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} para HE conforme as regras existentes.`,
+    });
   }
 
   /* 4ª ETAPA — Tapar furos com HE: dias em que a ordinária ficou abaixo do alvo
