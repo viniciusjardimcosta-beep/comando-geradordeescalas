@@ -153,6 +153,7 @@ export function rodar(opts: {
   dias?: number;
   par?: Record<string, unknown>;
   ia?: Record<string, unknown>;
+  temComposicaoOrdManual?: boolean;
 }): RodadaResultado {
   const dias = opts.dias ?? motor.diasNoMes(opts.mes, opts.ano);
   const alertas: RodadaResultado["alertas"] = [];
@@ -168,6 +169,7 @@ export function rodar(opts: {
     alertas as any,
     falhas as any,
     furos as any,
+    opts.temComposicaoOrdManual ?? false,
   );
   return { ...r, alertas, falhas, furos };
 }

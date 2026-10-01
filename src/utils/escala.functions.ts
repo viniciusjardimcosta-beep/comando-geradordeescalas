@@ -487,6 +487,7 @@ function escalar(
   alertas: Alerta[],
   falhasCriticas: FalhaCritica[] = [],
   furos: Furo[] = [],
+  temComposicaoOrdManual = false,
 ): { ord: Map<number, Map<number, string>>; exp: Map<number, Map<number, string>>; he: Map<number, Map<number, string>> } {
   let iterTotal = 0;
   const tick = (dia: number, etapa: string) => {
@@ -499,6 +500,27 @@ function escalar(
     ord.set(d, new Map());
     expm.set(d, new Map());
     he.set(d, new Map());
+  }
+
+  const foraDaComposicaoOrdManual = (m: MilitarRT): boolean =>
+    temComposicaoOrdManual &&
+    m.ativo &&
+    !m.isAdm &&
+    m.tipoEscala === "24h" &&
+    m.grupoOrdem === undefined;
+
+  const militaresForaDaComposicao = militares.filter(foraDaComposicaoOrdManual);
+  if (militaresForaDaComposicao.length > 0) {
+    alertas.push({
+      tipo: "info",
+      msg:
+        `Militar disponível fora da composição ordinária manual: ${militaresForaDaComposicao.map((m) => m.nome).join(", ")} ` +
+        `${militaresForaDaComposicao.length === 1 ? "estava disponível" : "estavam disponíveis"} para o mês, mas ` +
+        `${militaresForaDaComposicao.length === 1 ? "não foi incluído" : "não foram incluídos"} em nenhuma guarnição ordinária definida pelo operador. ` +
+        `Por isso, não ${militaresForaDaComposicao.length === 1 ? "foi inserido" : "foram inseridos"} automaticamente em ORD nem ` +
+        `${militaresForaDaComposicao.length === 1 ? "recebeu" : "receberam"} CM automático para completar carga. ` +
+        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} para HE conforme as regras existentes.`,
+    });
   }
 
   const findMilitar = (matricula?: string, nome?: string): MilitarRT | undefined => {
@@ -893,7 +915,9 @@ function escalar(
     };
 
     // Decisão ORD/CM/HE pela carga mensal, aplicada dentro da linha do tempo real.
-    const espacoOrd = Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
+    const espacoOrd = foraDaComposicaoOrdManual(m)
+      ? 0
+      : Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
     let restanteHe = limiteRestanteHe(m);
     lancaPorLinhaDoTempo(espacoOrd, restanteHe);
 
@@ -970,6 +994,7 @@ function escalar(
         .filter((m) => m.grupoOrdem === grupoDoDia && elegivel(m, papel))
         .sort(ordenar);
       if (noGrupo[0]) return noGrupo[0];
+      if (temComposicaoOrdManual) return null;
       // Militares sem grupo definido (config legada): entram por menor carga
       const semGrupo = militares
         .filter((m) => m.grupoOrdem === undefined && elegivel(m, papel))
@@ -1470,6 +1495,7 @@ function escalar(
     const diasAf = diasAfastadoMap.get(m.rowOrd) ?? 0;
     const cargaMin = cargaMensalProporcional(diasAf);
     if (cargaMin <= 0) continue;
+    if (foraDaComposicaoOrdManual(m)) continue;
     const cargaOrd = horasOrdMes(m);
 
     if (cargaOrd === cargaMin) continue;
@@ -2336,7 +2362,18 @@ export const gerarEscala = createServerFn({ method: "POST" })
     let expm: Map<number, Map<number, string>>;
     let he: Map<number, Map<number, string>>;
     try {
-      const res = escalar(militares, dias, data.mes, data.ano, data.parametros, ia, alertas, falhasCriticas, furos);
+      const res = escalar(
+        militares,
+        dias,
+        data.mes,
+        data.ano,
+        data.parametros,
+        ia,
+        alertas,
+        falhasCriticas,
+        furos,
+        ordemPorEscala.size > 0,
+      );
       ord = res.ord; expm = res.exp; he = res.he;
     } catch (e) {
       if (e instanceof EscalaLoopError) {
