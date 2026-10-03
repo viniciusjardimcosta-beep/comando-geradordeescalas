@@ -35,6 +35,17 @@ export interface EscalaDetalhe {
   furos: FuroEscala[];
 }
 
+const PREFIXO_RESERVA_ORD_MANUAL =
+  "Militar disponível não incluído na composição ORD manual e não utilizado automaticamente:";
+
+export function observacaoReservaOrdManual(alertas: AlertaEscala[]): string | null {
+  const aviso = alertas.find(
+    (alerta) => alerta.tipo === "info" && alerta.msg.startsWith(PREFIXO_RESERVA_ORD_MANUAL),
+  );
+  if (!aviso) return null;
+  return `Observação: ${aviso.msg}`;
+}
+
 interface MaybeSingle {
   maybeSingle: () => Promise<{ data: unknown; error: { message: string } | null }>;
 }

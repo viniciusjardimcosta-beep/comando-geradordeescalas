@@ -24,6 +24,8 @@ import { toast } from "sonner";
 import {
   ESCALAS_LIST_COLUMNS,
   buscarDetalheEscala,
+  observacaoReservaOrdManual,
+  type AlertaEscala,
   type EscalaDetalhe,
 } from "@/lib/escalas/listagem";
 import {
@@ -277,7 +279,7 @@ function ImportarPage() {
     window.open(data.signedUrl, "_blank");
   };
 
-  const baixarRelatorioFuros = async (h: HistoricoRow, furos: Furo[]) => {
+  const baixarRelatorioFuros = async (h: HistoricoRow, furos: Furo[], alertas: AlertaEscala[]) => {
     const lista = Array.isArray(furos) ? furos : [];
     if (!lista.length) {
       toast.info("Esta escala não possui furos.");
@@ -379,6 +381,16 @@ function ImportarPage() {
     });
 
     y += boxH + 8;
+
+    const observacaoReserva = observacaoReservaOrdManual(alertas);
+    if (observacaoReserva) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 80);
+      const linhasObservacao = doc.splitTextToSize(observacaoReserva, pageW - marginX * 2);
+      doc.text(linhasObservacao, marginX, y);
+      y += linhasObservacao.length * 4 + 5;
+    }
 
     // ===== Tabela de dias com furos =====
     doc.setFont("helvetica", "bold");
@@ -691,7 +703,7 @@ function ImportarPage() {
                                 size="sm"
                                 variant="outline"
                                 className="border-warning text-warning hover:bg-warning/10"
-                                onClick={() => baixarRelatorioFuros(h, det.furos as Furo[])}
+                                onClick={() => baixarRelatorioFuros(h, det.furos as Furo[], det.alertas)}
                               >
                                 <Download className="mr-1 h-3 w-3" /> Baixar Relatório de Furos
                               </Button>

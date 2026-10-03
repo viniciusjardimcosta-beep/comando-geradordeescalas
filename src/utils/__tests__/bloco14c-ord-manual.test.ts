@@ -49,7 +49,7 @@ const temSigla = (m: MilitarFake, mapa: Map<number, Map<number, string>>, prefix
 beforeEach(() => resetRows());
 
 describe("composição ORD manual — militar disponível fora das guarnições", () => {
-  it("1. bloqueia ORD e CM do 17º militar e emite aviso", () => {
+  it("1. bloqueia ORD, CM e HE automáticas do 17º militar e emite aviso", () => {
     const { militares, externos } = composicaoManual(1);
     militares[0].afastDias.add(1);
     const externo = externos[0];
@@ -63,6 +63,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
 
     expect(diasCom(r.ord, externo, DIAS, "234")).toEqual([]);
     expect(temSigla(externo, r.exp, /^CM/)).toBe(false);
+    expect(temSigla(externo, r.he, /^HE/)).toBe(false);
     expect(r.alertas.some((a) => a.tipo === "info" && a.msg.includes(externo.nome))).toBe(true);
   });
 
@@ -72,6 +73,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
     for (const externo of externos) {
       expect(diasCom(r.ord, externo, DIAS, "234")).toEqual([]);
       expect(temSigla(externo, r.exp, /^CM/)).toBe(false);
+      expect(temSigla(externo, r.he, /^HE/)).toBe(false);
     }
     const avisos = r.alertas.filter((a) => a.tipo === "info" && /fora da composição ordinária manual/i.test(a.msg));
     expect(avisos).toHaveLength(1);
@@ -149,7 +151,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
     expect(r.alertas.some((a) => /fora da composição ordinária manual/i.test(a.msg))).toBe(false);
   });
 
-  it("8. externo continua elegível para HE/tapa-furo sem ganhar ORD", () => {
+  it("8. externo não participa de HE/tapa-furo automático", () => {
     const { militares, externos } = composicaoManual(1);
     const membro = militares[3];
     const r = rodar({
@@ -159,7 +161,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
       temComposicaoOrdManual: true,
       ia: { afastamentos: [{ matricula: membro.matricula, diaInicio: 1, diaFim: 1, sigla: "LAA" }] },
     });
-    expect(temSigla(externos[0], r.he, /^HE/)).toBe(true);
+    expect(temSigla(externos[0], r.he, /^HE/)).toBe(false);
     expect(diasCom(r.ord, externos[0], DIAS, "234")).toEqual([]);
   });
 
@@ -183,5 +185,96 @@ describe("composição ORD manual — militar disponível fora das guarnições"
     const integrantes = militares.filter((m) => m.grupoOrdem !== undefined);
     const r = rodar({ militares, mes: MES, ano: ANO, temComposicaoOrdManual: true });
     expect(integrantes.some((m) => temSigla(m, r.exp, /^CM/))).toBe(true);
+  });
+
+  it("11. lançamento direto nominal continua permitido para o reservado", () => {
+    const { militares, externos } = composicaoManual(1);
+    const externo = externos[0];
+    const r = rodar({
+      militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { lancamentos: [{ matricula: externo.matricula, dias: [10], linha: "HE", sigla: "HE8" }] },
+    });
+    expect(r.he.get(10)?.get(externo.rowOrd)).toBe("HE8");
+  });
+
+  it("12. lançamento genérico preserva os demais e exclui o reservado", () => {
+    const { militares, externos } = composicaoManual(1);
+    const externo = externos[0];
+    const integrante = militares.find((m) => m.grupoOrdem === 1);
+    expect(integrante).toBeDefined();
+    const r = rodar({
+      militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { lancamentos: [{ dias: [10], linha: "HE", sigla: "HE8" }] },
+    });
+    expect(r.he.get(10)?.get(integrante?.rowOrd ?? -1)).toBe("HE8");
+    expect(r.he.get(10)?.get(externo.rowOrd)).toBeUndefined();
+  });
+
+  it("13. viradas nominal ORD e HE continuam permitidas para reservados", () => {
+    const casoOrd = composicaoManual(1);
+    const externoOrd = casoOrd.externos[0];
+    const rOrd = rodar({
+      militares: casoOrd.militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { viradaAnterior: [{ matricula: externoOrd.matricula, tipo: "ord" }] },
+    });
+    expect(rOrd.ord.get(1)?.get(externoOrd.rowOrd)).toBe("1");
+    expect(rOrd.exp.get(1)?.get(externoOrd.rowOrd)).toBe("CM2");
+
+    resetRows();
+    const casoHe = composicaoManual(1);
+    const externoHe = casoHe.externos[0];
+    const rHe = rodar({
+      militares: casoHe.militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { viradaAnterior: [{ matricula: externoHe.matricula, tipo: "he" }] },
+    });
+    expect(rHe.he.get(1)?.get(externoHe.rowOrd)).toBe("HE8");
+  });
+
+  it("14. ação obrigatorio nominal continua utilizando o reservado", () => {
+    const { militares, externos } = composicaoManual(1);
+    const externo = externos[0];
+    const r = rodar({
+      militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { excecoes: [{ matricula: externo.matricula, dias: [10], acao: "obrigatorio" }] },
+    });
+    expect(temSigla(externo, r.he, /^HE/)).toBe(true);
+  });
+
+  it("15. reconciliação automática ORD→HE não altera lançamento complementar nominal do reservado", () => {
+    const { militares, externos } = composicaoManual(1);
+    const externo = externos[0];
+    const lancamentos = [
+      ...Array.from({ length: 10 }, (_, indice) => ({
+        matricula: externo.matricula,
+        dias: [indice + 1],
+        linha: "EXP" as const,
+        sigla: "CM16",
+      })),
+      { matricula: externo.matricula, dias: [11], linha: "EXP" as const, sigla: "CM12" },
+    ];
+    const r = rodar({
+      militares,
+      mes: MES,
+      ano: ANO,
+      temComposicaoOrdManual: true,
+      ia: { lancamentos },
+    });
+    expect(r.exp.get(11)?.get(externo.rowOrd)).toBe("CM12");
+    expect(temSigla(externo, r.he, /^HE/)).toBe(false);
   });
 });
