@@ -4,6 +4,7 @@ import {
   ESCALA_DETALHE_COLUMNS,
   buscarDetalheEscala,
   criarCacheDetalhe,
+  observacaoReservaOrdManual,
   type EscalaDetalhe,
 } from "../listagem";
 import {
@@ -37,6 +38,20 @@ function clienteFake(porId: Record<string, unknown>, erro?: string) {
 }
 
 describe("BLOCO 14B.1 — PERF-01 listagem de escalas", () => {
+  it("extrai somente a observação consolidada da reserva manual", () => {
+    const observacao = observacaoReservaOrdManual([
+      { tipo: "warn", msg: "Outro alerta." },
+      {
+        tipo: "info",
+        msg: "Militar disponível não incluído na composição ORD manual e não utilizado automaticamente: EXTERNO FICTÍCIO. Permanece disponível para lançamento manual pelo operador.",
+      },
+    ]);
+    expect(observacao).toBe(
+      "Observação: Militar disponível não incluído na composição ORD manual e não utilizado automaticamente: EXTERNO FICTÍCIO. Permanece disponível para lançamento manual pelo operador.",
+    );
+    expect(observacaoReservaOrdManual([{ tipo: "info", msg: "Outro alerta." }])).toBeNull();
+  });
+
   it("A. consulta inicial não solicita alertas", () => {
     expect(ESCALAS_LIST_COLUMNS).not.toContain("alertas");
   });

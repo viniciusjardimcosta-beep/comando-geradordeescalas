@@ -731,7 +731,7 @@ function escalar(
     // sem nome → aplicar a todos os militares
     const alvos: MilitarRT[] = l.nome || l.matricula
       ? [findMilitar(l.matricula, l.nome)].filter((x): x is MilitarRT => !!x)
-      : militares;
+      : militares.filter((m) => !foraDaComposicaoOrdManual(m));
     if ((l.nome || l.matricula) && alvos.length === 0) {
       alertas.push({ tipo: "warn", msg: `Lançamento ignorado: militar não encontrado (${l.nome ?? l.matricula}).` });
       continue;
@@ -1035,12 +1035,10 @@ function escalar(
     alertas.push({
       tipo: "info",
       msg:
-        `Militar disponível fora da composição ordinária manual: ${militaresForaDaComposicao.map((m) => m.nome).join(", ")} ` +
-        `${militaresForaDaComposicao.length === 1 ? "estava disponível" : "estavam disponíveis"} para o mês, mas ` +
-        `${militaresForaDaComposicao.length === 1 ? "não foi incluído" : "não foram incluídos"} em nenhuma guarnição ordinária definida pelo operador. ` +
-        `Por isso, não ${militaresForaDaComposicao.length === 1 ? "foi inserido" : "foram inseridos"} automaticamente em ORD nem ` +
-        `${militaresForaDaComposicao.length === 1 ? "recebeu" : "receberam"} CM automático para completar carga. ` +
-        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} para HE conforme as regras existentes.`,
+        `Militar disponível não incluído na composição ORD manual e não utilizado automaticamente: ` +
+        `${militaresForaDaComposicao.map((m) => m.nome).join(", ")}. ` +
+        `${militaresForaDaComposicao.length === 1 ? "Permanece disponível" : "Permanecem disponíveis"} ` +
+        `para lançamento manual pelo operador.`,
     });
   }
 
@@ -1071,6 +1069,7 @@ function escalar(
         if (!m.ativo) return false;
         if (m.isAdm) return false;
         if (m.tipoEscala === "parcial") return false;
+        if (foraDaComposicaoOrdManual(m)) return false;
         if (indisp.has(m.rowOrd)) return false;
         if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
         if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
@@ -1176,6 +1175,7 @@ function escalar(
       const candidatosForcados = militares
         .filter((m) => {
           if (!m.ativo || m.isAdm || m.tipoEscala === "parcial") return false;
+          if (foraDaComposicaoOrdManual(m)) return false;
           if (indisp.has(m.rowOrd)) return false;
           if (bloqueioPosVirada.get(dia)?.has(m.rowOrd)) return false;
           if (dia < dias && naoEscalar.get(dia + 1)?.has(m.rowOrd)) return false;
@@ -1752,6 +1752,7 @@ function escalar(
     if (!m.ativo) continue;
     if (m.isAdm) continue;
     if (m.tipoEscala === "parcial") continue;
+    if (foraDaComposicaoOrdManual(m)) continue;
 
     const alvoOrd = Math.round(cargaMaxOrd(m));
     if (alvoOrd <= 0) continue;

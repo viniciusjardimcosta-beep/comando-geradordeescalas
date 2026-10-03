@@ -1,6 +1,7 @@
 # Roadmap
 
-- [ ] Obter autorização após esclarecer “obrigatório”, virada e lançamentos diretos no plano corrigido.
+- [x] Obter autorização após esclarecer “obrigatório”, virada e lançamentos diretos no plano corrigido.
+- [ ] Cumprir o relatório final obrigatório da autorização, sem publicar.
 - [ ] Bloquear HE automática e reconciliação automática para externos da composição ORD manual.
 - [ ] Preservar somente utilizações explicitamente determinadas pelo operador e o modo automático sem composição manual.
 - [ ] Atualizar aviso consolidado e observação do Relatório de Furos.
