@@ -75,7 +75,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
       expect(temSigla(externo, r.exp, /^CM/)).toBe(false);
       expect(temSigla(externo, r.he, /^HE/)).toBe(false);
     }
-    const avisos = r.alertas.filter((a) => a.tipo === "info" && /fora da composição ordinária manual/i.test(a.msg));
+    const avisos = r.alertas.filter((a) => a.tipo === "info" && /não incluído na composição ORD manual/i.test(a.msg));
     expect(avisos).toHaveLength(1);
     expect(avisos[0].msg).toContain(externos[0].nome);
     expect(avisos[0].msg).toContain(externos[1].nome);
@@ -133,7 +133,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
   it("6. não emite novo aviso quando todos estão incluídos manualmente", () => {
     const { militares } = composicaoManual(0);
     const r = rodar({ militares, mes: MES, ano: ANO, temComposicaoOrdManual: true });
-    expect(r.alertas.some((a) => /fora da composição ordinária manual/i.test(a.msg))).toBe(false);
+    expect(r.alertas.some((a) => /não incluído na composição ORD manual/i.test(a.msg))).toBe(false);
   });
 
   it("7. sem composição manual preserva fallback ORD, CM e ausência do novo aviso", () => {
@@ -148,7 +148,7 @@ describe("composição ORD manual — militar disponível fora das guarnições"
     const r = rodar({ militares, mes: MES, ano: ANO });
     expect(militares.some((m) => diasCom(r.ord, m, DIAS, "234").length > 0)).toBe(true);
     expect(militares.some((m) => temSigla(m, r.exp, /^CM/))).toBe(true);
-    expect(r.alertas.some((a) => /fora da composição ordinária manual/i.test(a.msg))).toBe(false);
+    expect(r.alertas.some((a) => /não incluído na composição ORD manual/i.test(a.msg))).toBe(false);
   });
 
   it("8. externo não participa de HE/tapa-furo automático", () => {
