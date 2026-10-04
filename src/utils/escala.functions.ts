@@ -835,7 +835,12 @@ function escalar(
   // Primeiro consome carga ordinária mensal em blocos operacionais de 6h; CM só
   // fecha a fração final menor que 6h dentro do bloco real, e o restante físico
   // do serviço vira HE no dia correto da sequência.
-  const lancaServico24 = (m: MilitarRT, dia: number, destinoHe = false) => {
+  const lancaServico24 = (
+    m: MilitarRT,
+    dia: number,
+    destinoHe = false,
+    usoManualExplicito = false,
+  ) => {
     const ultimoDia = dia === dias;
     const setHe = (d: number, h: number) => {
       if (h <= 0) return;
@@ -901,7 +906,7 @@ function escalar(
     };
 
     // Decisão ORD/CM/HE pela carga mensal, aplicada dentro da linha do tempo real.
-    const espacoOrd = foraDaComposicaoOrdManual(m)
+    const espacoOrd = foraDaComposicaoOrdManual(m) && !usoManualExplicito
       ? 0
       : Math.max(0, cargaMaxOrd(m) - horasOrdinariasAcumuladas(m));
     let restanteHe = limiteRestanteHe(m);
@@ -993,7 +998,7 @@ function escalar(
     for (const rowOrd of obriga) {
       const m = militares.find((x) => x.rowOrd === rowOrd);
       if (m && !slot.has(rowOrd) && !m.isAdm) {
-        lancaServico24(m, dia);
+        lancaServico24(m, dia, false, true);
       }
     }
 

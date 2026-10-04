@@ -252,7 +252,9 @@ describe("composição ORD manual — militar disponível fora das guarnições"
       temComposicaoOrdManual: true,
       ia: { excecoes: [{ matricula: externo.matricula, dias: [10], acao: "obrigatorio" }] },
     });
-    expect(temSigla(externo, r.he, /^HE/)).toBe(true);
+    expect(r.ord.get(10)?.get(externo.rowOrd)).toBe("234");
+    expect(r.ord.get(11)?.get(externo.rowOrd)).toBe("1");
+    expect(temSigla(externo, r.he, /^HE/)).toBe(false);
   });
 
   it("15. reconciliação automática ORD→HE não altera lançamento complementar nominal do reservado", () => {
