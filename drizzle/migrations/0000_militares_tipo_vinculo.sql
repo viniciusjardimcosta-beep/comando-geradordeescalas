@@ -1,0 +1,1 @@
+ALTER TABLE public.militares ADD COLUMN tipo_vinculo text NOT NULL DEFAULT 'CARREIRA' CHECK (tipo_vinculo IN ('CARREIRA','TEMPORARIO'));

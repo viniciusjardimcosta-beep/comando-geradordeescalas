@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Trash2, Crown } from "lucide-react";
 import type { MilitarNbi } from "@/utils/nbi";
-import { montarPostoQuadro } from "@/utils/nbi";
+import { identificacaoNbi } from "@/utils/nbi";
 import { lotacaoDocumentalDe, funcaoDocumentalDe } from "@/lib/nbi/formatacao";
 import {
   type IntegranteComissao, trechoIntegrante, comporComposicao,
@@ -51,8 +51,7 @@ export function ComissaoBuilder({
     const m = militares.find((x) => x.id === id);
     if (!m) return null;
     return {
-      posto_quadro: montarPostoQuadro(m.posto_graduacao, m.quadro),
-      nome: m.nome,
+      ...identificacaoNbi(m),
       matricula: m.matricula ?? "",
     };
   }

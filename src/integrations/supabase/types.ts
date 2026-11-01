@@ -359,6 +359,7 @@ export type Database = {
           setor_nbi: string | null
           subsecao_nbi: string | null
           tipo_escala: string
+          tipo_vinculo: string
           updated_at: string
           user_id: string
         }
@@ -392,6 +393,7 @@ export type Database = {
           setor_nbi?: string | null
           subsecao_nbi?: string | null
           tipo_escala?: string
+          tipo_vinculo?: string
           updated_at?: string
           user_id: string
         }
@@ -425,6 +427,7 @@ export type Database = {
           setor_nbi?: string | null
           subsecao_nbi?: string | null
           tipo_escala?: string
+          tipo_vinculo?: string
           updated_at?: string
           user_id?: string
         }

@@ -39,7 +39,7 @@ import {
 import {
   type AssuntoTipo, type MilitarNbi, type FeriasReg,
   periodoOrdinal, analisarFraseNbi, postoMilitarCombina,
-  normalizarTextoNbi,
+  normalizarTextoNbi, identificacaoNbi, idsMilitaresEstruturadosNbi,
   somarDiasISO, diasEntreISO, formatarDataBR, interpolarTexto,
 } from "@/utils/nbi";
 import { CODIGOS_HOMOLOGADOS } from "@/utils/nbi-categorias";
@@ -80,6 +80,10 @@ export const Route = createFileRoute("/app/nbi/nova")({
     meta: [
       { title: "Nova NBI — Comando" },
       { name: "description", content: "Assistente de criação de Nota para Boletim Interno." },
+      { property: "og:title", content: "Nova NBI — Comando" },
+      { property: "og:description", content: "Assistente de criação de Nota para Boletim Interno." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
 });
@@ -247,7 +251,7 @@ function NovaNbiPage() {
     try {
       const [tpl, mil, fer, cfg, sub] = await Promise.all([
         supabase.from("nbi_templates").select("id,codigo,titulo,titulo_documento,disponivel,ordem,texto_modelo,campos,estado_homologacao,subtipo,versao").order("ordem"),
-        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical,gbm_nbi,companhia_nbi,pelotao_nbi,secao_nbi,subsecao_nbi,setor_nbi,cidade_nbi,batalhao_nbi,funcao_administrativa_nbi,funcao_documental_nbi").eq("user_id", uid).eq("ativo", true).order("nome"),
+        supabase.from("militares").select("id,nome,nome_guerra,posto_graduacao,tipo_vinculo,matricula,quadro,lotacao_nbi,funcao_atual,distribuicao_interna_nbi,genero_gramatical,gbm_nbi,companhia_nbi,pelotao_nbi,secao_nbi,subsecao_nbi,setor_nbi,cidade_nbi,batalhao_nbi,funcao_administrativa_nbi,funcao_documental_nbi").eq("user_id", uid).eq("ativo", true).order("nome"),
         supabase.from("ferias_militares").select("id,militar_id,ano,periodo,data_inicio,data_fim").eq("user_id", uid),
         supabase.from("nbi_settings").select("*").eq("user_id", uid).maybeSingle(),
         supabase.from("nbi_substituicoes")
@@ -461,6 +465,7 @@ function NovaNbiPage() {
     if (!t) return {};
     const ctx = contextoDe(a);
     const motor = obterMotor(a.tipo);
+    if (a.tipo === "nomeacao_comissao") return resolverBase(ctx, { militares });
     return motor ? motor.resolverCampos(ctx) : resolverBase(ctx);
   }
 
@@ -482,8 +487,13 @@ function NovaNbiPage() {
     if (!t) return ["template não encontrado"];
     const ctx = contextoDe(a);
     const motor = obterMotor(a.tipo);
-    if (motor) return motor.validar(ctx);
-    return [...validarMilitar(ctx), ...validarCamposTemplate(ctx)];
+    const out = motor ? motor.validar(ctx) : [...validarMilitar(ctx), ...validarCamposTemplate(ctx)];
+    for (const id of idsMilitaresEstruturadosNbi([a])) {
+      const m = militares.find((x) => x.id === id);
+      const p = m ? identificacaoNbi(m).pendencia : null;
+      if (p && !out.includes(p)) out.push(p);
+    }
+    return out;
   }
 
 
@@ -1797,6 +1807,12 @@ function Etapa3({
       ...alerta.map((x) => ({ status: "alerta" as const, mensagem: `${prefixo}: ${x.titulo} — ${x.motivo}` })),
     ];
   });
+
+  for (const id of idsMilitaresEstruturadosNbi(rascunho.assuntos)) {
+    const m = militares.find((x) => x.id === id);
+    const aviso = m ? identificacaoNbi(m).aviso : null;
+    if (aviso) itensConsistencia.push({ status: "alerta", mensagem: `${m?.nome}: ${aviso}` });
+  }
 
 
   // Bloco 10D — auditoria pré-geração (somente leitura, nunca altera dados).
