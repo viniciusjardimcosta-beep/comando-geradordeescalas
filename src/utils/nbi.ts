@@ -9,6 +9,7 @@ export type AssuntoTipo =
 
 export interface MilitarNbi {
   id: string;
+  tipo_vinculo?: "CARREIRA" | "TEMPORARIO";
   nome: string;
   nome_guerra: string | null;
   posto_graduacao: string | null;
@@ -229,6 +230,58 @@ export function montarPostoQuadro(posto: string | null, quadro: string | null): 
   const re = new RegExp(`(^|\\s)${qN.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}(\\s|$)`);
   if (re.test(pN)) return p;
   return `${p} ${q}`;
+}
+
+/** Apenas cadastro identificado por ID; nunca resolve identidade a partir de texto. */
+export function identificacaoNbi(m: Pick<MilitarNbi, "id" | "nome" | "nome_guerra" | "posto_graduacao" | "quadro" | "tipo_vinculo">) {
+  const temporario = Boolean(m.id) && m.tipo_vinculo === "TEMPORARIO";
+  const soldadoTemporario = temporario && analisarFraseNbi(m.posto_graduacao ?? "").postoCanonico === "soldado";
+  const nomeGuerra = m.nome_guerra?.trim() ?? "";
+  return {
+    soldadoTemporario,
+    posto_quadro: soldadoTemporario ? "SD TEMP SBMET" : montarPostoQuadro(m.posto_graduacao, m.quadro),
+    nome: soldadoTemporario ? nomeGuerra : m.nome,
+    pendencia: soldadoTemporario && !nomeGuerra
+      ? "Informe o nome de guerra do Soldado Temporário antes de gerar a NBI."
+      : null,
+    aviso: temporario && !soldadoTemporario
+      ? "Nomenclatura institucional não definida para este posto com vínculo Temporário; identificação anterior preservada."
+      : null,
+  };
+}
+
+/** Coleta exclusivamente referências estruturadas já existentes nos assuntos. */
+export function idsMilitaresEstruturadosNbi(assuntos: unknown): string[] {
+  const ids = new Set<string>();
+  const registro = (v: unknown): Record<string, unknown> | null =>
+    v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
+  const adicionar = (v: unknown) => { if (typeof v === "string" && v.trim()) ids.add(v); };
+  if (!Array.isArray(assuntos)) return [];
+  for (const bruto of assuntos) {
+    const a = registro(bruto);
+    if (!a) continue;
+    adicionar(a.militar_id);
+    adicionar(a.militar_titular_id);
+    adicionar(registro(a.militar_snapshot)?.militar_id);
+    adicionar(registro(a.titular_snapshot)?.militar_id);
+    const substituicao = registro(a.substituicao);
+    adicionar(substituicao?.substituto_militar_id);
+    adicionar(substituicao?.titular_militar_id);
+    let integrantes: unknown = a.comissao;
+    if (!Array.isArray(integrantes)) {
+      const json = registro(a.campos)?.integrantes_json;
+      if (typeof json === "string") {
+        try { integrantes = JSON.parse(json); } catch { integrantes = []; }
+      }
+    }
+    if (Array.isArray(integrantes)) {
+      for (const item of integrantes) {
+        const i = registro(item);
+        if (i?.tipo === "militar") adicionar(i.militar_id);
+      }
+    }
+  }
+  return [...ids];
 }
 
 export function artigoO(genero: string | null | undefined): string {

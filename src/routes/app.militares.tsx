@@ -29,6 +29,14 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/militares")({
   component: MilitaresPage,
+  head: () => ({ meta: [
+    { title: "Militares do quartel — Comando" },
+    { name: "description", content: "Cadastro de militares e dados institucionais para NBI no Comando." },
+    { property: "og:title", content: "Militares do quartel — Comando" },
+    { property: "og:description", content: "Cadastro de militares e dados institucionais para NBI no Comando." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
 });
 
 type TipoEscala = "24h" | "parcial";
@@ -36,6 +44,7 @@ type Genero = "" | "M" | "F";
 
 interface Militar {
   id: string;
+  tipo_vinculo: "CARREIRA" | "TEMPORARIO";
   nome: string;
   posto_graduacao: string | null;
   matricula: string | null;
@@ -66,6 +75,7 @@ interface Militar {
 
 interface FormState {
   nome: string;
+  tipo_vinculo: "CARREIRA" | "TEMPORARIO";
   posto_graduacao: string;
   matricula: string;
   is_cov: boolean;
@@ -94,6 +104,7 @@ interface FormState {
 
 const emptyForm: FormState = {
   nome: "",
+  tipo_vinculo: "CARREIRA",
   posto_graduacao: "",
   matricula: "",
   is_cov: false,
@@ -173,6 +184,7 @@ function MilitaresPage() {
     setEditing(m);
     setForm({
       nome: m.nome,
+      tipo_vinculo: m.tipo_vinculo ?? "CARREIRA",
       posto_graduacao: m.posto_graduacao ?? "",
       matricula: m.matricula ?? "",
       is_cov: m.is_cov,
@@ -212,6 +224,7 @@ function MilitaresPage() {
     const funcaoCompat = form.is_cg ? "CG" : form.is_cov ? "COV" : null;
     const payload = {
       nome: form.nome.trim(),
+      tipo_vinculo: form.tipo_vinculo,
       posto_graduacao: form.posto_graduacao.trim() || null,
       matricula: form.matricula.trim() || null,
       is_cov: form.is_cov,
@@ -408,6 +421,18 @@ function MilitaresPage() {
               </div>
 
               {/* RF-02 — seções recolhíveis por grupo lógico */}
+              <div className="grid gap-2">
+                <Label htmlFor="tipo_vinculo">Tipo de vínculo</Label>
+                <Select value={form.tipo_vinculo} onValueChange={(v) => {
+                  if (v === "CARREIRA" || v === "TEMPORARIO") setForm({ ...form, tipo_vinculo: v });
+                }}>
+                  <SelectTrigger id="tipo_vinculo"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CARREIRA">Carreira</SelectItem>
+                    <SelectItem value="TEMPORARIO">Temporário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Accordion type="multiple" defaultValue={["operacionais"]} className="w-full">
                 <AccordionItem value="operacionais">
                   <AccordionTrigger className="text-sm font-semibold">Dados operacionais</AccordionTrigger>
@@ -571,7 +596,7 @@ function MilitaresPage() {
                         id="nome_guerra"
                         value={form.nome_guerra}
                         onChange={(e) => setForm({ ...form, nome_guerra: e.target.value })}
-                        placeholder="Uso interno · o Word sempre usa o nome completo"
+                        placeholder="Nome de guerra cadastrado"
                       />
                     </div>
                   </AccordionContent>

@@ -4,7 +4,9 @@
 // backend com context.userId (nunca a partir de input do cliente).
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { formatarDataBR } from "@/utils/nbi";
+import { formatarDataBR, identificacaoNbi, idsMilitaresEstruturadosNbi, type MilitarNbi } from "@/utils/nbi";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import { normalizarCabecalho } from "@/lib/nbi/cabecalho";
 
 // ---------- helpers de input ----------
@@ -16,6 +18,22 @@ function asUuid(v: unknown): string {
 }
 
 // ---------- auditoria (interna) ----------
+async function validarCadastroEstruturadoNbi(supabase: SupabaseClient<Database>, userId: string, assuntos: unknown): Promise<string | null> {
+  const ids = idsMilitaresEstruturadosNbi(assuntos);
+  if (ids.length === 0) return null; // Referências textuais não exigem identidade.
+  const { data, error } = await supabase.from("militares")
+    .select("id,nome,posto_graduacao,quadro,tipo_vinculo,nome_guerra")
+    .eq("user_id", userId).in("id", ids);
+  if (error) return "Não foi possível validar o cadastro dos militares antes da numeração.";
+  for (const id of ids) {
+    const m = data?.find((x) => x.id === id);
+    if (!m) return "Militar estruturado não encontrado no cadastro desta unidade.";
+    const pendencia = identificacaoNbi(m as Pick<MilitarNbi, "id" | "nome" | "posto_graduacao" | "quadro" | "tipo_vinculo" | "nome_guerra">).pendencia;
+    if (pendencia) return pendencia;
+  }
+  return null;
+}
+
 async function auditar(
   documento_id: string,
   user_id: string,
@@ -47,6 +65,11 @@ export const reservarNumeroNbi = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    const { data: doc, error: eDoc } = await supabase.from("nbi_documents")
+      .select("assuntos").eq("id", data.documento_id).eq("user_id", userId).maybeSingle();
+    if (eDoc || !doc) return { ok: false as const, code: "Documento não encontrado" };
+    const pendencia = await validarCadastroEstruturadoNbi(supabase, userId, doc.assuntos);
+    if (pendencia) return { ok: false as const, code: pendencia };
     const { data: rpc, error } = await supabase.rpc("nbi_reservar_numero", {
       _documento_id: data.documento_id,
       _ano_local: data.ano_local,
@@ -233,6 +256,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
       .maybeSingle();
     if (eDoc || !doc) throw new Error("Documento não encontrado");
     if (doc.canceled_at) throw new Error("Documento cancelado");
+    const pendenciaCadastro = await validarCadastroEstruturadoNbi(supabase, userId, doc.assuntos);
+    if (pendenciaCadastro) return { ok: false as const, code: pendenciaCadastro };
 
     const anoLocal = new Date(doc.data_documento + "T00:00:00Z").getUTCFullYear();
 

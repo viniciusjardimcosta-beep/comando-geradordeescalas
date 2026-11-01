@@ -3,9 +3,11 @@
 // apenas organizada por motor. Nenhum texto oficial aqui.
 
 import {
-  montarPostoQuadro, artigoO, artigoAo, numeroPorExtenso, periodoOrdinal,
+  identificacaoNbi, artigoO, artigoAo, numeroPorExtenso, periodoOrdinal,
   somarDiasISO, diasEntreISO, formatarDataBR, formatarDataFlexivelBR,
+  type MilitarNbi,
 } from "@/utils/nbi";
+import { trechoIntegrante, comporComposicao, type IntegranteComissao } from "@/lib/nbi/derivados";
 import type { ContextoMotor } from "./tipos";
 import { lotacaoDocumentalDe, distribuicaoDocumentalDe, funcaoDocumentalDe } from "@/lib/nbi/formatacao";
 import { normalizarLocalidade } from "@/utils/nbi-toponimos";
@@ -35,7 +37,7 @@ export const CHAVES_TITULAR = new Set([
  */
 export function resolverBase(
   ctx: ContextoMotor,
-  opts: { viagem?: boolean } = {},
+  opts: { viagem?: boolean; militares?: MilitarNbi[] } = {},
 ): Record<string, string> {
   const { campos, militar, titular, camposTemplate } = ctx;
   const v: Record<string, string> = {};
@@ -48,23 +50,38 @@ export function resolverBase(
   }
 
   if (militar) {
-    if (!v.NOME) v.NOME = militar.nome;
+    const identificacao = identificacaoNbi(militar);
+    if (identificacao.soldadoTemporario || !v.NOME) v.NOME = identificacao.nome;
     if (!v.ID_FUNC) v.ID_FUNC = militar.matricula ?? "";
     if (!v.LOTACAO) v.LOTACAO = lotacaoDocumentalDe(militar);
-    if (!v.POSTO_QUADRO) v.POSTO_QUADRO = montarPostoQuadro(militar.posto_graduacao, militar.quadro);
+    if (identificacao.soldadoTemporario || !v.POSTO_QUADRO) v.POSTO_QUADRO = identificacao.posto_quadro;
     if (!v.FUNCAO_DOCUMENTAL) v.FUNCAO_DOCUMENTAL = funcaoDocumentalDe(militar);
     v.ARTIGO_O_A = artigoO(militar.genero_gramatical);
     v.ARTIGO_AO_A = artigoAo(militar.genero_gramatical);
   }
   if (titular) {
-    v.NOME_TITULAR = titular.nome;
+    const identificacao = identificacaoNbi(titular);
+    v.NOME_TITULAR = identificacao.nome;
     v.ID_FUNC_TITULAR = titular.matricula ?? "";
     v.LOTACAO_TITULAR = lotacaoDocumentalDe(titular);
-    v.POSTO_QUADRO_TITULAR = montarPostoQuadro(titular.posto_graduacao, titular.quadro);
+    v.POSTO_QUADRO_TITULAR = identificacao.posto_quadro;
     v.DISTRIBUICAO_INTERNA_TITULAR = distribuicaoDocumentalDe(titular);
     v.FUNCAO_ATUAL_TITULAR = funcaoDocumentalDe(titular);
     v.FUNCAO_DOCUMENTAL_TITULAR = funcaoDocumentalDe(titular);
     v.ARTIGO_O_A_TITULAR = artigoO(titular.genero_gramatical);
+  }
+
+  // Rascunhos estruturados recompostos pelo cadastro atual; texto puro intocado.
+  if (opts.militares && campos.integrantes_json) {
+    try {
+      const integrantes = JSON.parse(String(campos.integrantes_json)) as IntegranteComissao[];
+      if (Array.isArray(integrantes) && integrantes.length > 0) {
+        v.COMPOSICAO = comporComposicao(integrantes.map((i) => {
+          const m = i.tipo === "militar" ? opts.militares?.find((x) => x.id === i.militar_id) : null;
+          return trechoIntegrante(i, m ? { ...identificacaoNbi(m), matricula: m.matricula ?? "" } : null);
+        }));
+      }
+    } catch { /* Composição textual preexistente não é reinterpretada. */ }
   }
 
   if (v.DATA_INICIO && v.DATA_FIM && !v.QTD_DIAS) {
@@ -140,6 +157,8 @@ export function validarMilitar(ctx: ContextoMotor): string[] {
   const out: string[] = [];
   const m = ctx.militar;
   if (!m) { out.push("militar não selecionado"); return out; }
+  const pendencia = identificacaoNbi(m).pendencia;
+  if (pendencia) out.push(pendencia);
   if (!m.matricula) out.push(`ID FUNC/matrícula ausente no cadastro de ${m.nome}`);
   if (!m.posto_graduacao) out.push(`posto/graduação ausente no cadastro de ${m.nome}`);
   if (!m.quadro) out.push(`quadro ausente no cadastro NBI de ${m.nome}`);
@@ -153,6 +172,8 @@ export function validarTitular(ctx: ContextoMotor): string[] {
   const out: string[] = [];
   const t = ctx.titular;
   if (!t) { out.push("titular da função não selecionado"); return out; }
+  const pendencia = identificacaoNbi(t).pendencia;
+  if (pendencia) out.push(pendencia);
   if (!t.matricula) out.push(`ID FUNC do titular ${t.nome} ausente`);
   if (!t.posto_graduacao) out.push(`posto do titular ${t.nome} ausente`);
   if (!t.quadro) out.push(`quadro do titular ${t.nome} ausente`);
