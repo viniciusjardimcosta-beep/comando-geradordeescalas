@@ -74,6 +74,7 @@ describe("Soldado Temporário — identificação estritamente estruturada", () 
   });
   it("Comissão puramente textual preserva conteúdo coincidente com nome cadastrado", () => {
     const c = contexto();
+    c.camposTemplate = [{ chave: "COMPOSICAO", label: "Composição", tipo: "text" }];
     c.campos = { COMPOSICAO: "Soldado Temporário TESTE VICTOR DE HOMOLOGACAO", integrantes_json: "[]" };
     expect(resolverBase(c, { militares: [victor] }).COMPOSICAO).toBe(c.campos.COMPOSICAO);
   });
@@ -108,7 +109,7 @@ describe("Soldado Temporário — identificação estritamente estruturada", () 
     expect(historico.texto_final).toBe("Soldado QPBM TESTE VICTOR DE HOMOLOGACAO");
   });
   it("todos os 13 assuntos principais mantêm suas validações de carreira", () => {
-    const motores = listarMotores().filter((m) => m.codigo !== "servico_extraordinario_convocacao");
+    const motores = listarMotores();
     expect(motores).toHaveLength(13);
     for (const motor of motores) {
       const c = contexto({ ...victor, tipo_vinculo: "CARREIRA" });
