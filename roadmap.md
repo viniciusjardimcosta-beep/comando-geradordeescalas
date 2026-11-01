@@ -9,7 +9,7 @@
 - [x] Validar operacionalmente o cenário fictício 17/16 sem publicar.
 
 ## Soldado Temporário NBI
-- [ ] Aplicar migration mínima do vínculo sem inferência ou alteração de RLS.
-- [ ] Implementar identificação central, cadastro, Comissão e validação pré-numeração apenas para referências estruturadas.
-- [ ] Executar testes específicos e regressão completa.
-- [ ] Homologar VICTOR pela interface e auditar DOCX, preservando textos e históricos; não publicar.
+- [x] Aplicar migration mínima do vínculo sem inferência ou alteração de RLS.
+- [x] Implementar identificação central, cadastro, Comissão e validação pré-numeração apenas para referências estruturadas.
+- [x] Executar testes específicos e regressão completa.
+- [x] Homologar VICTOR pela interface e auditar DOCX, preservando textos e históricos; não publicar.
