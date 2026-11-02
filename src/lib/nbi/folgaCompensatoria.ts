@@ -73,7 +73,7 @@ export function calcularMesesFolga(mesRef: string): MesesFolga | null {
   if (!m) return null;
   const ano = parseInt(m[1], 10);
   const mes = parseInt(m[2], 10);
-  if (!Number.isFinite(ano) || mes < 1 || mes > 12) return null;
+  if (!Number.isFinite(ano) || ano < 1 || ano > 9998 || mes < 1 || mes > 12) return null;
 
   const viradaDeAno = mes === 12;
   const mesSeguinte = viradaDeAno ? 1 : mes + 1;
@@ -102,12 +102,38 @@ export interface SubtipoFolga {
 export const SUBTIPOS_FOLGA: SubtipoFolga[] = [
   { id: "previsao", label: "Horas a compensar (previsão)", template: "folga_compensatoria" },
   { id: "realizada", label: "Compensação já realizada", template: "folga_compensatoria_realizada" },
+  { id: "saldo_devedor", label: "Saldo devedor — recuperação prevista", template: "folga_compensatoria_saldo_devedor" },
 ];
 
 export const SUBTIPO_FOLGA_PADRAO = "previsao";
 
 export function subtipoFolga(id: string): SubtipoFolga {
-  return SUBTIPOS_FOLGA.find((s) => s.id === id) ?? SUBTIPOS_FOLGA[0];
+  const subtipo = SUBTIPOS_FOLGA.find((s) => s.id === id);
+  if (!subtipo) throw new Error("Subtipo de folga compensatória desconhecido.");
+  return subtipo;
+}
+
+export function validarFolgaCompensatoria(campos: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const sub = String(campos.SUBTIPO ?? "").trim() || SUBTIPO_FOLGA_PADRAO;
+  const natureza = campos.NATUREZA_SALDO;
+  if (!SUBTIPOS_FOLGA.some((s) => s.id === sub)) out.push("subtipo de folga compensatória desconhecido");
+  if (sub === "saldo_devedor" ? natureza !== "DEBITO"
+    : natureza !== undefined && natureza !== "CREDITO") {
+    out.push("natureza do saldo incompatível com o subtipo de folga compensatória");
+  }
+  const raw = campos.QTD_HORAS;
+  const horas = typeof raw === "string" || typeof raw === "number" ? String(raw).trim() : "";
+  if (!/^\d+$/.test(horas) || !Number.isSafeInteger(Number(horas)) || Number(horas) <= 0) {
+    out.push("quantidade de horas a compensar ausente ou inválida: informe um inteiro positivo");
+  }
+  if (!calcularMesesFolga(typeof campos.mes_referencia_sel === "string" ? campos.mes_referencia_sel : "")) {
+    out.push("mês de referência e ano da compensação ausentes ou inválidos");
+  }
+  if (sub !== "realizada" && (typeof campos.MOTIVO !== "string" || !campos.MOTIVO.trim())) {
+    out.push("motivo da folga compensatória ausente");
+  }
+  return out;
 }
 
 /** Campos exibidos por subtipo (a variante "realizada" não usa MOTIVO). */
