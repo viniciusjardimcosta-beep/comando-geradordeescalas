@@ -162,6 +162,7 @@ export function folgasPrevistas(base: BaseConsistencia): FolgaPrevista[] {
     if (!documentoConfirmado(d)) continue;
     for (const a of d.assuntos) {
       if (a.tipo !== "folga_compensatoria") continue;
+      if (a.campos.NATUREZA_SALDO === "DEBITO" || a.campos.SUBTIPO === "saldo_devedor" || a.subtipo === "saldo_devedor") continue;
       const ref = texto(a.campos.mes_referencia_sel);
       const meses = calcularMesesFolga(ref);
       if (!meses) continue;

@@ -13,3 +13,10 @@
 - [x] Implementar identificação central, cadastro, Comissão e validação pré-numeração apenas para referências estruturadas.
 - [x] Executar testes específicos e regressão completa.
 - [x] Homologar VICTOR pela interface e auditar DOCX, preservando textos e históricos; não publicar.
+
+## NBI Saldo devedor
+- [ ] Acrescentar somente o template de débito aprovado e a variante, preservando positivos e históricos.
+- [ ] Compartilhar validação estrita cliente/servidor antes dos dois caminhos de numeração.
+- [ ] Alinhar campos, prévia e metadados persistidos; excluir débito das folgas previstas.
+- [ ] Executar testes específicos, regressão e verificação fictícia de prévia/DOCX.
+- [ ] Homologação final e publicação: aguardam autorização expressa do operador.

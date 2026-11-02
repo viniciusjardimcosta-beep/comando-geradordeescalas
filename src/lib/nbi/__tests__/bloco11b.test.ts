@@ -144,7 +144,7 @@ describe("Bloco 11B — motor exclusivo", () => {
       .toBe("folga_compensatoria");
     expect(motorFolgaCompensatoria.codigoTemplateEfetivo!(ctx({ SUBTIPO: "realizada" })))
       .toBe("folga_compensatoria_realizada");
-    expect(SUBTIPOS_FOLGA).toHaveLength(2);
+    expect(SUBTIPOS_FOLGA).toHaveLength(3);
   });
 
   it("bloqueia horas ausentes, mês ausente e motivo ausente", () => {

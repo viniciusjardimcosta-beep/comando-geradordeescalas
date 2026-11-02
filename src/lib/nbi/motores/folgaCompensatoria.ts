@@ -8,12 +8,12 @@
 import type { ContextoMotor, MotorNbi } from "./tipos";
 import { resolverBase, filtrarPlaceholders, validarMilitar, validarCamposTemplate } from "./comum";
 import {
-  calcularMesesFolga, subtipoFolga, SUBTIPO_FOLGA_PADRAO,
+  calcularMesesFolga, subtipoFolga, SUBTIPO_FOLGA_PADRAO, validarFolgaCompensatoria,
 } from "@/lib/nbi/folgaCompensatoria";
 
 const SCHEMA = [
   "NOME", "ID_FUNC", "POSTO_QUADRO", "LOTACAO", "ARTIGO_O_A", "ARTIGO_O_A_CAP",
-  "QTD_HORAS", "MOTIVO", "MES_REFERENCIA", "MES_COMPENSACAO", "ANO",
+  "QTD_HORAS", "MOTIVO", "MES_REFERENCIA", "MES_COMPENSACAO", "ANO", "ANO_RECUPERACAO",
 ];
 
 function subtipoDe(ctx: ContextoMotor): string {
@@ -40,6 +40,7 @@ export const motorFolgaCompensatoria: MotorNbi = {
       v.MES_REFERENCIA = meses.referencia;
       v.MES_COMPENSACAO = meses.compensacao;
       v.ANO = meses.ano;
+      v.ANO_RECUPERACAO = meses.anoCompensacao;
     }
 
     // A quantidade de horas é livre (exemplares oficiais trazem 4, 12, 33...).
@@ -60,14 +61,7 @@ export const motorFolgaCompensatoria: MotorNbi = {
       ? { ...ctx, camposTemplate: ctx.camposTemplate.filter((c) => c.chave.toUpperCase() !== "MOTIVO") }
       : ctx;
     const out = [...validarMilitar(ctxValido), ...validarCamposTemplate(ctxValido)];
-    const v = this.resolverCampos(ctx);
-    const horas = parseInt(String(ctx.campos.QTD_HORAS ?? ""), 10);
-    if (!v.QTD_HORAS || !Number.isFinite(horas) || horas <= 0) {
-      out.push("quantidade de horas a compensar ausente ou inválida");
-    }
-    if (!v.MES_REFERENCIA) out.push("mês de referência da compensação ausente");
-    if (!v.MES_COMPENSACAO) out.push("mês previsto para compensação não pôde ser calculado");
-    if (subtipoDe(ctx) !== "realizada" && !v.MOTIVO) out.push("motivo da folga compensatória ausente");
+    out.push(...validarFolgaCompensatoria(ctx.campos));
     return out;
   },
 
