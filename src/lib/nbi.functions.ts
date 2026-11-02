@@ -8,6 +8,7 @@ import { formatarDataBR, identificacaoNbi, idsMilitaresEstruturadosNbi, type Mil
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { normalizarCabecalho } from "@/lib/nbi/cabecalho";
+import { validarFolgaDocumento } from "@/lib/nbi/validarFolgaDocumento";
 
 // ---------- helpers de input ----------
 function asUuid(v: unknown): string {
@@ -68,6 +69,8 @@ export const reservarNumeroNbi = createServerFn({ method: "POST" })
     const { data: doc, error: eDoc } = await supabase.from("nbi_documents")
       .select("assuntos").eq("id", data.documento_id).eq("user_id", userId).maybeSingle();
     if (eDoc || !doc) return { ok: false as const, code: "Documento não encontrado" };
+    const pendenciaFolga = await validarFolgaDocumento(supabase, userId, doc.assuntos);
+    if (pendenciaFolga) return { ok: false as const, code: pendenciaFolga };
     const pendencia = await validarCadastroEstruturadoNbi(supabase, userId, doc.assuntos);
     if (pendencia) return { ok: false as const, code: pendencia };
     const { data: rpc, error } = await supabase.rpc("nbi_reservar_numero", {
@@ -256,6 +259,8 @@ export const gerarNbi = createServerFn({ method: "POST" })
       .maybeSingle();
     if (eDoc || !doc) throw new Error("Documento não encontrado");
     if (doc.canceled_at) throw new Error("Documento cancelado");
+    const pendenciaFolga = await validarFolgaDocumento(supabase, userId, doc.assuntos);
+    if (pendenciaFolga) return { ok: false as const, code: pendenciaFolga };
     const pendenciaCadastro = await validarCadastroEstruturadoNbi(supabase, userId, doc.assuntos);
     if (pendenciaCadastro) return { ok: false as const, code: pendenciaCadastro };
 

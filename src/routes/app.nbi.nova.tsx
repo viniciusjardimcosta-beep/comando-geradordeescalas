@@ -353,6 +353,7 @@ function NovaNbiPage() {
     // Bloco 11B — Folga compensatória: subtipo e motivo iniciam no padrão oficial.
     if (codigo === "folga_compensatoria") {
       campos.SUBTIPO = SUBTIPO_FOLGA_PADRAO;
+      campos.NATUREZA_SALDO = "CREDITO";
       campos.MOTIVO = textoMotivoFolga(MOTIVO_FOLGA_PADRAO) ?? "";
     }
     setRascunho((r) => ({
@@ -475,7 +476,10 @@ function NovaNbiPage() {
     // Assuntos com mais de uma redação oficial: o motor indica qual template
     // (linha de nbi_templates) contém a redação correta para este contexto.
     const motor = obterMotor(a.tipo);
-    const codigoEfetivo = motor?.codigoTemplateEfetivo?.(contextoDe(a)) ?? t.codigo;
+    let codigoEfetivo: string;
+    try { codigoEfetivo = motor?.codigoTemplateEfetivo?.(contextoDe(a)) ?? t.codigo; }
+    catch { return { texto: "", ausentes: ["SUBTIPO"] }; }
+    if (a.tipo === "folga_compensatoria" && !templatePor.has(codigoEfetivo)) return { texto: "", ausentes: ["TEMPLATE"] };
     const tEfetivo = templatePor.get(codigoEfetivo) ?? t;
     return interpolarTexto(tEfetivo.texto_modelo, resolverValores(a));
   }
@@ -488,6 +492,12 @@ function NovaNbiPage() {
     const ctx = contextoDe(a);
     const motor = obterMotor(a.tipo);
     const out = motor ? motor.validar(ctx) : [...validarMilitar(ctx), ...validarCamposTemplate(ctx)];
+    if (a.tipo === "folga_compensatoria") {
+      try {
+        const codigo = motor?.codigoTemplateEfetivo?.(ctx);
+        if (!codigo || !templatePor.has(codigo)) out.push("template da variante de folga compensatória não encontrado");
+      } catch { /* Shared validation already reports unknown subtype. */ }
+    }
     for (const id of idsMilitaresEstruturadosNbi([a])) {
       const m = militares.find((x) => x.id === id);
       const p = m ? identificacaoNbi(m).pendencia : null;
@@ -508,7 +518,13 @@ function NovaNbiPage() {
     try {
 
       const snapshot = rascunho.assuntos.map((a) => {
-        const t = templatePor.get(a.tipo);
+        let t = templatePor.get(a.tipo);
+        if (a.tipo === "folga_compensatoria") {
+          try {
+            const codigo = obterMotor(a.tipo)?.codigoTemplateEfetivo?.(contextoDe(a));
+            t = codigo ? templatePor.get(codigo) : undefined;
+          } catch { t = undefined; }
+        }
         const { texto, ausentes } = textoFinal(a);
         const militar = militares.find((m) => m.id === a.militar_id) ?? null;
         const titular = militares.find((m) => m.id === a.militar_titular_id) ?? null;
@@ -1295,7 +1311,10 @@ function AssuntoCard({
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">
               Redação oficial
             </Label>
-            <Select value={subtipoFolgaSel} onValueChange={(v) => onCampo("SUBTIPO", v)}>
+            <Select value={subtipoFolgaSel} onValueChange={(v) => onChange({ campos: {
+              ...assunto.campos, SUBTIPO: v, NATUREZA_SALDO: v === "saldo_devedor" ? "DEBITO" : "CREDITO",
+              ...(v === "saldo_devedor" || subtipoFolgaSel === "saldo_devedor" ? { MOTIVO: "" } : {}),
+            } })}>
               <SelectTrigger className="mt-2" data-testid={`assunto-${assunto.id}-subtipo`}>
                 <SelectValue placeholder="Selecione a redação" />
               </SelectTrigger>
@@ -1457,6 +1476,12 @@ function AssuntoCard({
 
             // ── Bloco 11B — motivo da folga compensatória (catálogo + livre) ──
             if (chaveUp === "MOTIVO" && assunto.tipo === "folga_compensatoria") {
+              if (subtipoFolgaSel === "saldo_devedor") return (
+                <div key={c.chave} className="md:col-span-2">
+                  <Label>Motivo das horas negativas<span className="text-destructive"> *</span></Label>
+                  <Textarea data-testid={tid} value={String(val ?? "")} onChange={(e) => onCampo(c.chave, e.target.value)} />
+                </div>
+              );
               const texto = String(val ?? "");
               const catalogado = motivoFolgaPorTexto(texto);
               const idSel = catalogado?.id ?? (texto ? "outro" : "");
