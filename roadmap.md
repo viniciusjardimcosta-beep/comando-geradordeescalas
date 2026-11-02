@@ -15,6 +15,8 @@
 - [x] Homologar VICTOR pela interface e auditar DOCX, preservando textos e históricos; não publicar.
 
 ## NBI Saldo devedor
+- [x] Corrigir compatibilidade sem natureza, preservando o par antigo de realizada e conferindo texto efetivo.
+- [x] Testar rejeições pré-numeração e duplicação isolada parcial; declarar a limitação da integração completa.
 - [x] Acrescentar somente o template de débito aprovado e a variante, preservando positivos e históricos.
 - [x] Compartilhar validação estrita cliente/servidor antes dos dois caminhos de numeração.
 - [x] Alinhar campos, prévia e metadados persistidos; excluir débito das folgas previstas.

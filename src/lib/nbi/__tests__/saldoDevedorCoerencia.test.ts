@@ -30,7 +30,8 @@ describe("Coerência Folga persistida", () => {
     expect(JSON.stringify(origem)).toBe(antes);
   });
   function positivo(SUBTIPO: "previsao" | "realizada") {
-    const dados = { ...campos, SUBTIPO, NATUREZA_SALDO: undefined };
+    const { NATUREZA_SALDO: _natureza, ...resto } = campos;
+    const dados = { ...resto, SUBTIPO };
     return { ...assunto, campos: dados, subtipo: SUBTIPO,
       template_codigo: SUBTIPO === "previsao" ? "folga_compensatoria" : "folga_compensatoria_realizada",
       texto_final: interpolarTexto(template.texto_modelo, motorFolgaCompensatoria.resolverCampos({ campos: dados, militar, titular: null, camposTemplate: template.campos })).texto };
