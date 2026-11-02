@@ -11,6 +11,24 @@ type Handler = (args: { data: Record<string, unknown>; context: Record<string, u
 beforeEach(() => vi.clearAllMocks());
 describe("Folga inválida não consome número em nenhum caminho", () => {
   for (const [nome, fn] of [["gerarNbi", gerarNbi], ["reservarNumeroNbi", reservarNumeroNbi]] as const) {
+    it.each([
+      { campos: { ...base, SUBTIPO: "previsao", NATUREZA_SALDO: undefined }, template_codigo: "folga_compensatoria_saldo_devedor", subtipo: "saldo_devedor" },
+      { campos: { ...base, NATUREZA_SALDO: undefined }, template_codigo: "folga_compensatoria", subtipo: "previsao" },
+      { campos: { ...base, SUBTIPO: "previsao", NATUREZA_SALDO: undefined }, template_codigo: "folga_compensatoria", subtipo: "realizada" },
+    ])(`${nome} bloqueia contradição persistida sem natureza %j`, async (dados) => {
+      const assunto = { tipo: "folga_compensatoria", texto_final: "texto fictício", ...dados };
+      const antes = JSON.stringify(assunto);
+      const q: Record<string, unknown> = {};
+      for (const m of ["select", "eq"]) q[m] = () => q;
+      q.maybeSingle = async () => ({ data: { assuntos: [assunto], data_documento: "2026-12-01" }, error: null });
+      const supabase = { from: vi.fn(() => q), rpc: vi.fn() };
+      const r = await (fn as unknown as Handler)({ data: { documento_id: "ficticio" }, context: { supabase, userId: "ficticio" } });
+      expect(r.ok).toBe(false);
+      expect(supabase.rpc).not.toHaveBeenCalled();
+      expect(admin.from).not.toHaveBeenCalled();
+      expect(admin.storage.from).not.toHaveBeenCalled();
+      expect(JSON.stringify(assunto)).toBe(antes);
+    });
     it.each([{ QTD_HORAS: "75abc" }, { QTD_HORAS: "-75" }, { QTD_HORAS: "75,5" }, { QTD_HORAS: "0" }, { MOTIVO: "" }, { SUBTIPO: "realizada" }, { SUBTIPO: "desconhecido" }, { mes_referencia_sel: "2026-13" }])(`${nome} rejeita %j antes de RPC/storage/escrita`, async (patch) => {
       let contador = 52;
       const rpc = vi.fn(() => { contador++; });

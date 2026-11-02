@@ -13,11 +13,17 @@ export async function validarFolgaDocumento(client: SupabaseClient<Database>, us
     const campos = assunto.campos && typeof assunto.campos === "object" && !Array.isArray(assunto.campos) ? assunto.campos : {};
     const erros = validarFolgaCompensatoria(campos);
     if (erros.length) return erros.join("; ");
-    // Legacy metadata/text stays untouched; explicit balance emissions are strict.
-    if (campos.NATUREZA_SALDO === undefined) continue;
     const sub = String(campos.SUBTIPO ?? "").trim() || SUBTIPO_FOLGA_PADRAO;
     const codigo = subtipoFolga(sub).template;
-    if (assunto.template_codigo !== codigo || assunto.subtipo !== sub) {
+    const legado = campos.NATUREZA_SALDO === undefined;
+    // Old realizada drafts stored the base pair; still verify REALIZADA text.
+    const parAntigoRealizada = legado && sub === "realizada"
+      && assunto.template_codigo === "folga_compensatoria" && assunto.subtipo === "previsao";
+    const metadadosCoerentes = legado
+      ? (assunto.template_codigo == null || assunto.template_codigo === codigo)
+        && (assunto.subtipo == null || assunto.subtipo === sub)
+      : assunto.template_codigo === codigo && assunto.subtipo === sub;
+    if (!metadadosCoerentes && !parAntigoRealizada) {
       return "Metadados de folga compensatória incompatíveis com o subtipo selecionado.";
     }
     if (!assunto.militar_id) return "Selecione o militar cadastrado para a folga compensatória.";
