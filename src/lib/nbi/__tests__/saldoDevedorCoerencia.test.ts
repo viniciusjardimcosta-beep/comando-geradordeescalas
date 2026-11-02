@@ -29,10 +29,37 @@ describe("Coerência Folga persistida", () => {
     expect(await validarFolgaDocumento(cliente(), "ficticio", [copia])).toBeNull();
     expect(JSON.stringify(origem)).toBe(antes);
   });
-  it("legado positivo sem natureza não exige novos metadados ou reescrita", async () => {
-    const legado = { ...assunto, campos: { ...campos, SUBTIPO: "previsao", NATUREZA_SALDO: undefined }, texto_final: "texto legado" };
+  function positivo(SUBTIPO: "previsao" | "realizada") {
+    const dados = { ...campos, SUBTIPO, NATUREZA_SALDO: undefined };
+    return { ...assunto, campos: dados, subtipo: SUBTIPO,
+      template_codigo: SUBTIPO === "previsao" ? "folga_compensatoria" : "folga_compensatoria_realizada",
+      texto_final: interpolarTexto(template.texto_modelo, motorFolgaCompensatoria.resolverCampos({ campos: dados, militar, titular: null, camposTemplate: template.campos })).texto };
+  }
+  it.each(["previsao", "realizada"] as const)("legado %s sem natureza coerente é aceito e permanece imutável", async (sub) => {
+    const legado = positivo(sub); const antes = JSON.stringify(legado);
     expect(await validarFolgaDocumento(cliente(), "ficticio", [legado])).toBeNull();
-    expect(legado.texto_final).toBe("texto legado");
+    expect(JSON.stringify(legado)).toBe(antes);
+  });
+  it("realizada preserva o par antigo base/previsao, conferindo texto efetivo", async () => {
+    const legado = { ...positivo("realizada"), template_codigo: "folga_compensatoria", subtipo: "previsao" };
+    const antes = JSON.stringify(legado);
+    expect(await validarFolgaDocumento(cliente(), "ficticio", [legado])).toBeNull();
+    expect(JSON.stringify(legado)).toBe(antes);
+    expect(await validarFolgaDocumento(cliente(), "ficticio", [{ ...legado, texto_final: "texto incompatível" }])).not.toBeNull();
+  });
+  it("legado sem metadados opcionais é conferido, não dispensado", async () => {
+    const legado = { ...positivo("previsao"), subtipo: undefined, template_codigo: undefined };
+    expect(await validarFolgaDocumento(cliente(), "ficticio", [legado])).toBeNull();
+    expect(await validarFolgaDocumento(cliente(), "ficticio", [{ ...legado, texto_final: "texto incompatível" }])).not.toBeNull();
+  });
+  it.each([
+    { template_codigo: "folga_compensatoria_saldo_devedor" },
+    { subtipo: "saldo_devedor" }, { subtipo: "realizada" },
+    { template_codigo: "desconhecido" }, { texto_final: "texto incompatível" },
+    { campos: { ...campos, NATUREZA_SALDO: undefined } },
+    { campos: { ...campos, SUBTIPO: "desconhecido", NATUREZA_SALDO: undefined } },
+  ])("natureza ausente não permite contradição %j", async (patch) => {
+    expect(await validarFolgaDocumento(cliente(), "ficticio", [{ ...positivo("previsao"), ...patch }])).not.toBeNull();
   });
   it("demais 13 assuntos não recebem validação de horas", async () => {
     for (const tipo of ["ferias", "apresentacao", "viagem", "assuncao_funcao", "dispensa_funcao", "servico_extraordinario", "dispensa_recompensa", "nomeacao_comissao", "licenca_paternidade", "nupcias", "luto", "comunicado", "situacao_sanitaria"]) {
