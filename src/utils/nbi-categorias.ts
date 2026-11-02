@@ -34,6 +34,7 @@ const MAPA: Record<string, CategoriaNbi> = {
   nomeacao_comissao: "SERVIÇO",
   folga_compensatoria: "SERVIÇO",
   folga_compensatoria_realizada: "SERVIÇO",
+  folga_compensatoria_saldo_devedor: "SERVIÇO",
 
   renovacao_tempo: "ADMINISTRATIVO",
   situacao_sanitaria: "ADMINISTRATIVO",
@@ -107,6 +108,7 @@ export const VARIANTES_INTERNAS: ReadonlySet<string> = new Set([
   "apresentacao_paternidade",
   "dispensa_recompensa_sem_apresentacao",
   "folga_compensatoria_realizada",
+  "folga_compensatoria_saldo_devedor",
 ]);
 
 export function ehVarianteInterna(codigo: string): boolean {

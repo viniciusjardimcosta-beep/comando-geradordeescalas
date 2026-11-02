@@ -294,6 +294,10 @@ describe("12C/C — assunção ⇄ dispensa", () => {
 // FASE 5 — Cenário D: folga compensatória
 // ============================================================
 describe("12C/D — folga compensatória", () => {
+  it("saldo devedor nunca aparece como folga positiva prevista", () => {
+    const d = doc({ id: "d-debito", numero: "040", assuntos: [assunto({ tipo: "folga_compensatoria", subtipo: "saldo_devedor", campos: { SUBTIPO: "saldo_devedor", NATUREZA_SALDO: "DEBITO", QTD_HORAS: "75", mes_referencia_sel: "2026-12" } })] });
+    expect(folgasPrevistas(base({ documentos: [d], hoje: "2027-01-01" }))).toEqual([]);
+  });
   it.each([
     ["2026-06", "junho", "julho", "2026", false],
     ["2026-07", "julho", "agosto", "2026", false],
