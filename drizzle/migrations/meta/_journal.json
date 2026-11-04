@@ -8,6 +8,13 @@
       "when": 1793572884455,
       "tag": "0000_militares_tipo_vinculo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793796329838,
+      "tag": "0001_restrict_nbi_template_versions_select_admin",
+      "breakpoints": true
     }
   ]
 }
