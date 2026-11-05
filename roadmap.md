@@ -1,24 +1,12 @@
-# Roadmap
+# Roadmap — Auditoria Final de Prontidão Comercial (somente leitura)
 
-- [x] Obter autorização após esclarecer “obrigatório”, virada e lançamentos diretos no plano corrigido.
-- [x] Cumprir o relatório final obrigatório da autorização, sem publicar.
-- [x] Bloquear HE automática e reconciliação automática para externos da composição ORD manual.
-- [x] Preservar somente utilizações explicitamente determinadas pelo operador e o modo automático sem composição manual.
-- [x] Atualizar aviso consolidado e observação do Relatório de Furos.
-- [x] Cobrir os dez casos obrigatórios e executar regressão completa.
-- [x] Validar operacionalmente o cenário fictício 17/16 sem publicar.
+Restrições: não alterar código, banco, RLS, Stripe, dados ou configurações. Não publicar. Não criar cobranças, assinaturas, escalas ou NBIs. Marcar NÃO VERIFICADO quando não for possível confirmar.
 
-## Soldado Temporário NBI
-- [x] Aplicar migration mínima do vínculo sem inferência ou alteração de RLS.
-- [x] Implementar identificação central, cadastro, Comissão e validação pré-numeração apenas para referências estruturadas.
-- [x] Executar testes específicos e regressão completa.
-- [x] Homologar VICTOR pela interface e auditar DOCX, preservando textos e históricos; não publicar.
-
-## NBI Saldo devedor
-- [x] Corrigir compatibilidade sem natureza, preservando o par antigo de realizada e conferindo texto efetivo.
-- [x] Testar rejeições pré-numeração e duplicação isolada parcial; declarar a limitação da integração completa.
-- [x] Acrescentar somente o template de débito aprovado e a variante, preservando positivos e históricos.
-- [x] Compartilhar validação estrita cliente/servidor antes dos dois caminhos de numeração.
-- [x] Alinhar campos, prévia e metadados persistidos; excluir débito das folgas previstas.
-- [x] Executar testes específicos, regressão e verificação fictícia de prévia/DOCX.
-- [ ] Homologação final e publicação: aguardam autorização expressa do operador.
+- [ ] 1. Stripe e assinaturas (chaves, ambiente, produtos/preços, checkout, webhooks, ativação/cancelamento, trial, caminhos de bypass)
+- [ ] 2. Isolamento de dados e segurança (RLS, autorização frontend/servidor, privilégios admin, storage)
+- [ ] 3. Gerador de Escalas (CRUD, exportação, persistência, erros, dependências)
+- [ ] 4. Gerador de NBI (permissões, três modalidades de folga, numeração, plano)
+- [ ] 5. Cadastro e experiência do assinante (fluxo completo, recuperação de senha, cancelamento)
+- [ ] 6. Requisitos comerciais/operacionais (fornecedor, suporte, termos, privacidade, preços, logs)
+- [ ] 7. Testes e estabilidade (suite, build, erros conhecidos, concorrência, dependências externas)
+- [ ] 8. Relatório final com tabela, classificação P0/P1/P2 e respostas às 6 perguntas
